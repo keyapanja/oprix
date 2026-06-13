@@ -1,26 +1,166 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@custom-variant dark (&:where(.dark, .dark *));
 
+/* ---------------------------------------------------------------------------
+   Semantic tokens — mapped to Tailwind color/font utilities.
+   `inline` keeps them as var() references so they react to the .dark class.
+--------------------------------------------------------------------------- */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-panel: var(--panel);
+  --color-elevated: var(--elevated);
+
+  --color-content: var(--content);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+
+  --color-accent: var(--accent-text);
+  --color-accent-soft: var(--accent-soft-bg);
+  --color-accent-strong: var(--accent-soft-text);
+
+  /* Brand — emerald/teal (static across both modes) */
+  --color-brand-50: #ecfdf5;
+  --color-brand-100: #d1fae5;
+  --color-brand-200: #a7f3d0;
+  --color-brand-300: #6ee7b7;
+  --color-brand-400: #34d399;
+  --color-brand-500: #10b981;
+  --color-brand-600: #059669;
+  --color-brand-700: #047857;
+  --color-brand-800: #065f46;
+  --color-brand-900: #064e3b;
+  --color-brand-950: #022c22;
+
+  --font-sans: var(--font-inter), system-ui, -apple-system, sans-serif;
+  --font-display: var(--font-jakarta), var(--font-inter), sans-serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* ---- Light theme (default) ---- */
+:root {
+  color-scheme: light;
+  --canvas: #f3f6f4;
+  --surface: #ffffff;
+  --panel: #ffffff;
+  --elevated: #ffffff;
+
+  --content: #0e1b16;
+  --muted: #5a6b64;
+  --faint: #8b9a93;
+
+  --line: #e6ebe8;
+  --line-strong: #d3dbd6;
+
+  --accent-text: #047857;
+  --accent-soft-bg: #ecfdf5;
+  --accent-soft-text: #047857;
+
+  --glass-bg: rgba(255, 255, 255, 0.72);
+  --shadow-color: 16, 24, 22;
+  --brand-shadow: rgba(5, 150, 105, 0.35);
+}
+
+/* ---- Dark theme ---- */
+.dark {
+  color-scheme: dark;
+  --canvas: #080b0a;
+  --surface: #121817;
+  --panel: #0c1110;
+  --elevated: #171f1d;
+
+  --content: #e8efec;
+  --muted: #97a39e;
+  --faint: #66726d;
+
+  --line: rgba(255, 255, 255, 0.08);
+  --line-strong: rgba(255, 255, 255, 0.14);
+
+  --accent-text: #34d399;
+  --accent-soft-bg: rgba(16, 185, 129, 0.12);
+  --accent-soft-text: #6ee7b7;
+
+  --glass-bg: rgba(18, 24, 23, 0.72);
+  --shadow-color: 0, 0, 0;
+  --brand-shadow: rgba(4, 120, 87, 0.45);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--canvas);
+  color: var(--content);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, .font-display {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+}
+
+/* ---------------------------------------------------------------------------
+   Reusable effects (plain CSS — robust across Tailwind versions)
+--------------------------------------------------------------------------- */
+.gradient-brand {
+  background-image: linear-gradient(135deg, #2dd4bf 0%, #10b981 50%, #059669 100%);
+}
+.gradient-brand-strong {
+  background-image: linear-gradient(135deg, #0d9488 0%, #047857 100%);
+}
+.gradient-mesh {
+  background-color: #064e3b;
+  background-image:
+    radial-gradient(at 16% 20%, #0d9488 0px, transparent 45%),
+    radial-gradient(at 84% 16%, #10b981 0px, transparent 45%),
+    radial-gradient(at 72% 84%, #14b8a6 0px, transparent 45%),
+    radial-gradient(at 22% 88%, #065f46 0px, transparent 48%);
+}
+
+.text-gradient-brand {
+  background: linear-gradient(120deg, #0d9488, #10b981 55%, #34d399);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: saturate(180%) blur(12px);
+  -webkit-backdrop-filter: saturate(180%) blur(12px);
+}
+
+.shadow-brand {
+  box-shadow: 0 10px 25px -8px var(--brand-shadow);
+}
+.shadow-card {
+  box-shadow:
+    0 1px 2px rgba(var(--shadow-color), 0.04),
+    0 4px 16px -4px rgba(var(--shadow-color), 0.08);
+}
+.shadow-card-hover {
+  box-shadow:
+    0 1px 2px rgba(var(--shadow-color), 0.05),
+    0 18px 40px -12px var(--brand-shadow);
+}
+
+@keyframes blob {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(24px, -32px) scale(1.08); }
+  66% { transform: translate(-20px, 18px) scale(0.94); }
+}
+.animate-blob { animation: blob 14s ease-in-out infinite; }
+.animation-delay-2 { animation-delay: 2.5s; }
+.animation-delay-4 { animation-delay: 5s; }
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-rise { animation: rise 0.5s cubic-bezier(0.21, 1, 0.7, 1) both; }
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
 }

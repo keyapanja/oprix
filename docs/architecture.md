@@ -14,7 +14,7 @@ This document is the source of truth for *how* Operix is built. The functional s
 | Language | **TypeScript** (strict) | Type safety across a large domain. |
 | Database | **PostgreSQL** | Relational integrity for HR/payroll; strong JSON support for flexible fields. |
 | ORM | **Prisma** | Type-safe queries, migrations, single schema file. |
-| Auth | **Auth.js (NextAuth)** + credentials/JWT sessions | Session + role claims. |
+| Auth | **`jose` JWT in an httpOnly cookie** (credentials only) | We only need email/password — no OAuth — so a signed-cookie session is lighter and more predictable than NextAuth on Next 16. Session carries `companyId`, `role`, `employeeId`/`clientId`. Swap in Auth.js later if OAuth/SSO is needed. |
 | Validation | **Zod** | Shared validation between client and server. |
 | UI | **Tailwind CSS + shadcn/ui** | Fast, consistent dashboard UI. |
 | Background jobs | **BullMQ + Redis** (or pg-boss) | Payroll runs, notification fan-out, recurring jobs. |

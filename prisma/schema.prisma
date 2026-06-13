@@ -111,28 +111,75 @@ enum DeliverableStatus {
 // ============================================================
 
 model Company {
-  id           String   @id @default(cuid())
-  name         String
-  logoKey      String?
-  address      String?
-  timezone     String   @default("Asia/Kolkata")
-  currency     String   @default("INR")
-  businessType String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                 String   @id @default(cuid())
+  name               String
+  logoKey            String?
+  address            String?
+  timezone           String   @default("Asia/Kolkata")
+  currency           String   @default("INR")
+  businessType       String?
+  employeeCodePrefix String   @default("EMP")
+  multiLocation      Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
-  users         User[]
-  departments   Department[]
-  teams         Team[]
-  designations  Designation[]
-  workShifts    WorkShift[]
-  employees     Employee[]
-  projects      Project[]
-  clients       Client[]
-  leaveTypes    LeaveType[]
-  payrollRuns   PayrollRun[]
-  kbCategories  KbCategory[]
-  ptSlabs       ProfessionalTaxSlab[]
+  users            User[]
+  departments      Department[]
+  teams            Team[]
+  designations     Designation[]
+  workShifts       WorkShift[]
+  locations        Location[]
+  probationPeriods ProbationPeriod[]
+  rolePermissions  RolePermission[]
+  employees        Employee[]
+  projects         Project[]
+  clients          Client[]
+  leaveTypes       LeaveType[]
+  payrollRuns      PayrollRun[]
+  kbCategories     KbCategory[]
+  ptSlabs          ProfessionalTaxSlab[]
+}
+
+// Work locations / sites. When Company.multiLocation is false, exactly one is
+// used and auto-assigned; when true, employees pick one.
+model Location {
+  id        String   @id @default(cuid())
+  companyId String
+  name      String
+  createdAt DateTime @default(now())
+
+  company   Company    @relation(fields: [companyId], references: [id])
+  employees Employee[]
+
+  @@unique([companyId, name])
+  @@index([companyId])
+}
+
+// Saved probation durations (e.g. 3 / 6 months) to pick from on the employee form.
+model ProbationPeriod {
+  id        String @id @default(cuid())
+  companyId String
+  months    Int
+
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@unique([companyId, months])
+  @@index([companyId])
+}
+
+// Dynamic role permissions. Presence of a row = that role is granted that
+// capability for the company. Absence (when the company has any rows) = denied.
+// Super Admin is always full and never stored here.
+model RolePermission {
+  id        String @id @default(cuid())
+  companyId String
+  role      Role
+  action    String
+
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@unique([companyId, role, action])
+  @@index([companyId, role])
 }
 
 model Department {
@@ -142,10 +189,11 @@ model Department {
   headId    String?  // Employee who heads the department
   createdAt DateTime @default(now())
 
-  company   Company    @relation(fields: [companyId], references: [id])
-  head      Employee?  @relation("DeptHead", fields: [headId], references: [id])
-  teams     Team[]
-  employees Employee[]
+  company      Company       @relation(fields: [companyId], references: [id])
+  head         Employee?     @relation("DeptHead", fields: [headId], references: [id])
+  teams        Team[]
+  designations Designation[]
+  employees    Employee[]
 
   @@unique([companyId, name])
   @@index([companyId])
@@ -167,23 +215,27 @@ model Team {
 }
 
 model Designation {
-  id        String   @id @default(cuid())
-  companyId String
-  name      String
+  id           String @id @default(cuid())
+  companyId    String
+  departmentId String
+  name         String
 
-  company   Company    @relation(fields: [companyId], references: [id])
-  employees Employee[]
+  company    Company    @relation(fields: [companyId], references: [id])
+  department Department @relation(fields: [departmentId], references: [id])
+  employees  Employee[]
 
-  @@unique([companyId, name])
+  @@unique([companyId, departmentId, name])
   @@index([companyId])
+  @@index([departmentId])
 }
 
 model WorkShift {
-  id        String   @id @default(cuid())
-  companyId String
-  name      String
-  startTime String // "09:00" local to company tz
-  endTime   String // "18:00"
+  id           String @id @default(cuid())
+  companyId    String
+  name         String
+  startTime    String // "09:00" local to company tz
+  endTime      String // "18:00"
+  graceMinutes Int    @default(0) // minutes after start still counted as on-time
 
   company   Company    @relation(fields: [companyId], references: [id])
   employees Employee[]
@@ -199,9 +251,12 @@ model User {
   id           String   @id @default(cuid())
   companyId    String
   email        String
-  passwordHash String
+  passwordHash String? // null until the invited user sets their password
   role         Role
   isActive     Boolean  @default(true)
+  // Invite / set-password flow:
+  setupToken          String?   @unique
+  setupTokenExpiresAt DateTime?
   // Exactly one of these is set depending on role:
   employeeId   String?  @unique // internal users
   clientId     String?          // CLIENT role -> portal scope
@@ -236,8 +291,10 @@ model Employee {
   designationId   String?
   managerId       String? // self-referential reporting line
   workShiftId     String?
+  locationId      String?
   employmentType  EmploymentType   @default(FULL_TIME)
   probationStatus ProbationStatus  @default(ON_PROBATION)
+  probationMonths Int?
   workLocation    String?
   deletedAt       DateTime?
   createdAt       DateTime         @default(now())
@@ -248,6 +305,7 @@ model Employee {
   team           Team?             @relation(fields: [teamId], references: [id])
   designation    Designation?      @relation(fields: [designationId], references: [id])
   workShift      WorkShift?        @relation(fields: [workShiftId], references: [id])
+  location       Location?         @relation(fields: [locationId], references: [id])
   manager        Employee?         @relation("Reports", fields: [managerId], references: [id])
   reports        Employee[]        @relation("Reports")
   headedDepts    Department[]      @relation("DeptHead")
