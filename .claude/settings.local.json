@@ -1,7 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(python -c \"import pypdf; r=pypdf.PdfReader\\('Operix.pdf'\\); print\\(len\\(r.pages\\)\\); [print\\('---PAGE',i,'---\\\\n',p.extract_text\\(\\)\\) for i,p in enumerate\\(r.pages\\)]\")"
-    ]
-  }
-}
