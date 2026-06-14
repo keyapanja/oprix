@@ -23,7 +23,7 @@ const EmployeeSchema = z.object({
   probationStatus: z.nativeEnum(ProbationStatus),
   probationMonths: z.string().optional().or(z.literal("")),
   departmentId: z.string().optional().or(z.literal("")),
-  teamId: z.string().optional().or(z.literal("")),
+  serviceId: z.string().optional().or(z.literal("")),
   designationId: z.string().optional().or(z.literal("")),
   managerId: z.string().optional().or(z.literal("")),
   workShiftId: z.string().optional().or(z.literal("")),
@@ -38,8 +38,8 @@ async function assertOwnedRefs(
   const checks: Promise<boolean>[] = [];
   if (refs.departmentId)
     checks.push(exists(prisma.department.findFirst({ where: { id: refs.departmentId, companyId }, select: { id: true } })));
-  if (refs.teamId)
-    checks.push(exists(prisma.team.findFirst({ where: { id: refs.teamId, companyId }, select: { id: true } })));
+  if (refs.serviceId)
+    checks.push(exists(prisma.service.findFirst({ where: { id: refs.serviceId, companyId }, select: { id: true } })));
   if (refs.designationId)
     checks.push(exists(prisma.designation.findFirst({ where: { id: refs.designationId, companyId }, select: { id: true } })));
   if (refs.managerId)
@@ -74,7 +74,7 @@ export async function createEmployee(
 
   const refsOk = await assertOwnedRefs(session.companyId, {
     departmentId: d.departmentId,
-    teamId: d.teamId,
+    serviceId: d.serviceId,
     designationId: d.designationId,
     managerId: d.managerId,
     workShiftId: d.workShiftId,
@@ -113,7 +113,7 @@ export async function createEmployee(
         probationStatus: d.probationStatus,
         probationMonths,
         departmentId: d.departmentId || null,
-        teamId: d.teamId || null,
+        serviceId: d.serviceId || null,
         designationId: d.designationId || null,
         managerId: d.managerId || null,
         workShiftId: d.workShiftId || null,

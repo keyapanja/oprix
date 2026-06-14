@@ -47,11 +47,13 @@ export async function markAttendance(input: {
       employeeId: d.employeeId,
       date,
       type: d.type ?? "PRESENT",
+      // A status click is an explicit override; a clock-only edit is not.
+      markedManually: !!d.type,
       clockIn: clockIn ?? null,
       clockOut: clockOut ?? null,
     },
     update: {
-      ...(d.type ? { type: d.type } : {}),
+      ...(d.type ? { type: d.type, markedManually: true } : {}),
       ...(d.clockIn !== undefined ? { clockIn: clockIn ?? null } : {}),
       ...(d.clockOut !== undefined ? { clockOut: clockOut ?? null } : {}),
     },

@@ -9,6 +9,7 @@ import { humanizeEnum, formatDate } from "@/lib/format";
 import { PRIORITY_TONE } from "@/lib/status";
 import { KanbanBoard } from "@/components/projects/kanban-board";
 import { ProjectStatusControl } from "@/components/projects/project-status";
+import { ProjectServices } from "@/components/projects/project-services";
 import type { KanbanTask } from "@/lib/projects/actions";
 
 export const metadata: Metadata = { title: "Project · Operix" };
@@ -21,11 +22,20 @@ export default async function ProjectDetailPage({
   const { id } = await params;
   const session = await requirePage("project:manage");
 
-  const [project, employees] = await Promise.all([
+  const [project, employees, allServices] = await Promise.all([
     prisma.project.findFirst({
       where: { id, companyId: session.companyId, deletedAt: null },
       include: {
         client: { select: { id: true, name: true } },
+        services: {
+          orderBy: { service: { name: "asc" } },
+          select: {
+            id: true,
+            serviceId: true,
+            primaryAssigneeId: true,
+            service: { select: { name: true } },
+          },
+        },
         tasks: {
           orderBy: { createdAt: "asc" },
           select: {
@@ -33,7 +43,8 @@ export default async function ProjectDetailPage({
             name: true,
             status: true,
             priority: true,
-            assignee: { select: { fullName: true } },
+            service: { select: { name: true } },
+            assignees: { select: { employee: { select: { fullName: true } } } },
           },
         },
       },
@@ -43,16 +54,25 @@ export default async function ProjectDetailPage({
       orderBy: { fullName: "asc" },
       select: { id: true, fullName: true },
     }),
+    prisma.service.findMany({
+      where: { companyId: session.companyId },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
   ]);
 
   if (!project) notFound();
+
+  const usedServiceIds = new Set(project.services.map((ps) => ps.serviceId));
+  const available = allServices.filter((s) => !usedServiceIds.has(s.id));
 
   const initialTasks: KanbanTask[] = project.tasks.map((t) => ({
     id: t.id,
     name: t.name,
     status: t.status,
     priority: t.priority,
-    assigneeName: t.assignee?.fullName ?? null,
+    serviceName: t.service?.name ?? null,
+    assigneeNames: t.assignees.map((a) => a.employee.fullName),
   }));
 
   return (
@@ -63,7 +83,6 @@ export default async function ProjectDetailPage({
         </Link>
       </div>
 
-      {/* Header */}
       <Card className="mb-6 p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
@@ -99,9 +118,20 @@ export default async function ProjectDetailPage({
         </div>
       </Card>
 
+      <ProjectServices
+        projectId={project.id}
+        items={project.services.map((ps) => ({
+          id: ps.id,
+          serviceName: ps.service.name,
+          primaryAssigneeId: ps.primaryAssigneeId,
+        }))}
+        available={available}
+        employees={employees.map((e) => ({ id: e.id, name: e.fullName }))}
+      />
+
       <KanbanBoard
         projectId={project.id}
-        employees={employees.map((e) => ({ id: e.id, name: e.fullName }))}
+        services={project.services.map((ps) => ({ id: ps.serviceId, name: ps.service.name }))}
         initialTasks={initialTasks}
       />
     </div>

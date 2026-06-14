@@ -11,13 +11,18 @@ export default async function OrganizationPage() {
   const session = await requirePage("org:manage");
   const where = { companyId: session.companyId };
 
-  const [departments, teams, designations, shifts, locations, probationPeriods, company] =
+  const [departments, services, designations, shifts, locations, probationPeriods, company] =
     await Promise.all([
       prisma.department.findMany({ where, orderBy: { name: "asc" }, select: { id: true, name: true } }),
-      prisma.team.findMany({
+      prisma.service.findMany({
         where,
         orderBy: { name: "asc" },
-        select: { id: true, name: true, department: { select: { name: true } } },
+        select: {
+          id: true,
+          name: true,
+          department: { select: { name: true } },
+          checklistTemplate: { orderBy: { orderIndex: "asc" }, select: { id: true, text: true } },
+        },
       }),
       prisma.designation.findMany({
         where,
@@ -41,11 +46,16 @@ export default async function OrganizationPage() {
     <>
       <PageHeader
         title="Organization"
-        description="Departments, teams, designations, shifts, locations, and probation settings."
+        description="Departments, services, designations, shifts, locations, and probation settings."
       />
       <OrgTabs
         departments={departments}
-        teams={teams}
+        services={services.map((s) => ({
+          id: s.id,
+          name: s.name,
+          department: s.department,
+          checklist: s.checklistTemplate,
+        }))}
         designations={designations}
         shifts={shifts}
         locations={locations}

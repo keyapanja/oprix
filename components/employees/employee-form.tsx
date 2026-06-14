@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
+import { DatePicker } from "@/components/ui/date-picker";
 import { humanizeEnum } from "@/lib/format";
 
 type Opt = { id: string; name: string };
@@ -21,7 +22,7 @@ const toOpts = (xs: Opt[]): ComboOpt[] => xs.map((x) => ({ value: x.id, label: x
 export function EmployeeForm({
   nextCode,
   departments,
-  teams,
+  services,
   designations,
   managers,
   shifts,
@@ -31,7 +32,7 @@ export function EmployeeForm({
 }: {
   nextCode: string;
   departments: Opt[];
-  teams: Opt[];
+  services: Opt[];
   designations: Array<Opt & { departmentId: string }>;
   managers: Opt[];
   shifts: Opt[];
@@ -91,10 +92,10 @@ export function EmployeeForm({
         <h3 className="mb-4 text-sm font-semibold text-content">Employment</h3>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Joining date" htmlFor="joiningDate" required>
-            <Input id="joiningDate" name="joiningDate" type="date" required />
+            <DatePicker id="joiningDate" name="joiningDate" placeholder="Select date" />
           </Field>
           <Field label="Date of birth" htmlFor="dateOfBirth">
-            <Input id="dateOfBirth" name="dateOfBirth" type="date" />
+            <DatePicker id="dateOfBirth" name="dateOfBirth" placeholder="Select date" />
           </Field>
           <Field label="Employment type">
             <Combobox
@@ -142,8 +143,8 @@ export function EmployeeForm({
               options={toOpts(departments)}
             />
           </Field>
-          <Field label="Team">
-            <Combobox name="teamId" emptyLabel="— None —" placeholder="— None —" options={toOpts(teams)} />
+          <Field label="Service">
+            <Combobox name="serviceId" emptyLabel="— None —" placeholder="— None —" options={toOpts(services)} />
           </Field>
           <Field label="Designation" hint={departmentId ? undefined : "Pick a department first"}>
             <Combobox

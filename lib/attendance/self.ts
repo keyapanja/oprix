@@ -32,7 +32,7 @@ export async function punchIn(): Promise<PunchState> {
 
   const existing = await prisma.attendance.findUnique({
     where: { employeeId_date: { employeeId: ctx.employeeId, date } },
-    select: { clockIn: true },
+    select: { clockIn: true, markedManually: true },
   });
   if (existing?.clockIn) return { error: "You've already punched in today." };
 
@@ -45,7 +45,12 @@ export async function punchIn(): Promise<PunchState> {
       type: "PRESENT",
       clockIn: combineDateTimeUTC(dateISO, time),
     },
-    update: { type: "PRESENT", clockIn: combineDateTimeUTC(dateISO, time) },
+    // Don't override an admin's manual status; the calendar/grid keeps them
+    // "On leave" if applicable, but the punch time is still recorded.
+    update: {
+      clockIn: combineDateTimeUTC(dateISO, time),
+      ...(existing?.markedManually ? {} : { type: "PRESENT" }),
+    },
   });
 
   revalidatePath("/dashboard");

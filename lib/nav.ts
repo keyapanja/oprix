@@ -11,11 +11,12 @@ export type NavItem = {
 // Only modules built so far are linked. More land as later slices ship.
 export const NAV: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: "dashboard" },
+  { label: "Calendar", href: "/calendar", icon: "calendarDays", action: "self:service" },
+  { label: "Leave", href: "/leave", icon: "calendar", action: "self:service" },
   { label: "Projects", href: "/projects", icon: "briefcase", action: "project:manage" },
   { label: "Clients", href: "/clients", icon: "userGroup", action: "client:manage" },
   { label: "Employees", href: "/employees", icon: "users", action: "employee:read" },
   { label: "Attendance", href: "/attendance", icon: "clock", action: "attendance:manage" },
-  { label: "Leave", href: "/leave", icon: "calendar", action: "leave:manage" },
   { label: "Organization", href: "/organization", icon: "building", action: "org:manage" },
 ];
 

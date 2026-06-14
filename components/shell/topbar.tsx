@@ -6,8 +6,21 @@ import { logoutAction } from "@/lib/auth/actions";
 import { Icon } from "@/components/ui/icons";
 import { roleLabel } from "@/lib/format";
 import { ThemeToggle } from "@/components/shell/theme-toggle";
+import { NotificationBell } from "@/components/shell/notification-bell";
 
-export function Topbar({ email, role }: { email: string; role: Role }) {
+type Note = { id: string; title: string; body: string | null };
+
+export function Topbar({
+  email,
+  role,
+  notifications,
+  unread,
+}: {
+  email: string;
+  role: Role;
+  notifications: Note[];
+  unread: number;
+}) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const initials = email.slice(0, 2).toUpperCase();
@@ -42,13 +55,7 @@ export function Topbar({ email, role }: { email: string; role: Role }) {
       <div className="ml-auto flex items-center gap-1.5">
         <ThemeToggle />
 
-        <button
-          className="relative flex size-9 items-center justify-center rounded-xl text-muted transition-colors hover:bg-canvas hover:text-content"
-          aria-label="Notifications"
-        >
-          <Icon name="bell" className="size-5" />
-          <span className="absolute right-2 top-2 size-2 rounded-full bg-brand-500 ring-2 ring-surface" />
-        </button>
+        <NotificationBell items={notifications} unread={unread} />
 
         <div className="mx-1 h-6 w-px bg-line-strong" />
 

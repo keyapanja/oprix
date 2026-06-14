@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import type { ApprovalStatus, LeavePaidType } from "@prisma/client";
+import type { ApprovalStatus, LeavePaidType, AllowancePeriod } from "@prisma/client";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -12,19 +12,28 @@ import { AddForm } from "@/components/org/add-form";
 import { RequestForm } from "@/components/leave/request-form";
 import { RequestActions } from "@/components/leave/request-actions";
 import { createLeaveType, deleteLeaveType } from "@/lib/leave/actions";
-import { humanizeEnum, formatDate } from "@/lib/format";
+import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/cn";
 
 type Req = {
   id: string;
   status: ApprovalStatus;
+  kind: "LEAVE" | "WFH";
   days: number;
+  isHalfDay: boolean;
   startDate: string;
   endDate: string;
   employeeName: string;
-  typeName: string;
+  typeName: string | null;
 };
-type LType = { id: string; name: string; paidType: LeavePaidType; annualQuota: number };
+type LType = {
+  id: string;
+  name: string;
+  description: string | null;
+  paidType: LeavePaidType;
+  allowanceValue: number;
+  allowancePeriod: AllowancePeriod;
+};
 type Opt = { id: string; name: string };
 
 const STATUS_TONE: Record<string, { tone: "gray" | "blue" | "green" | "red"; label: string }> = {
@@ -61,9 +70,7 @@ export function LeaveTabs({
             onClick={() => setTab(t)}
             className={cn(
               "-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors",
-              tab === t
-                ? "border-brand-500 text-accent-strong"
-                : "border-transparent text-muted hover:text-content",
+              tab === t ? "border-brand-500 text-accent-strong" : "border-transparent text-muted hover:text-content",
             )}
           >
             {t}
@@ -74,13 +81,13 @@ export function LeaveTabs({
       {tab === "Requests" && (
         <div className="space-y-5">
           <Card className="p-5">
-            <h3 className="mb-4 text-sm font-semibold text-content">New leave request</h3>
+            <h3 className="mb-4 text-sm font-semibold text-content">Raise a request for an employee</h3>
             <RequestForm employees={employees} leaveTypes={typeOpts} />
           </Card>
 
           <Card>
             {requests.length === 0 ? (
-              <p className="px-5 py-10 text-center text-sm text-muted">No leave requests yet.</p>
+              <p className="px-5 py-10 text-center text-sm text-muted">No requests yet.</p>
             ) : (
               <table className="w-full text-sm">
                 <thead>
@@ -99,14 +106,21 @@ export function LeaveTabs({
                     return (
                       <tr key={r.id} className="hover:bg-canvas">
                         <td className="px-5 py-3 font-medium text-content">{r.employeeName}</td>
-                        <td className="px-5 py-3 text-muted">{r.typeName}</td>
-                        <td className="px-5 py-3 text-muted">
-                          {formatDate(r.startDate)} – {formatDate(r.endDate)}
-                        </td>
-                        <td className="px-5 py-3 text-muted">{r.days}</td>
                         <td className="px-5 py-3">
-                          <Badge tone={s.tone}>{s.label}</Badge>
+                          {r.kind === "WFH" ? (
+                            <Badge tone="blue">WFH</Badge>
+                          ) : (
+                            <span className="text-muted">{r.typeName ?? "Leave"}</span>
+                          )}
                         </td>
+                        <td className="px-5 py-3 text-muted">
+                          {formatDate(r.startDate)}
+                          {r.startDate !== r.endDate && ` – ${formatDate(r.endDate)}`}
+                        </td>
+                        <td className="px-5 py-3 text-muted">
+                          {r.days}{r.isHalfDay && " (half)"}
+                        </td>
+                        <td className="px-5 py-3"><Badge tone={s.tone}>{s.label}</Badge></td>
                         {canApprove && (
                           <td className="px-5 py-3">
                             <RequestActions id={r.id} status={r.status} />
@@ -127,21 +141,28 @@ export function LeaveTabs({
           <Card className="p-5">
             <h3 className="mb-3 text-sm font-semibold text-content">Add leave type</h3>
             <AddForm action={createLeaveType}>
-              <Field label="Name" htmlFor="lt-name" className="min-w-48">
+              <Field label="Name" htmlFor="lt-name" className="min-w-44">
                 <Input id="lt-name" name="name" placeholder="e.g. Casual Leave" required />
               </Field>
-              <Field label="Paid?" className="min-w-36">
+              <Field label="Description" htmlFor="lt-desc" className="min-w-56">
+                <Input id="lt-desc" name="description" placeholder="Short note (optional)" />
+              </Field>
+              <Field label="Paid?" className="w-32">
                 <Combobox
                   name="paidType"
                   defaultValue="PAID"
-                  options={[
-                    { value: "PAID", label: "Paid" },
-                    { value: "UNPAID", label: "Unpaid" },
-                  ]}
+                  options={[{ value: "PAID", label: "Paid" }, { value: "UNPAID", label: "Unpaid" }]}
                 />
               </Field>
-              <Field label="Annual quota (days)" htmlFor="lt-quota" className="w-40">
-                <Input id="lt-quota" name="annualQuota" type="number" min={0} max={365} defaultValue={12} />
+              <Field label="Days" htmlFor="lt-val" className="w-24">
+                <Input id="lt-val" name="allowanceValue" type="number" min={0} max={365} step="0.5" defaultValue={12} />
+              </Field>
+              <Field label="Per" className="w-32">
+                <Combobox
+                  name="allowancePeriod"
+                  defaultValue="YEAR"
+                  options={[{ value: "YEAR", label: "Year" }, { value: "MONTH", label: "Month" }]}
+                />
               </Field>
             </AddForm>
           </Card>
@@ -154,21 +175,26 @@ export function LeaveTabs({
                 <thead>
                   <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wider text-faint">
                     <th className="px-5 py-3">Name</th>
-                    <th className="px-5 py-3">Type</th>
-                    <th className="px-5 py-3">Annual quota</th>
+                    <th className="px-5 py-3">Paid</th>
+                    <th className="px-5 py-3">Allowance</th>
                     <th className="px-5 py-3"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line">
                   {leaveTypes.map((t) => (
                     <tr key={t.id} className="hover:bg-canvas">
-                      <td className="px-5 py-3 font-medium text-content">{t.name}</td>
+                      <td className="px-5 py-3">
+                        <p className="font-medium text-content">{t.name}</p>
+                        {t.description && <p className="text-xs text-muted">{t.description}</p>}
+                      </td>
                       <td className="px-5 py-3">
                         <Badge tone={t.paidType === "PAID" ? "green" : "gray"}>
-                          {humanizeEnum(t.paidType)}
+                          {t.paidType === "PAID" ? "Paid" : "Unpaid"}
                         </Badge>
                       </td>
-                      <td className="px-5 py-3 text-muted">{t.annualQuota} days</td>
+                      <td className="px-5 py-3 text-muted">
+                        {t.allowanceValue} / {t.allowancePeriod === "MONTH" ? "month" : "year"}
+                      </td>
                       <td className="px-5 py-3 text-right">
                         <TypeDelete id={t.id} name={t.name} />
                       </td>

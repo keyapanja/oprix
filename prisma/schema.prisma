@@ -89,6 +89,16 @@ enum LeavePaidType {
   UNPAID
 }
 
+enum AllowancePeriod {
+  MONTH
+  YEAR
+}
+
+enum RequestKind {
+  LEAVE
+  WFH
+}
+
 enum PayrollRunStatus {
   DRAFT
   LOCKED
@@ -125,7 +135,7 @@ model Company {
 
   users            User[]
   departments      Department[]
-  teams            Team[]
+  services         Service[]
   designations     Designation[]
   workShifts       WorkShift[]
   locations        Location[]
@@ -135,9 +145,39 @@ model Company {
   projects         Project[]
   clients          Client[]
   leaveTypes       LeaveType[]
+  holidays         Holiday[]
+  announcements    Announcement[]
   payrollRuns      PayrollRun[]
   kbCategories     KbCategory[]
   ptSlabs          ProfessionalTaxSlab[]
+}
+
+// Company holidays — shown to every employee on the calendar.
+model Holiday {
+  id        String   @id @default(cuid())
+  companyId String
+  date      DateTime @db.Date
+  name      String
+  createdAt DateTime @default(now())
+
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@unique([companyId, date])
+  @@index([companyId])
+}
+
+// Company announcements / updates surfaced on the shared calendar.
+model Announcement {
+  id        String   @id @default(cuid())
+  companyId String
+  title     String
+  body      String?
+  date      DateTime @db.Date
+  createdAt DateTime @default(now())
+
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@index([companyId, date])
 }
 
 // Work locations / sites. When Company.multiLocation is false, exactly one is
@@ -191,7 +231,7 @@ model Department {
 
   company      Company       @relation(fields: [companyId], references: [id])
   head         Employee?     @relation("DeptHead", fields: [headId], references: [id])
-  teams        Team[]
+  services     Service[]
   designations Designation[]
   employees    Employee[]
 
@@ -199,19 +239,35 @@ model Department {
   @@index([companyId])
 }
 
-model Team {
+// Service lines the company offers (Web Dev, Content, Paid Ads…). Formerly "Team".
+model Service {
   id           String   @id @default(cuid())
   companyId    String
   departmentId String?
   name         String
   createdAt    DateTime @default(now())
 
-  company    Company     @relation(fields: [companyId], references: [id])
-  department Department? @relation(fields: [departmentId], references: [id])
-  employees  Employee[]
+  company          Company                @relation(fields: [companyId], references: [id])
+  department       Department?            @relation(fields: [departmentId], references: [id])
+  employees        Employee[]
+  projectLinks     ProjectService[]
+  tasks            Task[]
+  checklistTemplate ServiceChecklistItem[]
 
   @@unique([companyId, name])
   @@index([companyId])
+}
+
+// Default checklist a service seeds onto every task created under it.
+model ServiceChecklistItem {
+  id         String @id @default(cuid())
+  serviceId  String
+  text       String
+  orderIndex Int    @default(0)
+
+  service Service @relation(fields: [serviceId], references: [id])
+
+  @@index([serviceId])
 }
 
 model Designation {
@@ -287,7 +343,7 @@ model Employee {
   dateOfBirth     DateTime?
   joiningDate     DateTime
   departmentId    String?
-  teamId          String?
+  serviceId       String?
   designationId   String?
   managerId       String? // self-referential reporting line
   workShiftId     String?
@@ -302,12 +358,14 @@ model Employee {
 
   company        Company           @relation(fields: [companyId], references: [id])
   department     Department?       @relation(fields: [departmentId], references: [id])
-  team           Team?             @relation(fields: [teamId], references: [id])
+  service        Service?          @relation(fields: [serviceId], references: [id])
   designation    Designation?      @relation(fields: [designationId], references: [id])
   workShift      WorkShift?        @relation(fields: [workShiftId], references: [id])
   location       Location?         @relation(fields: [locationId], references: [id])
   manager        Employee?         @relation("Reports", fields: [managerId], references: [id])
   reports        Employee[]        @relation("Reports")
+  taskAssignments  TaskAssignee[]
+  primaryServices  ProjectService[]
   headedDepts    Department[]      @relation("DeptHead")
   user           User?
 
@@ -384,8 +442,9 @@ model Project {
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
-  company      Company       @relation(fields: [companyId], references: [id])
-  client       Client?       @relation(fields: [clientId], references: [id])
+  company      Company          @relation(fields: [companyId], references: [id])
+  client       Client?          @relation(fields: [clientId], references: [id])
+  services     ProjectService[]
   tasks        Task[]
   milestones   Milestone[]
   timeEntries  TimeEntry[]
@@ -401,10 +460,13 @@ model Task {
   parentTaskId String? // subtask
   name         String
   description  String?
-  assigneeId   String?
+  assigneeId   String? // deprecated; use assignees (TaskAssignee)
+  serviceId    String?
   dueDate      DateTime?
   priority     Priority   @default(MEDIUM)
   status       TaskStatus @default(TODO)
+  startedAt    DateTime? // first moved to In Progress
+  completedAt  DateTime? // moved to Completed
   milestoneId  String?
   orderIndex   Int        @default(0)
   createdAt    DateTime   @default(now())
@@ -414,6 +476,8 @@ model Task {
   parent       Task?            @relation("Subtasks", fields: [parentTaskId], references: [id])
   subtasks     Task[]           @relation("Subtasks")
   assignee     Employee?        @relation("Assignee", fields: [assigneeId], references: [id])
+  service      Service?         @relation(fields: [serviceId], references: [id])
+  assignees    TaskAssignee[]
   milestone    Milestone?       @relation(fields: [milestoneId], references: [id])
   checklist    ChecklistItem[]
   comments     Comment[]
@@ -424,6 +488,36 @@ model Task {
 
   @@index([projectId])
   @@index([assigneeId])
+  @@index([serviceId])
+}
+
+// Which services a project uses, and the primary employee for each.
+model ProjectService {
+  id                String  @id @default(cuid())
+  projectId         String
+  serviceId         String
+  primaryAssigneeId String?
+
+  project         Project   @relation(fields: [projectId], references: [id])
+  service         Service   @relation(fields: [serviceId], references: [id])
+  primaryAssignee Employee? @relation(fields: [primaryAssigneeId], references: [id])
+
+  @@unique([projectId, serviceId])
+  @@index([projectId])
+}
+
+// Many employees can work on one task.
+model TaskAssignee {
+  id         String @id @default(cuid())
+  taskId     String
+  employeeId String
+
+  task     Task     @relation(fields: [taskId], references: [id])
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@unique([taskId, employeeId])
+  @@index([taskId])
+  @@index([employeeId])
 }
 
 model TaskDependency {
@@ -495,15 +589,16 @@ model Attachment {
 // ============================================================
 
 model Attendance {
-  id         String         @id @default(cuid())
-  companyId  String
-  employeeId String
-  date       DateTime       @db.Date
-  type       AttendanceType @default(PRESENT)
-  clockIn    DateTime?
-  clockOut   DateTime?
-  location   String?
-  createdAt  DateTime       @default(now())
+  id             String         @id @default(cuid())
+  companyId      String
+  employeeId     String
+  date           DateTime       @db.Date
+  type           AttendanceType @default(PRESENT)
+  markedManually Boolean        @default(false) // admin override wins over auto leave status
+  clockIn        DateTime?
+  clockOut       DateTime?
+  location       String?
+  createdAt      DateTime       @default(now())
 
   employee Employee        @relation(fields: [employeeId], references: [id])
   breaks   AttendanceBreak[]
@@ -528,11 +623,14 @@ model AttendanceBreak {
 // ============================================================
 
 model LeaveType {
-  id           String        @id @default(cuid())
-  companyId    String
-  name         String // Casual, Sick, Paid, Unpaid
-  paidType     LeavePaidType @default(PAID)
-  annualQuota  Float         @default(0)
+  id              String          @id @default(cuid())
+  companyId       String
+  name            String // Casual, Sick, Paid, Unpaid
+  description     String?
+  paidType        LeavePaidType   @default(PAID)
+  allowanceValue  Float           @default(0) // days granted per period
+  allowancePeriod AllowancePeriod @default(YEAR)
+  annualQuota     Float           @default(0) // deprecated; kept for back-compat
 
   company   Company        @relation(fields: [companyId], references: [id])
   requests  LeaveRequest[]
@@ -560,10 +658,12 @@ model LeaveRequest {
   id              String         @id @default(cuid())
   companyId       String
   employeeId      String
-  leaveTypeId     String
+  kind            RequestKind    @default(LEAVE)
+  leaveTypeId     String? // null for WFH requests
   startDate       DateTime       @db.Date
   endDate         DateTime       @db.Date
   days            Float
+  isHalfDay       Boolean        @default(false)
   reason          String?
   status          ApprovalStatus @default(PENDING)
   managerApprovedById String?
@@ -571,8 +671,8 @@ model LeaveRequest {
   decidedAt       DateTime?
   createdAt       DateTime       @default(now())
 
-  employee  Employee  @relation(fields: [employeeId], references: [id])
-  leaveType LeaveType @relation(fields: [leaveTypeId], references: [id])
+  employee  Employee   @relation(fields: [employeeId], references: [id])
+  leaveType LeaveType? @relation(fields: [leaveTypeId], references: [id])
 
   @@index([companyId])
   @@index([employeeId])

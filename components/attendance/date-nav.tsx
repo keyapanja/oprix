@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/ui/icons";
+import { DatePicker } from "@/components/ui/date-picker";
 import { shiftISO, formatISO } from "@/lib/dates";
 
 export function DateNav({ date, today }: { date: string; today: string }) {
@@ -17,12 +18,9 @@ export function DateNav({ date, today }: { date: string; today: string }) {
       >
         <Icon name="chevronLeft" className="size-4" />
       </button>
-      <input
-        type="date"
-        value={date}
-        onChange={(e) => e.target.value && go(e.target.value)}
-        className="h-9 rounded-lg bg-surface px-3 text-sm text-content ring-1 ring-inset ring-line-strong focus:ring-2 focus:ring-brand-500"
-      />
+      <div className="w-44">
+        <DatePicker value={date} onChange={(d) => d && go(d)} />
+      </div>
       <button
         onClick={() => go(shiftISO(date, 1))}
         className="flex size-9 items-center justify-center rounded-lg bg-surface text-muted ring-1 ring-inset ring-line-strong hover:text-content"

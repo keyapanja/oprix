@@ -7,10 +7,11 @@ import { Field } from "@/components/ui/field";
 import { Combobox } from "@/components/ui/combobox";
 import { AddForm } from "@/components/org/add-form";
 import { DeleteButton } from "@/components/org/delete-button";
+import { ServiceList } from "@/components/org/service-list";
 import { PermissionsMatrix } from "@/components/org/permissions-matrix";
 import {
   createDepartment,
-  createTeam,
+  createService,
   createDesignation,
   createShift,
   createLocation,
@@ -20,17 +21,22 @@ import {
 import { cn } from "@/lib/cn";
 
 type Dept = { id: string; name: string };
-type Team = { id: string; name: string; department: { name: string } | null };
+type Svc = {
+  id: string;
+  name: string;
+  department: { name: string } | null;
+  checklist: { id: string; text: string }[];
+};
 type Desig = { id: string; name: string; department: { name: string } };
 type Shift = { id: string; name: string; startTime: string; endTime: string; graceMinutes: number };
 type Loc = { id: string; name: string };
 type Prob = { id: string; months: number };
 
-const BASE_TABS = ["Departments", "Teams", "Designations", "Shifts", "Locations", "Probation"];
+const BASE_TABS = ["Departments", "Services", "Designations", "Shifts", "Locations", "Probation"];
 
 export function OrgTabs({
   departments,
-  teams,
+  services,
   designations,
   shifts,
   locations,
@@ -39,7 +45,7 @@ export function OrgTabs({
   accessMatrix,
 }: {
   departments: Dept[];
-  teams: Team[];
+  services: Svc[];
   designations: Desig[];
   shifts: Shift[];
   locations: Loc[];
@@ -90,27 +96,28 @@ export function OrgTabs({
         />
       )}
 
-      {tab === "Teams" && (
-        <Section
-          title="Teams"
-          empty="No teams yet."
-          headers={["Name", "Department", ""]}
-          form={
-            <AddForm action={createTeam}>
-              <Field label="Team name" htmlFor="team-name" className="min-w-56">
-                <Input id="team-name" name="name" placeholder="e.g. Web Development" required />
+      {tab === "Services" && (
+        <div className="space-y-5">
+          <Card className="p-5">
+            <h3 className="mb-3 text-sm font-semibold text-content">Add service</h3>
+            <AddForm action={createService}>
+              <Field label="Service name" htmlFor="service-name" className="min-w-56">
+                <Input id="service-name" name="name" placeholder="e.g. Web Development" required />
               </Field>
               <Field label="Department" className="min-w-52">
                 <Combobox name="departmentId" options={deptOptions} placeholder="— None —" emptyLabel="— None —" />
               </Field>
             </AddForm>
-          }
-          rows={teams.map((t) => ({
-            id: t.id,
-            cells: [t.name, t.department?.name ?? "—"],
-            delete: <DeleteButton entity="team" id={t.id} label={t.name} />,
-          }))}
-        />
+          </Card>
+          <ServiceList
+            services={services.map((s) => ({
+              id: s.id,
+              name: s.name,
+              departmentName: s.department?.name ?? null,
+              checklist: s.checklist,
+            }))}
+          />
+        </div>
       )}
 
       {tab === "Designations" && (

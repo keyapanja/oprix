@@ -26,7 +26,7 @@ export default async function EmployeeDetailPage({
     where: { id, companyId: session.companyId, deletedAt: null },
     include: {
       department: { select: { name: true } },
-      team: { select: { name: true } },
+      service: { select: { name: true } },
       designation: { select: { name: true } },
       manager: { select: { id: true, fullName: true } },
       workShift: { select: { name: true, startTime: true, endTime: true } },
@@ -64,7 +64,7 @@ export default async function EmployeeDetailPage({
         : humanizeEnum(employee.probationStatus),
     },
     { label: "Work location", value: employee.location?.name ?? "—" },
-    { label: "Team", value: employee.team?.name ?? "—" },
+    { label: "Service", value: employee.service?.name ?? "—" },
     {
       label: "Work shift",
       value: employee.workShift

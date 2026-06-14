@@ -6,7 +6,7 @@ import { Icon } from "@/components/ui/icons";
 
 type Entity =
   | "department"
-  | "team"
+  | "service"
   | "designation"
   | "shift"
   | "location"

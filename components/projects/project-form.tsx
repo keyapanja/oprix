@@ -8,6 +8,7 @@ import { Input, Textarea } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
+import { DatePicker } from "@/components/ui/date-picker";
 import { humanizeEnum } from "@/lib/format";
 
 type Opt = { id: string; name: string };
@@ -15,7 +16,7 @@ type Opt = { id: string; name: string };
 const PRIORITIES = ["LOW", "MEDIUM", "HIGH", "URGENT"];
 const STATUSES = ["PLANNING", "ACTIVE", "ON_HOLD", "COMPLETED", "CANCELLED"];
 
-export function ProjectForm({ clients }: { clients: Opt[] }) {
+export function ProjectForm({ clients, services }: { clients: Opt[]; services: Opt[] }) {
   const [state, formAction, pending] = useActionState<ProjectState, FormData>(
     createProject,
     {},
@@ -40,11 +41,11 @@ export function ProjectForm({ clients }: { clients: Opt[] }) {
           <Field label="Priority">
             <Combobox name="priority" defaultValue="MEDIUM" options={PRIORITIES.map((p) => ({ value: p, label: humanizeEnum(p) }))} />
           </Field>
-          <Field label="Start date" htmlFor="p-start">
-            <Input id="p-start" name="startDate" type="date" />
+          <Field label="Start date">
+            <DatePicker name="startDate" />
           </Field>
-          <Field label="Due date" htmlFor="p-due">
-            <Input id="p-due" name="dueDate" type="date" />
+          <Field label="Due date">
+            <DatePicker name="dueDate" />
           </Field>
           <Field label="Status">
             <Combobox name="status" defaultValue="PLANNING" options={STATUSES.map((s) => ({ value: s, label: humanizeEnum(s) }))} />
@@ -52,6 +53,27 @@ export function ProjectForm({ clients }: { clients: Opt[] }) {
           <Field label="Description" htmlFor="p-desc" className="sm:col-span-2">
             <Textarea id="p-desc" name="description" placeholder="What's this project about?" />
           </Field>
+        </div>
+
+        <div className="mt-5 border-t border-line pt-4">
+          <p className="mb-2 text-sm font-medium text-content">Services</p>
+          {services.length === 0 ? (
+            <p className="text-sm text-muted">
+              No services yet — add them in Organization → Services.
+            </p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {services.map((s) => (
+                <label
+                  key={s.id}
+                  className="flex cursor-pointer items-center gap-2 rounded-xl border border-line-strong px-3 py-2 text-sm text-content hover:bg-canvas"
+                >
+                  <input type="checkbox" name="serviceIds" value={s.id} className="size-4 rounded border-line-strong text-brand-600 focus:ring-brand-500" />
+                  {s.name}
+                </label>
+              ))}
+            </div>
+          )}
         </div>
       </Card>
 

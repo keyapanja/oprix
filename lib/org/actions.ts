@@ -69,13 +69,13 @@ export async function createDesignation(
   return { ok: true };
 }
 
-// ---- Teams ----------------------------------------------------------------
-const TeamSchema = z.object({
+// ---- Services -------------------------------------------------------------
+const ServiceSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(80),
   departmentId: z.string().trim().optional().nullable(),
 });
 
-export async function createTeam(
+export async function createService(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
@@ -84,7 +84,7 @@ export async function createTeam(
     name: formData.get("name"),
     departmentId: (formData.get("departmentId") as string) || null,
   };
-  const parsed = TeamSchema.safeParse(raw);
+  const parsed = ServiceSchema.safeParse(raw);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message };
 
   // Ensure the chosen department belongs to this company (tenant safety).
@@ -97,7 +97,7 @@ export async function createTeam(
   }
 
   try {
-    await prisma.team.create({
+    await prisma.service.create({
       data: {
         companyId: session.companyId,
         name: parsed.data.name,
@@ -105,7 +105,7 @@ export async function createTeam(
       },
     });
   } catch {
-    return { error: "A team with that name already exists" };
+    return { error: "A service with that name already exists" };
   }
   revalidatePath(ORG);
   return { ok: true };
@@ -196,7 +196,7 @@ export async function createProbationPeriod(
 // ---- Delete (shared) ------------------------------------------------------
 type OrgEntity =
   | "department"
-  | "team"
+  | "service"
   | "designation"
   | "shift"
   | "location"
@@ -209,7 +209,7 @@ export async function deleteOrgEntity(entity: OrgEntity, id: string): Promise<Ac
   const scope = { id, companyId: session.companyId };
   try {
     if (entity === "department") await prisma.department.deleteMany({ where: scope });
-    else if (entity === "team") await prisma.team.deleteMany({ where: scope });
+    else if (entity === "service") await prisma.service.deleteMany({ where: scope });
     else if (entity === "designation") await prisma.designation.deleteMany({ where: scope });
     else if (entity === "shift") await prisma.workShift.deleteMany({ where: scope });
     else if (entity === "location") await prisma.location.deleteMany({ where: scope });
@@ -217,6 +217,52 @@ export async function deleteOrgEntity(entity: OrgEntity, id: string): Promise<Ac
   } catch {
     return { error: "Couldn't delete — it may be in use by an employee" };
   }
+  revalidatePath(ORG);
+  return { ok: true };
+}
+
+// ---- Service checklist templates ------------------------------------------
+export async function addServiceChecklistItem(
+  serviceId: string,
+  text: string,
+): Promise<{ ok?: boolean; error?: string; item?: { id: string; text: string } }> {
+  const session = await requireCapability("org:manage");
+  const t = text.trim();
+  if (!t) return { error: "Item text is required" };
+  const svc = await prisma.service.findFirst({
+    where: { id: serviceId, companyId: session.companyId },
+    select: { id: true },
+  });
+  if (!svc) return { error: "Service not found" };
+  const count = await prisma.serviceChecklistItem.count({ where: { serviceId } });
+  const item = await prisma.serviceChecklistItem.create({
+    data: { serviceId, text: t, orderIndex: count },
+    select: { id: true, text: true },
+  });
+  revalidatePath(ORG);
+  return { ok: true, item };
+}
+
+export async function removeServiceChecklistItem(itemId: string): Promise<ActionState> {
+  const session = await requireCapability("org:manage");
+  await prisma.serviceChecklistItem.deleteMany({
+    where: { id: itemId, service: { companyId: session.companyId } },
+  });
+  revalidatePath(ORG);
+  return { ok: true };
+}
+
+export async function renameServiceChecklistItem(
+  itemId: string,
+  text: string,
+): Promise<ActionState> {
+  const session = await requireCapability("org:manage");
+  const t = text.trim();
+  if (!t) return { error: "Item text is required" };
+  await prisma.serviceChecklistItem.updateMany({
+    where: { id: itemId, service: { companyId: session.companyId } },
+    data: { text: t },
+  });
   revalidatePath(ORG);
   return { ok: true };
 }
