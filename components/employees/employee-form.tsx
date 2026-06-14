@@ -2,7 +2,7 @@
 
 import { useActionState, useMemo, useState } from "react";
 import Link from "next/link";
-import { createEmployee, type EmployeeFormState } from "@/lib/employees/actions";
+import { createEmployee, updateEmployee, type EmployeeFormState } from "@/lib/employees/actions";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
@@ -14,6 +14,24 @@ import { humanizeEnum } from "@/lib/format";
 type Opt = { id: string; name: string };
 type ComboOpt = { value: string; label: string };
 
+export type EmployeeInitial = {
+  id: string;
+  employeeCode: string;
+  fullName: string;
+  email: string;
+  phone: string | null;
+  joiningDate: string; // YYYY-MM-DD
+  dateOfBirth: string | null; // YYYY-MM-DD
+  employmentType: string;
+  probationStatus: string;
+  probationMonths: number | null;
+  departmentId: string | null;
+  designationId: string | null;
+  managerId: string | null;
+  workShiftId: string | null;
+  locationId: string | null;
+};
+
 const EMPLOYMENT_TYPES = ["FULL_TIME", "PART_TIME", "CONTRACT", "INTERN"];
 const PROBATION = ["ON_PROBATION", "CONFIRMED"];
 
@@ -22,32 +40,31 @@ const toOpts = (xs: Opt[]): ComboOpt[] => xs.map((x) => ({ value: x.id, label: x
 export function EmployeeForm({
   nextCode,
   departments,
-  services,
   designations,
   managers,
   shifts,
   locations,
   probationPeriods,
   multiLocation,
+  employee,
 }: {
   nextCode: string;
   departments: Opt[];
-  services: Opt[];
   designations: Array<Opt & { departmentId: string }>;
   managers: Opt[];
   shifts: Opt[];
   locations: Opt[];
   probationPeriods: number[];
   multiLocation: boolean;
+  employee?: EmployeeInitial;
 }) {
-  const [state, formAction, pending] = useActionState<EmployeeFormState, FormData>(
-    createEmployee,
-    {},
-  );
+  const isEdit = !!employee;
+  const action = employee ? updateEmployee.bind(null, employee.id) : createEmployee;
+  const [state, formAction, pending] = useActionState<EmployeeFormState, FormData>(action, {});
 
   // Designations are department-wise, so the list cascades from the chosen department.
-  const [departmentId, setDepartmentId] = useState("");
-  const [designationId, setDesignationId] = useState("");
+  const [departmentId, setDepartmentId] = useState(employee?.departmentId ?? "");
+  const [designationId, setDesignationId] = useState(employee?.designationId ?? "");
   const deptDesignations = useMemo<ComboOpt[]>(
     () =>
       designations
@@ -67,23 +84,23 @@ export function EmployeeForm({
       <Card className="p-5">
         <h3 className="mb-4 text-sm font-semibold text-content">Basic details</h3>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Employee code" htmlFor="employeeCode" hint="Auto-generated">
+          <Field label="Employee code" htmlFor="employeeCode" hint={isEdit ? undefined : "Auto-generated"}>
             <Input
               id="employeeCode"
-              value={nextCode}
+              value={employee?.employeeCode ?? nextCode}
               disabled
               readOnly
               className="cursor-not-allowed text-muted"
             />
           </Field>
           <Field label="Full name" htmlFor="fullName" required>
-            <Input id="fullName" name="fullName" placeholder="Jane Doe" required />
+            <Input id="fullName" name="fullName" placeholder="Jane Doe" defaultValue={employee?.fullName} required />
           </Field>
           <Field label="Email" htmlFor="email" required>
-            <Input id="email" name="email" type="email" placeholder="jane@company.com" required />
+            <Input id="email" name="email" type="email" placeholder="jane@company.com" defaultValue={employee?.email} required />
           </Field>
           <Field label="Phone" htmlFor="phone">
-            <Input id="phone" name="phone" placeholder="+91 …" />
+            <Input id="phone" name="phone" placeholder="+91 …" defaultValue={employee?.phone ?? ""} />
           </Field>
         </div>
       </Card>
@@ -92,28 +109,29 @@ export function EmployeeForm({
         <h3 className="mb-4 text-sm font-semibold text-content">Employment</h3>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Joining date" htmlFor="joiningDate" required>
-            <DatePicker id="joiningDate" name="joiningDate" placeholder="Select date" />
+            <DatePicker id="joiningDate" name="joiningDate" placeholder="Select date" defaultValue={employee?.joiningDate} />
           </Field>
           <Field label="Date of birth" htmlFor="dateOfBirth">
-            <DatePicker id="dateOfBirth" name="dateOfBirth" placeholder="Select date" />
+            <DatePicker id="dateOfBirth" name="dateOfBirth" placeholder="Select date" defaultValue={employee?.dateOfBirth ?? ""} />
           </Field>
           <Field label="Employment type">
             <Combobox
               name="employmentType"
-              defaultValue="FULL_TIME"
+              defaultValue={employee?.employmentType ?? "FULL_TIME"}
               options={EMPLOYMENT_TYPES.map((t) => ({ value: t, label: humanizeEnum(t) }))}
             />
           </Field>
           <Field label="Probation status">
             <Combobox
               name="probationStatus"
-              defaultValue="ON_PROBATION"
+              defaultValue={employee?.probationStatus ?? "ON_PROBATION"}
               options={PROBATION.map((t) => ({ value: t, label: humanizeEnum(t) }))}
             />
           </Field>
           <Field label="Probation period" hint={probationPeriods.length === 0 ? "Add options in Organization → Probation" : undefined}>
             <Combobox
               name="probationMonths"
+              defaultValue={employee?.probationMonths ? String(employee.probationMonths) : ""}
               emptyLabel="— None —"
               placeholder="— None —"
               options={probationPeriods.map((m) => ({ value: String(m), label: `${m} months` }))}
@@ -121,7 +139,7 @@ export function EmployeeForm({
           </Field>
           {multiLocation && (
             <Field label="Work location">
-              <Combobox name="locationId" emptyLabel="— None —" placeholder="Select location" options={toOpts(locations)} />
+              <Combobox name="locationId" defaultValue={employee?.locationId ?? ""} emptyLabel="— None —" placeholder="Select location" options={toOpts(locations)} />
             </Field>
           )}
         </div>
@@ -143,9 +161,6 @@ export function EmployeeForm({
               options={toOpts(departments)}
             />
           </Field>
-          <Field label="Service">
-            <Combobox name="serviceId" emptyLabel="— None —" placeholder="— None —" options={toOpts(services)} />
-          </Field>
           <Field label="Designation" hint={departmentId ? undefined : "Pick a department first"}>
             <Combobox
               name="designationId"
@@ -158,20 +173,20 @@ export function EmployeeForm({
             />
           </Field>
           <Field label="Reporting manager">
-            <Combobox name="managerId" emptyLabel="— None —" placeholder="— None —" options={toOpts(managers)} />
+            <Combobox name="managerId" defaultValue={employee?.managerId ?? ""} emptyLabel="— None —" placeholder="— None —" options={toOpts(managers)} />
           </Field>
           <Field label="Work shift">
-            <Combobox name="workShiftId" emptyLabel="— None —" placeholder="— None —" options={toOpts(shifts)} />
+            <Combobox name="workShiftId" defaultValue={employee?.workShiftId ?? ""} emptyLabel="— None —" placeholder="— None —" options={toOpts(shifts)} />
           </Field>
         </div>
       </Card>
 
       <div className="flex justify-end gap-3">
-        <Link href="/employees">
+        <Link href={employee ? `/employees/${employee.id}` : "/employees"}>
           <Button type="button" variant="secondary">Cancel</Button>
         </Link>
         <Button type="submit" disabled={pending}>
-          {pending ? "Creating…" : "Create employee"}
+          {pending ? (isEdit ? "Saving…" : "Creating…") : isEdit ? "Save changes" : "Create employee"}
         </Button>
       </div>
     </form>

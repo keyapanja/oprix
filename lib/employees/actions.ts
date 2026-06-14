@@ -137,6 +137,64 @@ export async function createEmployee(
   redirect("/employees");
 }
 
+export async function updateEmployee(
+  employeeId: string,
+  _prev: EmployeeFormState,
+  formData: FormData,
+): Promise<EmployeeFormState> {
+  const session = await requireCapability("employee:manage");
+
+  const parsed = EmployeeSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message };
+  const d = parsed.data;
+
+  const employee = await prisma.employee.findFirst({
+    where: { id: employeeId, companyId: session.companyId, deletedAt: null },
+    select: { id: true },
+  });
+  if (!employee) return { error: "Employee not found" };
+  if (d.managerId === employeeId) return { error: "An employee can't report to themselves" };
+
+  const refsOk = await assertOwnedRefs(session.companyId, {
+    departmentId: d.departmentId,
+    designationId: d.designationId,
+    managerId: d.managerId,
+    workShiftId: d.workShiftId,
+    locationId: d.locationId,
+  });
+  if (!refsOk) return { error: "One of the selected options is invalid" };
+
+  const company = await prisma.company.findUnique({
+    where: { id: session.companyId },
+    select: { multiLocation: true },
+  });
+  const probationMonths = d.probationMonths ? parseInt(d.probationMonths, 10) : null;
+
+  await prisma.employee.update({
+    where: { id: employeeId },
+    data: {
+      fullName: d.fullName,
+      email: d.email,
+      phone: d.phone || null,
+      joiningDate: new Date(d.joiningDate),
+      dateOfBirth: d.dateOfBirth ? new Date(d.dateOfBirth) : null,
+      employmentType: d.employmentType,
+      probationStatus: d.probationStatus,
+      probationMonths,
+      departmentId: d.departmentId || null,
+      designationId: d.designationId || null,
+      managerId: d.managerId || null,
+      workShiftId: d.workShiftId || null,
+      // Service is managed per project, not on the employee; left untouched.
+      ...(company?.multiLocation ? { locationId: d.locationId || null } : {}),
+    },
+  });
+
+  revalidatePath(`/employees/${employeeId}`);
+  revalidatePath("/employees");
+  redirect(`/employees/${employeeId}`);
+}
+
 /** Creates an EMPLOYEE-role login (no password yet) and emails a setup link. */
 async function inviteEmployeeUser(opts: {
   companyId: string;

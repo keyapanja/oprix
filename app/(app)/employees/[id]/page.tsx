@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import { BackLink } from "@/components/ui/back-link";
+import { Button } from "@/components/ui/button";
+import { Icon } from "@/components/ui/icons";
 import { requirePage } from "@/lib/auth/guard";
 import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/auth/permissions";
@@ -26,7 +29,6 @@ export default async function EmployeeDetailPage({
     where: { id, companyId: session.companyId, deletedAt: null },
     include: {
       department: { select: { name: true } },
-      service: { select: { name: true } },
       designation: { select: { name: true } },
       manager: { select: { id: true, fullName: true } },
       workShift: { select: { name: true, startTime: true, endTime: true } },
@@ -64,7 +66,6 @@ export default async function EmployeeDetailPage({
         : humanizeEnum(employee.probationStatus),
     },
     { label: "Work location", value: employee.location?.name ?? "—" },
-    { label: "Service", value: employee.service?.name ?? "—" },
     {
       label: "Work shift",
       value: employee.workShift
@@ -102,7 +103,15 @@ export default async function EmployeeDetailPage({
             </p>
           </div>
           {canManage && (
-            <DeleteEmployeeButton id={employee.id} name={employee.fullName} />
+            <div className="flex shrink-0 items-center gap-2">
+              <Link href={`/employees/${employee.id}/edit`}>
+                <Button variant="secondary" size="sm">
+                  <Icon name="pencil" className="size-4" />
+                  Edit
+                </Button>
+              </Link>
+              <DeleteEmployeeButton id={employee.id} name={employee.fullName} />
+            </div>
           )}
         </div>
 

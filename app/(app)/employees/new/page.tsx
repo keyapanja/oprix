@@ -12,14 +12,13 @@ export default async function NewEmployeePage() {
   const session = await requirePage("employee:manage");
   const where = { companyId: session.companyId };
 
-  const [company, departments, services, designations, managers, shifts, locations, probationPeriods] =
+  const [company, departments, designations, managers, shifts, locations, probationPeriods] =
     await Promise.all([
       prisma.company.findUnique({
         where: { id: session.companyId },
         select: { employeeCodePrefix: true, multiLocation: true },
       }),
       prisma.department.findMany({ where, orderBy: { name: "asc" }, select: { id: true, name: true } }),
-      prisma.service.findMany({ where, orderBy: { name: "asc" }, select: { id: true, name: true } }),
       prisma.designation.findMany({ where, orderBy: { name: "asc" }, select: { id: true, name: true, departmentId: true } }),
       prisma.employee.findMany({
         where: { ...where, deletedAt: null },
@@ -42,7 +41,6 @@ export default async function NewEmployeePage() {
       <EmployeeForm
         nextCode={nextCode}
         departments={departments}
-        services={services}
         designations={designations}
         managers={managers.map((m) => ({ id: m.id, name: m.fullName }))}
         shifts={shifts}
