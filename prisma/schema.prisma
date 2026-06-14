@@ -68,6 +68,11 @@ enum Priority {
   URGENT
 }
 
+enum TimerStatus {
+  RUNNING
+  PAUSED
+}
+
 enum AttendanceType {
   PRESENT
   ABSENT
@@ -365,6 +370,7 @@ model Employee {
   manager        Employee?         @relation("Reports", fields: [managerId], references: [id])
   reports        Employee[]        @relation("Reports")
   taskAssignments  TaskAssignee[]
+  taskTimers       TaskTimer[]
   primaryServices  ProjectService[]
   headedDepts    Department[]      @relation("DeptHead")
   user           User?
@@ -483,6 +489,7 @@ model Task {
   comments     Comment[]
   attachments  Attachment[]
   timeEntries  TimeEntry[]
+  timers       TaskTimer[]
   dependsOn    TaskDependency[] @relation("Dependent")
   dependents   TaskDependency[] @relation("Prerequisite")
 
@@ -518,6 +525,29 @@ model TaskAssignee {
   @@unique([taskId, employeeId])
   @@index([taskId])
   @@index([employeeId])
+}
+
+// Live stopwatch state for one employee on one task. Pause banks elapsed into
+// accumulatedSeconds and clears runStartedAt; resume sets runStartedAt again.
+// Multiple rows per employee = concurrent timers. Deleted on stop, after the
+// total is finalized into a TimeEntry (timesheet) row.
+model TaskTimer {
+  id                 String      @id @default(cuid())
+  companyId          String
+  taskId             String
+  employeeId         String
+  status             TimerStatus @default(RUNNING)
+  accumulatedSeconds Int         @default(0)
+  runStartedAt       DateTime? // set while RUNNING; null while PAUSED
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+
+  task     Task     @relation(fields: [taskId], references: [id])
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@unique([taskId, employeeId])
+  @@index([companyId, employeeId])
+  @@index([taskId])
 }
 
 model TaskDependency {

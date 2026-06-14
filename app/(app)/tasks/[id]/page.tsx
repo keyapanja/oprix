@@ -13,6 +13,9 @@ import { TaskAssignees } from "@/components/tasks/task-assignees";
 import { TaskChecklist } from "@/components/tasks/task-checklist";
 import { TaskEdit } from "@/components/tasks/task-edit";
 import { CommentForm } from "@/components/tasks/comment-form";
+import { TaskTimerControl } from "@/components/timer/task-timer-control";
+import { getMyTaskTimer, taskTrackedSeconds } from "@/lib/timer/data";
+import { fmtHm } from "@/lib/timer/shared";
 
 export const metadata: Metadata = { title: "Task · Operix" };
 
@@ -79,6 +82,11 @@ export default async function TaskDetailPage({
       select: { id: true, action: true, meta: true, createdAt: true },
     }),
   ]);
+
+  const myTimer = session.employeeId
+    ? await getMyTaskTimer(session.employeeId, id)
+    : { status: "NONE" as const, baseSeconds: 0, runStartedAtMs: null };
+  const trackedSeconds = await taskTrackedSeconds(id);
 
   // Resolve comment authors.
   const authorIds = [...new Set(task.comments.map((c) => c.authorId))];
@@ -150,6 +158,26 @@ export default async function TaskDetailPage({
         <div className="mt-4 flex flex-wrap gap-x-8 gap-y-1 border-t border-line pt-4 text-sm">
           <div><span className="text-faint">Started</span> <span className="font-medium text-content">{task.startedAt ? fmtDateTime(task.startedAt) : "—"}</span></div>
           <div><span className="text-faint">Completed</span> <span className="font-medium text-content">{task.completedAt ? fmtDateTime(task.completedAt) : "—"}</span></div>
+        </div>
+
+        <div className="mt-4 border-t border-line pt-4">
+          <div className="mb-3 flex items-center justify-between">
+            <p className="text-xs font-medium uppercase tracking-wide text-faint">Time tracking</p>
+            <p className="text-sm">
+              <span className="text-faint">Total logged</span>{" "}
+              <span className="font-semibold text-content">{fmtHm(trackedSeconds)}</span>
+            </p>
+          </div>
+          {session.employeeId ? (
+            <TaskTimerControl
+              taskId={task.id}
+              status={myTimer.status}
+              baseSeconds={myTimer.baseSeconds}
+              runStartedAtMs={myTimer.runStartedAtMs}
+            />
+          ) : (
+            <p className="text-sm text-muted">Time tracking is available to employee accounts.</p>
+          )}
         </div>
       </Card>
 

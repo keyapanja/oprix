@@ -2,8 +2,10 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth/session";
 import { listPermissions } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/db";
+import { getActiveTimers } from "@/lib/timer/data";
 import { Sidebar } from "@/components/shell/sidebar";
 import { Topbar } from "@/components/shell/topbar";
+import { TimerBar } from "@/components/timer/timer-bar";
 
 export default async function AppLayout({
   children,
@@ -23,6 +25,7 @@ export default async function AppLayout({
     }),
     prisma.notification.count({ where: { userId: session.userId, isRead: false } }),
   ]);
+  const activeTimers = session.employeeId ? await getActiveTimers(session.employeeId) : [];
 
   return (
     <div className="flex h-dvh overflow-hidden">
@@ -37,6 +40,7 @@ export default async function AppLayout({
         <main className="flex-1 overflow-y-auto px-6 py-8">
           <div className="animate-rise mx-auto max-w-7xl">{children}</div>
         </main>
+        <TimerBar timers={activeTimers} />
       </div>
     </div>
   );

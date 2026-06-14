@@ -44,7 +44,7 @@ export const DEFAULT_PERMISSIONS: Record<Role, Action[]> = {
     "employee:read", "task:manage", "leave:approve", "timesheet:approve",
     "self:service",
   ],
-  EMPLOYEE: ["self:service"],
+  EMPLOYEE: ["task:manage", "self:service"],
   CLIENT: ["portal:access"],
 };
 
