@@ -1,15 +1,23 @@
 import "server-only";
 import { prisma } from "@/lib/db";
-import type { ActiveTimer } from "@/lib/timer/shared";
+import type { ActiveTimer, TaskTimerState } from "@/lib/timer/shared";
 
-/** All live (running + paused) timers for an employee, for the global bar. */
-export async function getActiveTimers(employeeId: string): Promise<ActiveTimer[]> {
+/** Seconds a user has logged to the timesheet for a task. */
+async function loggedSeconds(userId: string, taskId: string): Promise<number> {
+  const agg = await prisma.timeEntry.aggregate({
+    where: { userId, taskId },
+    _sum: { hours: true },
+  });
+  return Math.round((agg._sum.hours ?? 0) * 3600);
+}
+
+/** Running timers for a user, for the global bar. */
+export async function getRunningTimers(userId: string): Promise<ActiveTimer[]> {
   const rows = await prisma.taskTimer.findMany({
-    where: { employeeId },
+    where: { userId, status: "RUNNING" },
     orderBy: { createdAt: "asc" },
     select: {
       taskId: true,
-      status: true,
       accumulatedSeconds: true,
       runStartedAt: true,
       task: {
@@ -22,46 +30,86 @@ export async function getActiveTimers(employeeId: string): Promise<ActiveTimer[]
     taskName: r.task.name,
     projectId: r.task.projectId,
     projectName: r.task.project.name,
-    status: r.status,
+    status: "RUNNING",
     baseSeconds: r.accumulatedSeconds,
     runStartedAtMs: r.runStartedAt ? r.runStartedAt.getTime() : null,
   }));
 }
 
-/** The current employee's timer for one task (for the task-detail control). */
-export async function getMyTaskTimer(employeeId: string, taskId: string) {
+/**
+ * The user's timer state for one task: RUNNING if live, PAUSED (resumable) if
+ * there's logged time but no live run, otherwise NONE.
+ */
+export async function getMyTaskTimer(userId: string, taskId: string): Promise<TaskTimerState> {
   const t = await prisma.taskTimer.findUnique({
-    where: { taskId_employeeId: { taskId, employeeId } },
+    where: { taskId_userId: { taskId, userId } },
     select: { status: true, accumulatedSeconds: true, runStartedAt: true },
   });
-  if (!t) return { status: "NONE" as const, baseSeconds: 0, runStartedAtMs: null };
-  return {
-    status: t.status,
-    baseSeconds: t.accumulatedSeconds,
-    runStartedAtMs: t.runStartedAt ? t.runStartedAt.getTime() : null,
-  };
+  if (t && t.status === "RUNNING") {
+    return {
+      status: "RUNNING",
+      baseSeconds: t.accumulatedSeconds,
+      runStartedAtMs: t.runStartedAt ? t.runStartedAt.getTime() : null,
+    };
+  }
+  const logged = await loggedSeconds(userId, taskId);
+  return logged > 0
+    ? { status: "PAUSED", baseSeconds: logged, runStartedAtMs: null }
+    : { status: "NONE", baseSeconds: 0, runStartedAtMs: null };
+}
+
+/** Timer state for many tasks at once (task list): running, resumable, or none. */
+export async function getTaskTimerStates(
+  userId: string,
+  taskIds: string[],
+): Promise<Map<string, TaskTimerState>> {
+  const map = new Map<string, TaskTimerState>();
+  if (taskIds.length === 0) return map;
+
+  const [running, logged] = await Promise.all([
+    prisma.taskTimer.findMany({
+      where: { userId, taskId: { in: taskIds }, status: "RUNNING" },
+      select: { taskId: true, accumulatedSeconds: true, runStartedAt: true },
+    }),
+    prisma.timeEntry.groupBy({
+      by: ["taskId"],
+      where: { userId, taskId: { in: taskIds } },
+      _sum: { hours: true },
+    }),
+  ]);
+
+  for (const t of running) {
+    map.set(t.taskId, {
+      status: "RUNNING",
+      baseSeconds: t.accumulatedSeconds,
+      runStartedAtMs: t.runStartedAt ? t.runStartedAt.getTime() : null,
+    });
+  }
+  for (const g of logged) {
+    if (!g.taskId || map.has(g.taskId)) continue;
+    const secs = Math.round((g._sum.hours ?? 0) * 3600);
+    if (secs > 0) map.set(g.taskId, { status: "PAUSED", baseSeconds: secs, runStartedAtMs: null });
+  }
+  return map;
 }
 
 /**
- * Total time tracked on a task so far, in seconds: finalized timesheet hours
- * plus any in-progress timers (banked + current run, snapshot at call time).
+ * Total time tracked on a task so far (everyone), in seconds: logged timesheet
+ * hours plus the live portion of any currently-running timers.
  */
 export async function taskTrackedSeconds(taskId: string): Promise<number> {
-  const [agg, timers] = await Promise.all([
+  const [agg, running] = await Promise.all([
     prisma.timeEntry.aggregate({ where: { taskId }, _sum: { hours: true } }),
     prisma.taskTimer.findMany({
-      where: { taskId },
-      select: { accumulatedSeconds: true, runStartedAt: true },
+      where: { taskId, status: "RUNNING" },
+      select: { runStartedAt: true },
     }),
   ]);
-  const finalized = (agg._sum.hours ?? 0) * 3600;
+  const logged = (agg._sum.hours ?? 0) * 3600;
   const now = Date.now();
-  const live = timers.reduce(
-    (sum, t) =>
-      sum +
-      t.accumulatedSeconds +
-      (t.runStartedAt ? Math.max(0, Math.floor((now - t.runStartedAt.getTime()) / 1000)) : 0),
+  const live = running.reduce(
+    (sum, t) => sum + (t.runStartedAt ? Math.max(0, Math.floor((now - t.runStartedAt.getTime()) / 1000)) : 0),
     0,
   );
-  return Math.round(finalized + live);
+  return Math.round(logged + live);
 }

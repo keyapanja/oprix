@@ -86,7 +86,7 @@ export function KanbanBoard({
       </div>
 
       {view === "board" ? (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="flex gap-4 overflow-x-auto pb-2">
           {TASK_COLUMNS.map((col) => {
             const colTasks = tasks.filter((t) => t.status === col.status);
             return (
@@ -103,7 +103,7 @@ export function KanbanBoard({
                   setOverCol(null);
                 }}
                 className={cn(
-                  "flex flex-col rounded-2xl border p-3 transition-colors",
+                  "flex w-72 shrink-0 flex-col rounded-2xl border p-3 transition-colors",
                   overCol === col.status ? "border-brand-400 bg-accent-soft" : "border-line bg-canvas/50",
                 )}
               >

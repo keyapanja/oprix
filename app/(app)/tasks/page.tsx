@@ -6,7 +6,9 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icons";
 import { TasksTable, type TaskRow } from "@/components/tasks/tasks-table";
-import { getActiveTimers } from "@/lib/timer/data";
+import { getTaskTimerStates } from "@/lib/timer/data";
+import { canUseTimer } from "@/lib/timer/finalize";
+import type { TaskTimerState } from "@/lib/timer/shared";
 
 export const metadata: Metadata = { title: "Tasks · Operix" };
 
@@ -22,17 +24,23 @@ export default async function TasksPage() {
       status: true,
       priority: true,
       dueDate: true,
+      createdById: true,
       project: { select: { name: true } },
       service: { select: { name: true } },
-      assignees: { select: { employee: { select: { fullName: true } } } },
+      assignees: { select: { employeeId: true, employee: { select: { fullName: true } } } },
     },
   });
 
-  const timers = session.employeeId ? await getActiveTimers(session.employeeId) : [];
-  const timerMap = new Map(timers.map((tm) => [tm.taskId, tm]));
+  const timerStates: Map<string, TaskTimerState> = await getTaskTimerStates(
+    session.userId,
+    tasks.map((t) => t.id),
+  );
 
   const rows: TaskRow[] = tasks.map((t) => {
-    const tm = timerMap.get(t.id);
+    const isAssignee = !!session.employeeId && t.assignees.some((a) => a.employeeId === session.employeeId);
+    const isReviewer = session.userId === t.createdById;
+    const canTime = canUseTimer(t.status, isAssignee, isReviewer);
+    const state = timerStates.get(t.id) ?? { status: "NONE" as const, baseSeconds: 0, runStartedAtMs: null };
     return {
       id: t.id,
       name: t.name,
@@ -42,9 +50,7 @@ export default async function TasksPage() {
       priority: t.priority,
       assigneeNames: t.assignees.map((a) => a.employee.fullName),
       dueDate: t.dueDate ? t.dueDate.toISOString().slice(0, 10) : null,
-      timer: tm
-        ? { status: tm.status, baseSeconds: tm.baseSeconds, runStartedAtMs: tm.runStartedAtMs }
-        : { status: "NONE" as const, baseSeconds: 0, runStartedAtMs: null },
+      timer: { ...state, locked: !canTime },
     };
   });
 
@@ -62,7 +68,7 @@ export default async function TasksPage() {
           </Link>
         }
       />
-      <TasksTable rows={rows} canTrack={!!session.employeeId} />
+      <TasksTable rows={rows} canTrack />
     </>
   );
 }

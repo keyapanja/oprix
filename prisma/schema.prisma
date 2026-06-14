@@ -57,7 +57,9 @@ enum ProjectStatus {
 enum TaskStatus {
   TODO
   IN_PROGRESS
-  REVIEW
+  REVIEW // submitted by the worker, waiting for the creator's review
+  REDO // creator requested changes; back with the worker
+  CLIENT_REVIEW // approved internally, waiting for client review
   COMPLETED
 }
 
@@ -370,7 +372,6 @@ model Employee {
   manager        Employee?         @relation("Reports", fields: [managerId], references: [id])
   reports        Employee[]        @relation("Reports")
   taskAssignments  TaskAssignee[]
-  taskTimers       TaskTimer[]
   primaryServices  ProjectService[]
   headedDepts    Department[]      @relation("DeptHead")
   user           User?
@@ -468,6 +469,8 @@ model Task {
   description  String?
   assigneeId   String? // deprecated; use assignees (TaskAssignee)
   serviceId    String?
+  createdById  String? // userId of the creator — acts as the reviewer (A) in the review flow
+  finalLink    String? // worker's submitted output / preview link (current submission)
   dueDate      DateTime?
   priority     Priority   @default(MEDIUM)
   status       TaskStatus @default(TODO)
@@ -508,9 +511,24 @@ model ProjectService {
   project         Project   @relation(fields: [projectId], references: [id])
   service         Service   @relation(fields: [serviceId], references: [id])
   primaryAssignee Employee? @relation(fields: [primaryAssigneeId], references: [id])
+  checklist       ProjectServiceChecklistItem[]
 
   @@unique([projectId, serviceId])
   @@index([projectId])
+}
+
+// Per-project checklist for a service. Seeded from the service's default
+// template when the service is added to the project, editable per project, and
+// copied onto tasks created for this service within this project.
+model ProjectServiceChecklistItem {
+  id               String @id @default(cuid())
+  projectServiceId String
+  text             String
+  orderIndex       Int    @default(0)
+
+  projectService ProjectService @relation(fields: [projectServiceId], references: [id], onDelete: Cascade)
+
+  @@index([projectServiceId])
 }
 
 // Many employees can work on one task.
@@ -535,18 +553,17 @@ model TaskTimer {
   id                 String      @id @default(cuid())
   companyId          String
   taskId             String
-  employeeId         String
+  userId             String // who is tracking time — any user (worker or reviewer)
   status             TimerStatus @default(RUNNING)
   accumulatedSeconds Int         @default(0)
   runStartedAt       DateTime? // set while RUNNING; null while PAUSED
   createdAt          DateTime    @default(now())
   updatedAt          DateTime    @updatedAt
 
-  task     Task     @relation(fields: [taskId], references: [id])
-  employee Employee @relation(fields: [employeeId], references: [id])
+  task Task @relation(fields: [taskId], references: [id])
 
-  @@unique([taskId, employeeId])
-  @@index([companyId, employeeId])
+  @@unique([taskId, userId])
+  @@index([companyId, userId])
   @@index([taskId])
 }
 
@@ -715,7 +732,8 @@ model LeaveRequest {
 model TimeEntry {
   id            String         @id @default(cuid())
   companyId     String
-  employeeId    String
+  userId        String? // who tracked it — any user (incl. non-employee reviewers)
+  employeeId    String? // set when that user is also an employee (for the timesheet)
   projectId     String
   taskId        String?
   date          DateTime       @db.Date
@@ -725,12 +743,13 @@ model TimeEntry {
   approvedById  String?
   createdAt     DateTime       @default(now())
 
-  employee Employee @relation(fields: [employeeId], references: [id])
-  project  Project  @relation(fields: [projectId], references: [id])
-  task     Task?    @relation(fields: [taskId], references: [id])
+  employee Employee? @relation(fields: [employeeId], references: [id])
+  project  Project   @relation(fields: [projectId], references: [id])
+  task     Task?     @relation(fields: [taskId], references: [id])
 
   @@index([companyId])
   @@index([employeeId, date])
+  @@index([userId])
 }
 
 // ============================================================

@@ -62,3 +62,30 @@ export async function markAttendance(input: {
   revalidatePath("/attendance");
   return { ok: true };
 }
+
+/** Clear a day's attendance for an employee (punch in/out + status) so it can be re-tested. */
+export async function resetAttendance(input: {
+  employeeId: string;
+  date: string;
+}): Promise<AttendanceState> {
+  const session = await requireCapability("attendance:manage");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date)) return { error: "Invalid date" };
+
+  const emp = await prisma.employee.findFirst({
+    where: { id: input.employeeId, companyId: session.companyId, deletedAt: null },
+    select: { id: true },
+  });
+  if (!emp) return { error: "Employee not found" };
+
+  const rec = await prisma.attendance.findUnique({
+    where: { employeeId_date: { employeeId: input.employeeId, date: dateAtUTC(input.date) } },
+    select: { id: true },
+  });
+  if (rec) {
+    await prisma.attendanceBreak.deleteMany({ where: { attendanceId: rec.id } });
+    await prisma.attendance.delete({ where: { id: rec.id } });
+  }
+
+  revalidatePath("/attendance");
+  return { ok: true };
+}

@@ -20,7 +20,7 @@ export type TaskRow = {
   priority: Priority;
   assigneeNames: string[];
   dueDate: string | null;
-  timer: { status: TimerStatusUI; baseSeconds: number; runStartedAtMs: number | null };
+  timer: { status: TimerStatusUI; baseSeconds: number; runStartedAtMs: number | null; locked: boolean };
 };
 
 const STATUS_FILTER = [
@@ -28,6 +28,8 @@ const STATUS_FILTER = [
   { value: "TODO", label: "To Do" },
   { value: "IN_PROGRESS", label: "In Progress" },
   { value: "REVIEW", label: "Review" },
+  { value: "REDO", label: "Redo" },
+  { value: "CLIENT_REVIEW", label: "Client Review" },
   { value: "COMPLETED", label: "Completed" },
 ];
 
@@ -114,6 +116,7 @@ export function TasksTable({ rows, canTrack }: { rows: TaskRow[]; canTrack: bool
                       status={r.timer.status}
                       baseSeconds={r.timer.baseSeconds}
                       runStartedAtMs={r.timer.runStartedAtMs}
+                      locked={r.timer.locked}
                     />
                   </div>
                 </td>

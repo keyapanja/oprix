@@ -35,6 +35,7 @@ export default async function ProjectDetailPage({
             serviceId: true,
             primaryAssigneeId: true,
             service: { select: { name: true } },
+            checklist: { orderBy: { orderIndex: "asc" }, select: { id: true, text: true } },
           },
         },
         tasks: {
@@ -123,6 +124,7 @@ export default async function ProjectDetailPage({
           id: ps.id,
           serviceName: ps.service.name,
           primaryAssigneeId: ps.primaryAssigneeId,
+          checklist: ps.checklist,
         }))}
         available={available}
         employees={employees.map((e) => ({ id: e.id, name: e.fullName }))}

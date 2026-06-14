@@ -22,6 +22,22 @@ export async function logActivity(opts: {
   });
 }
 
+/** Convenience: append a TASK history entry for the acting session. */
+export async function logTaskActivity(
+  session: { companyId: string; userId: string },
+  taskId: string,
+  message: string,
+): Promise<void> {
+  await logActivity({
+    companyId: session.companyId,
+    actorId: session.userId,
+    actorLabel: await actorLabel(session.userId),
+    entityType: "TASK",
+    entityId: taskId,
+    message,
+  });
+}
+
 /** Best-effort display label for the current user (employee name, else email). */
 export async function actorLabel(userId: string): Promise<string> {
   const user = await prisma.user.findUnique({

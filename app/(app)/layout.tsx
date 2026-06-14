@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { getSession } from "@/lib/auth/session";
 import { listPermissions } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/db";
-import { getActiveTimers } from "@/lib/timer/data";
+import { getRunningTimers } from "@/lib/timer/data";
 import { hasPunchedInToday } from "@/lib/attendance/gate";
 import { Sidebar } from "@/components/shell/sidebar";
 import { Topbar } from "@/components/shell/topbar";
@@ -38,7 +38,7 @@ export default async function AppLayout({
     }),
     prisma.notification.count({ where: { userId: session.userId, isRead: false } }),
   ]);
-  const activeTimers = session.employeeId ? await getActiveTimers(session.employeeId) : [];
+  const activeTimers = await getRunningTimers(session.userId);
 
   return (
     <div className="flex h-dvh overflow-hidden">

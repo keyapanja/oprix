@@ -2,6 +2,13 @@
 
 export type TimerStatusUI = "RUNNING" | "PAUSED" | "NONE";
 
+/** Per-task timer state for the current employee (used by list + detail controls). */
+export type TaskTimerState = {
+  status: TimerStatusUI;
+  baseSeconds: number;
+  runStartedAtMs: number | null;
+};
+
 export type ActiveTimer = {
   taskId: string;
   taskName: string;
@@ -32,6 +39,15 @@ export function fmtClock(totalSeconds: number): string {
   const h = Math.floor(totalSeconds / 3600);
   const pad = (n: number) => String(n).padStart(2, "0");
   return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+}
+
+/** Short human duration for log messages: "45s", "12m", "1h 3m". */
+export function fmtDurationShort(totalSeconds: number): string {
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.round((totalSeconds % 3600) / 60);
+  if (h) return m ? `${h}h ${m}m` : `${h}h`;
+  return `${m}m`;
 }
 
 /** Coarse total: "1h 23m", "12m", or "0m". */

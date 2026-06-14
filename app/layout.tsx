@@ -36,7 +36,12 @@ export default function RootLayout({
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
-      <body className="min-h-full">{children}</body>
+      {/* suppressHydrationWarning: some browser extensions (e.g. Bitdefender adds
+          bis_register / __processed_* attributes) mutate <body> before React
+          hydrates; this keeps those harmless injections from warning. */}
+      <body suppressHydrationWarning className="min-h-full">
+        {children}
+      </body>
     </html>
   );
 }

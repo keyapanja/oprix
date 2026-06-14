@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { startTimer, pauseTimer, stopTimer } from "@/lib/timer/actions";
+import { startTimer, pauseTimer } from "@/lib/timer/actions";
 import { Icon } from "@/components/ui/icons";
 import { fmtClock, liveSeconds, type TimerStatusUI } from "@/lib/timer/shared";
 
@@ -11,11 +11,15 @@ export function TaskTimerControl({
   status,
   baseSeconds,
   runStartedAtMs,
+  locked = false,
+  lockedReason,
 }: {
   taskId: string;
   status: TimerStatusUI;
   baseSeconds: number;
   runStartedAtMs: number | null;
+  locked?: boolean;
+  lockedReason?: string;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -57,7 +61,13 @@ export function TaskTimerControl({
       </div>
 
       <div className="flex items-center gap-2">
-        {status === "NONE" && (
+        {locked && (
+          <span className="inline-flex items-center gap-1.5 rounded-xl bg-canvas px-3 py-2 text-xs font-medium text-faint ring-1 ring-inset ring-line">
+            <Icon name="logout" className="size-3.5" />
+            {lockedReason ?? "Timer locked"}
+          </span>
+        )}
+        {!locked && status === "NONE" && (
           <button
             onClick={() => run(() => startTimer(taskId))}
             disabled={pending}
@@ -67,7 +77,7 @@ export function TaskTimerControl({
             Start timer
           </button>
         )}
-        {live && (
+        {!locked && live && (
           <button
             onClick={() => run(() => pauseTimer(taskId))}
             disabled={pending}
@@ -77,7 +87,7 @@ export function TaskTimerControl({
             Pause
           </button>
         )}
-        {paused && (
+        {!locked && paused && (
           <button
             onClick={() => run(() => startTimer(taskId))}
             disabled={pending}
@@ -85,16 +95,6 @@ export function TaskTimerControl({
           >
             <Icon name="play" className="size-4" fill="currentColor" stroke="none" />
             Resume
-          </button>
-        )}
-        {(live || paused) && (
-          <button
-            onClick={() => run(() => stopTimer(taskId))}
-            disabled={pending}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-red-700 active:scale-[0.98] disabled:opacity-60"
-          >
-            <Icon name="stop" className="size-4" fill="currentColor" stroke="none" />
-            Stop &amp; log
           </button>
         )}
       </div>

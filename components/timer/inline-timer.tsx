@@ -2,21 +2,23 @@
 
 import { useEffect, useState, useTransition, type MouseEvent } from "react";
 import { useRouter } from "next/navigation";
-import { startTimer, pauseTimer, stopTimer } from "@/lib/timer/actions";
+import { startTimer, pauseTimer } from "@/lib/timer/actions";
 import { Icon } from "@/components/ui/icons";
 import { fmtClock, liveSeconds, type TimerStatusUI } from "@/lib/timer/shared";
 
-/** Compact start/pause/resume/stop control for task lists. */
+/** Compact start/pause/resume control for task lists. */
 export function InlineTimer({
   taskId,
   status,
   baseSeconds,
   runStartedAtMs,
+  locked = false,
 }: {
   taskId: string;
   status: TimerStatusUI;
   baseSeconds: number;
   runStartedAtMs: number | null;
+  locked?: boolean;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -41,6 +43,20 @@ export function InlineTimer({
     });
   };
 
+  // Locked (e.g. completed / waiting for review): show the logged total read-only,
+  // no start/pause/resume controls.
+  if (locked) {
+    if (!live && !paused) return <span className="text-faint">—</span>;
+    return (
+      <span
+        onClick={(e) => e.stopPropagation()}
+        className="font-display text-xs font-bold tabular-nums text-faint"
+      >
+        {fmtClock(seconds)}
+      </span>
+    );
+  }
+
   return (
     <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
       {(live || paused) && (
@@ -61,16 +77,6 @@ export function InlineTimer({
       >
         <Icon name={live ? "pause" : "play"} className="size-3.5" {...(live ? {} : { fill: "currentColor", stroke: "none" })} />
       </button>
-      {(live || paused) && (
-        <button
-          onClick={(e) => act(e, () => stopTimer(taskId))}
-          disabled={pending}
-          title="Stop & log"
-          className="flex size-7 shrink-0 items-center justify-center rounded-lg text-faint transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50 dark:hover:bg-red-500/15"
-        >
-          <Icon name="stop" className="size-3" fill="currentColor" stroke="none" />
-        </button>
-      )}
     </div>
   );
 }

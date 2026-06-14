@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useTransition } from "react";
 import type { AttendanceType } from "@prisma/client";
-import { markAttendance } from "@/lib/attendance/actions";
+import { markAttendance, resetAttendance } from "@/lib/attendance/actions";
 import { effectiveStatus } from "@/lib/attendance/resolve";
 import { Icon } from "@/components/ui/icons";
 import { Combobox } from "@/components/ui/combobox";
@@ -77,6 +77,14 @@ export function AttendanceGrid({
       if (res.error) alert(res.error);
     });
   }
+  function reset(employeeId: string, name: string) {
+    if (!confirm(`Clear ${name}'s attendance for this day? This removes their punch in/out and status.`)) return;
+    startTransition(async () => {
+      const res = await resetAttendance({ employeeId, date });
+      if (res.error) alert(res.error);
+      else update(employeeId, { recordType: null, markedManually: false, clockIn: "", clockOut: "" });
+    });
+  }
 
   if (rows.length === 0) {
     return (
@@ -132,6 +140,7 @@ export function AttendanceGrid({
             <th className="px-5 py-3">Status</th>
             <th className="px-5 py-3">In</th>
             <th className="px-5 py-3">Out</th>
+            <th className="px-5 py-3 text-right">Reset</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-line">
@@ -199,12 +208,23 @@ export function AttendanceGrid({
                     className="h-9 w-32 rounded-lg bg-surface px-2 text-sm text-content ring-1 ring-inset ring-line-strong focus:ring-2 focus:ring-brand-500"
                   />
                 </td>
+                <td className="px-5 py-3 text-right">
+                  {(r.recordType || r.clockIn || r.clockOut) && (
+                    <button
+                      onClick={() => reset(r.employeeId, r.name)}
+                      title="Clear this day's record"
+                      className="inline-flex size-8 items-center justify-center rounded-lg text-faint transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/15"
+                    >
+                      <Icon name="trash" className="size-4" />
+                    </button>
+                  )}
+                </td>
               </tr>
             );
           })}
           {pageRows.length === 0 && (
             <tr>
-              <td colSpan={4} className="px-5 py-10 text-center text-sm text-muted">
+              <td colSpan={5} className="px-5 py-10 text-center text-sm text-muted">
                 No employees match “{search}”.
               </td>
             </tr>

@@ -10,7 +10,7 @@ import { getSession } from "@/lib/auth/session";
 import { hasPermission } from "@/lib/auth/permissions";
 import { dateAtUTC } from "@/lib/dates";
 import { humanizeEnum } from "@/lib/format";
-import { logActivity, actorLabel } from "@/lib/activity";
+import { logActivity, actorLabel, logTaskActivity } from "@/lib/activity";
 
 export type ProjectState = { error?: string; ok?: boolean };
 
@@ -63,7 +63,12 @@ export async function createProject(
       status: d.status,
       services: { create: validServices.map((s) => ({ serviceId: s.id })) },
     },
+    select: { id: true, services: { select: { id: true, serviceId: true } } },
   });
+  // Seed each project-service's checklist from its service default.
+  for (const ps of project.services) {
+    await seedProjectServiceChecklist(ps.id, ps.serviceId);
+  }
   revalidatePath("/projects");
   redirect(`/projects/${project.id}`);
 }
@@ -88,16 +93,33 @@ async function ownsProject(companyId: string, projectId: string): Promise<boolea
   return (await prisma.project.count({ where: { id: projectId, companyId } })) > 0;
 }
 
+/** Copy a service's default checklist template onto a project-service link. */
+async function seedProjectServiceChecklist(projectServiceId: string, serviceId: string): Promise<void> {
+  const template = await prisma.serviceChecklistItem.findMany({
+    where: { serviceId },
+    orderBy: { orderIndex: "asc" },
+    select: { text: true },
+  });
+  if (template.length) {
+    await prisma.projectServiceChecklistItem.createMany({
+      data: template.map((c, i) => ({ projectServiceId, text: c.text, orderIndex: i })),
+    });
+  }
+}
+
 export async function addProjectService(projectId: string, serviceId: string): Promise<ProjectState> {
   const session = await requireCapability("project:manage");
   if (!(await ownsProject(session.companyId, projectId))) return { error: "Project not found" };
   const svc = await prisma.service.findFirst({ where: { id: serviceId, companyId: session.companyId }, select: { id: true } });
   if (!svc) return { error: "Invalid service" };
+  let projectServiceId: string;
   try {
-    await prisma.projectService.create({ data: { projectId, serviceId } });
+    const ps = await prisma.projectService.create({ data: { projectId, serviceId }, select: { id: true } });
+    projectServiceId = ps.id;
   } catch {
     return { error: "That service is already on this project" };
   }
+  await seedProjectServiceChecklist(projectServiceId, serviceId);
   revalidatePath(`/projects/${projectId}`);
   return { ok: true };
 }
@@ -126,6 +148,39 @@ export async function setServicePrimary(
   await prisma.projectService.updateMany({
     where: { id: projectServiceId, project: { companyId: session.companyId } },
     data: { primaryAssigneeId: employeeId },
+  });
+  return { ok: true };
+}
+
+// ---- Project-service checklist (per-project; seeds that project's tasks) ----
+async function ownsProjectService(companyId: string, projectServiceId: string): Promise<boolean> {
+  return (
+    (await prisma.projectService.count({
+      where: { id: projectServiceId, project: { companyId } },
+    })) > 0
+  );
+}
+
+export async function addProjectServiceChecklistItem(
+  projectServiceId: string,
+  text: string,
+): Promise<{ ok?: boolean; error?: string; item?: { id: string; text: string } }> {
+  const session = await requireCapability("project:manage");
+  const t = text.trim();
+  if (!t) return { error: "Item text is required" };
+  if (!(await ownsProjectService(session.companyId, projectServiceId))) return { error: "Not found" };
+  const count = await prisma.projectServiceChecklistItem.count({ where: { projectServiceId } });
+  const item = await prisma.projectServiceChecklistItem.create({
+    data: { projectServiceId, text: t, orderIndex: count },
+    select: { id: true, text: true },
+  });
+  return { ok: true, item };
+}
+
+export async function removeProjectServiceChecklistItem(itemId: string): Promise<ProjectState> {
+  const session = await requireCapability("project:manage");
+  await prisma.projectServiceChecklistItem.deleteMany({
+    where: { id: itemId, projectService: { project: { companyId: session.companyId } } },
   });
   return { ok: true };
 }
@@ -182,12 +237,14 @@ export async function createTask(input: {
 
   // The service's primary assignee for this project is auto-assigned.
   let primaryAssigneeId: string | null = null;
+  let projectServiceId: string | null = null;
   if (input.serviceId) {
     const ps = await prisma.projectService.findUnique({
       where: { projectId_serviceId: { projectId: input.projectId, serviceId: input.serviceId } },
-      select: { primaryAssigneeId: true },
+      select: { id: true, primaryAssigneeId: true },
     });
     primaryAssigneeId = ps?.primaryAssigneeId ?? null;
+    projectServiceId = ps?.id ?? null;
   }
 
   const task = await prisma.task.create({
@@ -195,6 +252,7 @@ export async function createTask(input: {
       projectId: input.projectId,
       name,
       serviceId: input.serviceId || null,
+      createdById: session.userId, // creator acts as the reviewer in the review flow
       status: input.status ?? "TODO",
       priority: input.priority ?? "MEDIUM",
       dueDate: input.dueDate ? dateAtUTC(input.dueDate) : null,
@@ -203,13 +261,23 @@ export async function createTask(input: {
     select: TASK_SELECT,
   });
 
-  // Seed the task checklist from the service's template.
+  // Seed the task checklist: the project-specific list first, else the service default.
   if (input.serviceId) {
-    const template = await prisma.serviceChecklistItem.findMany({
-      where: { serviceId: input.serviceId },
-      orderBy: { orderIndex: "asc" },
-      select: { text: true },
-    });
+    let template: { text: string }[] = [];
+    if (projectServiceId) {
+      template = await prisma.projectServiceChecklistItem.findMany({
+        where: { projectServiceId },
+        orderBy: { orderIndex: "asc" },
+        select: { text: true },
+      });
+    }
+    if (!template.length) {
+      template = await prisma.serviceChecklistItem.findMany({
+        where: { serviceId: input.serviceId },
+        orderBy: { orderIndex: "asc" },
+        select: { text: true },
+      });
+    }
     if (template.length) {
       await prisma.checklistItem.createMany({
         data: template.map((c, i) => ({ taskId: task.id, text: c.text, orderIndex: i })),
@@ -327,9 +395,14 @@ export async function addTaskAssignee(taskId: string, employeeId: string): Promi
 
 export async function removeTaskAssignee(taskId: string, employeeId: string): Promise<ProjectState> {
   const session = await requireCapability("task:manage");
+  const emp = await prisma.employee.findFirst({
+    where: { id: employeeId, companyId: session.companyId },
+    select: { fullName: true },
+  });
   await prisma.taskAssignee.deleteMany({
     where: { taskId, employeeId, task: { project: { companyId: session.companyId } } },
   });
+  await logTaskActivity(session, taskId, `unassigned ${emp?.fullName ?? "someone"}`);
   revalidatePath(`/tasks/${taskId}`);
   return { ok: true };
 }
@@ -352,7 +425,7 @@ export async function addComment(taskId: string, body: string): Promise<ProjectS
 
   const task = await prisma.task.findFirst({
     where: { id: taskId, project: { companyId: session.companyId } },
-    select: { id: true, assignees: { select: { employeeId: true } } },
+    select: { id: true, name: true, assignees: { select: { employeeId: true } } },
   });
   if (!task) return { error: "Task not found" };
 
@@ -361,10 +434,33 @@ export async function addComment(taskId: string, body: string): Promise<ProjectS
   if (!isManager && !isAssignee) return { error: "You don't have access to comment on this task" };
 
   await prisma.comment.create({ data: { taskId, authorId: session.userId, body: text } });
+
+  const actor = await actorLabel(session.userId);
+
+  // Notify anyone @-mentioned in the comment (matched by "@Full Name").
+  const people = await prisma.employee.findMany({
+    where: { companyId: session.companyId, deletedAt: null },
+    select: { fullName: true, user: { select: { id: true } } },
+  });
+  const mentioned = people.filter(
+    (p) => p.user && p.user.id !== session.userId && text.includes(`@${p.fullName}`),
+  );
+  if (mentioned.length) {
+    await prisma.notification.createMany({
+      data: mentioned.map((p) => ({
+        userId: p.user!.id,
+        type: "MENTION",
+        title: "You were mentioned",
+        body: `${actor} mentioned you in a comment on “${task.name}”`,
+        meta: { taskId },
+      })),
+    });
+  }
+
   await logActivity({
     companyId: session.companyId,
     actorId: session.userId,
-    actorLabel: await actorLabel(session.userId),
+    actorLabel: actor,
     entityType: "TASK",
     entityId: taskId,
     message: "commented",
@@ -393,11 +489,12 @@ export async function toggleChecklistItem(itemId: string, isDone: boolean): Prom
   if (!session) return { error: "Not authenticated" };
   const item = await prisma.checklistItem.findFirst({
     where: { id: itemId, task: { project: { companyId: session.companyId } } },
-    select: { taskId: true },
+    select: { taskId: true, text: true },
   });
   if (!item) return { error: "Item not found" };
   if (!(await canEditTask(session, item.taskId))) return { error: "No access" };
   await prisma.checklistItem.update({ where: { id: itemId }, data: { isDone } });
+  await logTaskActivity(session, item.taskId, `${isDone ? "checked" : "unchecked"} '${item.text}'`);
   revalidatePath(`/tasks/${item.taskId}`);
   return { ok: true };
 }
@@ -416,6 +513,7 @@ export async function addChecklistItem(
     data: { taskId, text: t, orderIndex: count },
     select: { id: true, text: true, isDone: true },
   });
+  await logTaskActivity(session, taskId, `added checklist item '${t}'`);
   revalidatePath(`/tasks/${taskId}`);
   return { ok: true, item };
 }
@@ -425,11 +523,12 @@ export async function removeChecklistItem(itemId: string): Promise<ProjectState>
   if (!session) return { error: "Not authenticated" };
   const item = await prisma.checklistItem.findFirst({
     where: { id: itemId, task: { project: { companyId: session.companyId } } },
-    select: { taskId: true },
+    select: { taskId: true, text: true },
   });
   if (!item) return { error: "Item not found" };
   if (!(await canEditTask(session, item.taskId))) return { error: "No access" };
   await prisma.checklistItem.delete({ where: { id: itemId } });
+  await logTaskActivity(session, item.taskId, `removed checklist item '${item.text}'`);
   revalidatePath(`/tasks/${item.taskId}`);
   return { ok: true };
 }

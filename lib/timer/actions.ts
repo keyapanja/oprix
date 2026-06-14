@@ -3,142 +3,98 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
-import { hasPermission } from "@/lib/auth/permissions";
-import { nowInZone, dateAtUTC } from "@/lib/dates";
+import { logTaskActivity } from "@/lib/activity";
+import { fmtDurationShort } from "@/lib/timer/shared";
+import { finalizeTaskTimer, canUseTimer } from "@/lib/timer/finalize";
 
 export type TimerState = { ok?: boolean; error?: string };
 
-type Sess = NonNullable<Awaited<ReturnType<typeof getSession>>>;
-
-// A task (company-scoped) the current employee may track time on: they manage
-// tasks, or they're assigned to it.
-async function accessibleTask(session: Sess, taskId: string) {
-  const task = await prisma.task.findFirst({
-    where: { id: taskId, project: { companyId: session.companyId } },
-    select: { id: true, projectId: true, assignees: { select: { employeeId: true } } },
+/** Seconds this user has already logged to the timesheet for a task. */
+async function loggedSeconds(userId: string, taskId: string): Promise<number> {
+  const agg = await prisma.timeEntry.aggregate({
+    where: { userId, taskId },
+    _sum: { hours: true },
   });
-  if (!task) return null;
-  const isManager = await hasPermission(session.companyId, session.role, "task:manage");
-  const isAssignee =
-    !!session.employeeId && task.assignees.some((a) => a.employeeId === session.employeeId);
-  return isManager || isAssignee ? task : null;
+  return Math.round((agg._sum.hours ?? 0) * 3600);
 }
 
-function bankedSeconds(t: {
-  accumulatedSeconds: number;
-  runStartedAt: Date | null;
-}, now: Date): number {
-  const run = t.runStartedAt
-    ? Math.max(0, Math.floor((now.getTime() - t.runStartedAt.getTime()) / 1000))
-    : 0;
-  return t.accumulatedSeconds + run;
-}
-
-/** Start a fresh timer, or resume a paused one, for the current employee. */
+/**
+ * Start (or resume) tracking. Time tracking is user-scoped, so reviewers without
+ * an employee record can track too. Gated by the review flow: the worker may time
+ * while the task is theirs (To Do / In Progress / Redo); the reviewer may time
+ * while it's waiting for review. A worker starting work auto-moves it to In Progress.
+ */
 export async function startTimer(taskId: string): Promise<TimerState> {
   const session = await getSession();
   if (!session) return { error: "Not authenticated" };
-  if (!session.employeeId) return { error: "Only employees can track time" };
-  if (!(await accessibleTask(session, taskId))) return { error: "No access to this task" };
 
-  const existing = await prisma.taskTimer.findUnique({
-    where: { taskId_employeeId: { taskId, employeeId: session.employeeId } },
-    select: { id: true, status: true },
-  });
-
-  if (existing) {
-    if (existing.status === "RUNNING") return { ok: true };
-    await prisma.taskTimer.update({
-      where: { id: existing.id },
-      data: { status: "RUNNING", runStartedAt: new Date() },
-    });
-  } else {
-    await prisma.taskTimer.create({
-      data: {
-        companyId: session.companyId,
-        taskId,
-        employeeId: session.employeeId,
-        status: "RUNNING",
-        runStartedAt: new Date(),
-      },
-    });
-  }
-  revalidatePath(`/tasks/${taskId}`);
-  return { ok: true };
-}
-
-/** Pause a running timer, banking the current run into accumulatedSeconds. */
-export async function pauseTimer(taskId: string): Promise<TimerState> {
-  const session = await getSession();
-  if (!session?.employeeId) return { error: "Not authenticated" };
-
-  const timer = await prisma.taskTimer.findUnique({
-    where: { taskId_employeeId: { taskId, employeeId: session.employeeId } },
-    select: { id: true, status: true, accumulatedSeconds: true, runStartedAt: true },
-  });
-  if (!timer) return { error: "No active timer" };
-  if (timer.status === "PAUSED") return { ok: true };
-
-  await prisma.taskTimer.update({
-    where: { id: timer.id },
-    data: { status: "PAUSED", accumulatedSeconds: bankedSeconds(timer, new Date()), runStartedAt: null },
-  });
-  revalidatePath(`/tasks/${taskId}`);
-  return { ok: true };
-}
-
-/** Stop a timer: finalize the total into a timesheet TimeEntry and clear it. */
-export async function stopTimer(taskId: string): Promise<TimerState> {
-  const session = await getSession();
-  if (!session?.employeeId) return { error: "Not authenticated" };
-
-  const timer = await prisma.taskTimer.findUnique({
-    where: { taskId_employeeId: { taskId, employeeId: session.employeeId } },
+  const task = await prisma.task.findFirst({
+    where: { id: taskId, project: { companyId: session.companyId } },
     select: {
       id: true,
-      accumulatedSeconds: true,
-      runStartedAt: true,
-      task: { select: { projectId: true } },
+      status: true,
+      startedAt: true,
+      createdById: true,
+      assignees: { select: { employeeId: true } },
     },
   });
-  if (!timer) return { error: "No active timer" };
+  if (!task) return { error: "Task not found" };
 
-  const totalSeconds = bankedSeconds(timer, new Date());
-
-  if (totalSeconds > 0) {
-    const company = await prisma.company.findUnique({
-      where: { id: session.companyId },
-      select: { timezone: true },
-    });
-    const date = dateAtUTC(nowInZone(company?.timezone ?? "Asia/Kolkata").dateISO);
-    const hours = totalSeconds / 3600;
-
-    // Aggregate into the day's pending timesheet row for this task, if present.
-    const existing = await prisma.timeEntry.findFirst({
-      where: { employeeId: session.employeeId, taskId, date, status: "PENDING" },
-      select: { id: true, hours: true },
-    });
-    if (existing) {
-      await prisma.timeEntry.update({
-        where: { id: existing.id },
-        data: { hours: existing.hours + hours },
-      });
-    } else {
-      await prisma.timeEntry.create({
-        data: {
-          companyId: session.companyId,
-          employeeId: session.employeeId,
-          projectId: timer.task.projectId,
-          taskId,
-          date,
-          hours,
-          notes: "Tracked via timer",
-        },
-      });
-    }
+  const isAssignee = !!session.employeeId && task.assignees.some((a) => a.employeeId === session.employeeId);
+  const isReviewer = session.userId === task.createdById;
+  if (!canUseTimer(task.status, isAssignee, isReviewer)) {
+    return { error: "The timer isn't available to you on this task right now." };
   }
 
-  await prisma.taskTimer.delete({ where: { id: timer.id } });
+  const existing = await prisma.taskTimer.findUnique({
+    where: { taskId_userId: { taskId, userId: session.userId } },
+    select: { id: true },
+  });
+  if (existing) return { ok: true }; // already running
+
+  // A worker starting/resuming work moves the task into In Progress.
+  if (isAssignee && (task.status === "TODO" || task.status === "REDO")) {
+    await prisma.task.update({
+      where: { id: taskId },
+      data: { status: "IN_PROGRESS", startedAt: task.startedAt ?? new Date() },
+    });
+    await logTaskActivity(session, taskId, "moved the task to In Progress");
+  }
+
+  const prior = await loggedSeconds(session.userId, taskId);
+  await prisma.taskTimer.create({
+    data: {
+      companyId: session.companyId,
+      taskId,
+      userId: session.userId,
+      status: "RUNNING",
+      accumulatedSeconds: prior, // resume display from the previously-logged total
+      runStartedAt: new Date(),
+    },
+  });
+  await logTaskActivity(session, taskId, prior > 0 ? "resumed the timer" : "started the timer");
   revalidatePath(`/tasks/${taskId}`);
+  revalidatePath("/tasks");
+  return { ok: true };
+}
+
+/**
+ * Pause: bank just this run's seconds into the timesheet and clear the live
+ * timer. The total stays in TimeEntry, so the task shows "Resume" next time.
+ */
+export async function pauseTimer(taskId: string): Promise<TimerState> {
+  const session = await getSession();
+  if (!session) return { error: "Not authenticated" };
+
+  const runSeconds = await finalizeTaskTimer(session.companyId, session.userId, taskId);
+  if (runSeconds === null) return { ok: true }; // nothing was running
+
+  await logTaskActivity(
+    session,
+    taskId,
+    runSeconds > 0 ? `paused the timer · logged ${fmtDurationShort(runSeconds)}` : "paused the timer",
+  );
+  revalidatePath(`/tasks/${taskId}`);
+  revalidatePath("/tasks");
   return { ok: true };
 }

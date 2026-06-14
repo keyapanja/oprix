@@ -62,11 +62,14 @@ export function TaskAssignees({
           )}
         </span>
       ))}
-      {canEdit && available.length > 0 && (
-        <div className="w-48">
-          <Combobox value="" onChange={add} placeholder="+ Add assignee" options={available.map((e) => ({ value: e.id, label: e.name }))} />
-        </div>
-      )}
+      {canEdit &&
+        (available.length > 0 ? (
+          <div className="w-48">
+            <Combobox value="" onChange={add} placeholder="+ Add assignee" options={available.map((e) => ({ value: e.id, label: e.name }))} />
+          </div>
+        ) : (
+          <span className="text-xs text-faint">Everyone&apos;s assigned</span>
+        ))}
     </div>
   );
 }
