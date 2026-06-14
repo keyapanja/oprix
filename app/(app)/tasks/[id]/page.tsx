@@ -11,6 +11,7 @@ import { PRIORITY_TONE } from "@/lib/status";
 import { TaskStatusControl } from "@/components/tasks/task-status";
 import { TaskAssignees } from "@/components/tasks/task-assignees";
 import { TaskChecklist } from "@/components/tasks/task-checklist";
+import { TaskEdit } from "@/components/tasks/task-edit";
 import { CommentForm } from "@/components/tasks/comment-form";
 
 export const metadata: Metadata = { title: "Task · Operix" };
@@ -40,9 +41,17 @@ export default async function TaskDetailPage({
       description: true,
       status: true,
       priority: true,
+      serviceId: true,
+      dueDate: true,
       startedAt: true,
       completedAt: true,
-      project: { select: { id: true, name: true } },
+      project: {
+        select: {
+          id: true,
+          name: true,
+          services: { select: { serviceId: true, service: { select: { name: true } } } },
+        },
+      },
       service: { select: { name: true } },
       assignees: { select: { employee: { select: { id: true, fullName: true } } } },
       checklist: { orderBy: { orderIndex: "asc" }, select: { id: true, text: true, isDone: true } },
@@ -105,7 +114,23 @@ export default async function TaskDetailPage({
               )}
             </div>
           </div>
-          {isManager && <TaskStatusControl id={task.id} status={task.status} />}
+          {isManager && (
+            <div className="flex flex-col items-end gap-2">
+              <TaskStatusControl id={task.id} status={task.status} />
+              <TaskEdit
+                taskId={task.id}
+                projectId={task.project.id}
+                services={task.project.services.map((s) => ({ id: s.serviceId, name: s.service.name }))}
+                initial={{
+                  name: task.name,
+                  description: task.description ?? "",
+                  serviceId: task.serviceId ?? "",
+                  priority: task.priority,
+                  dueDate: task.dueDate ? task.dueDate.toISOString().slice(0, 10) : "",
+                }}
+              />
+            </div>
+          )}
         </div>
 
         {task.description && (

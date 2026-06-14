@@ -172,6 +172,8 @@ export async function createTask(input: {
   name: string;
   serviceId?: string | null;
   status?: TaskStatus;
+  priority?: Priority;
+  dueDate?: string | null;
 }): Promise<{ ok?: boolean; error?: string; task?: KanbanTask }> {
   const session = await requireCapability("task:manage");
   const name = input.name.trim();
@@ -194,6 +196,8 @@ export async function createTask(input: {
       name,
       serviceId: input.serviceId || null,
       status: input.status ?? "TODO",
+      priority: input.priority ?? "MEDIUM",
+      dueDate: input.dueDate ? dateAtUTC(input.dueDate) : null,
       assignees: primaryAssigneeId ? { create: { employeeId: primaryAssigneeId } } : undefined,
     },
     select: TASK_SELECT,
@@ -257,6 +261,7 @@ const TaskMetaSchema = z.object({
   description: z.string().trim().max(4000).optional().or(z.literal("")),
   serviceId: z.string().optional().or(z.literal("")),
   priority: z.nativeEnum(Priority),
+  dueDate: z.string().optional().or(z.literal("")),
 });
 
 export async function updateTaskMeta(taskId: string, formData: FormData): Promise<ProjectState> {
@@ -278,6 +283,7 @@ export async function updateTaskMeta(taskId: string, formData: FormData): Promis
       description: d.description || null,
       serviceId: d.serviceId || null,
       priority: d.priority,
+      dueDate: d.dueDate ? dateAtUTC(d.dueDate) : null,
     },
   });
   await logActivity({
