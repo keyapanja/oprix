@@ -33,7 +33,11 @@ export const resolvePermissions = cache(
         where: { companyId, role },
         select: { action: true },
       });
-      for (const r of rows) base.add(r.action as Action);
+      // "task:scope:*" rows are task-visibility config (see lib/tasks/visibility.ts),
+      // not capabilities — keep them out of the permission set.
+      for (const r of rows) {
+        if (!r.action.startsWith("task:scope:")) base.add(r.action as Action);
+      }
     } else {
       for (const a of DEFAULT_PERMISSIONS[role]) base.add(a);
     }

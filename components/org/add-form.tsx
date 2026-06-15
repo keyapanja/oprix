@@ -22,11 +22,18 @@ export function AddForm({
   }, [state]);
 
   return (
-    <form action={formAction} className="flex flex-wrap items-end gap-3">
+    // Top-aligned so fields with a hint line don't push their input up; the
+    // button gets an invisible label spacer so it lines up with the inputs.
+    <form action={formAction} className="flex flex-wrap items-start gap-3">
       <Fragment key={resetKey}>{children}</Fragment>
-      <Button type="submit" disabled={pending}>
-        {pending ? "Saving…" : submitLabel}
-      </Button>
+      <div className="space-y-1.5">
+        <span aria-hidden="true" className="block select-none text-sm font-medium opacity-0">
+          {submitLabel}
+        </span>
+        <Button type="submit" disabled={pending}>
+          {pending ? "Saving…" : submitLabel}
+        </Button>
+      </div>
       {state.error && <p className="w-full text-xs text-red-600">{state.error}</p>}
     </form>
   );

@@ -3,12 +3,13 @@ import { headers } from "next/headers";
 import { getSession } from "@/lib/auth/session";
 import { listPermissions } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/db";
-import { getRunningTimers } from "@/lib/timer/data";
+import { getActiveTimers } from "@/lib/timer/data";
 import { hasPunchedInToday } from "@/lib/attendance/gate";
 import { Sidebar } from "@/components/shell/sidebar";
 import { Topbar } from "@/components/shell/topbar";
 import { TimerBar } from "@/components/timer/timer-bar";
 import { PunchInBanner } from "@/components/attendance/punch-banner";
+import { noteHref, formatNoteTime, type ClientNote } from "@/lib/notifications/categories";
 
 export default async function AppLayout({
   children,
@@ -34,11 +35,20 @@ export default async function AppLayout({
       where: { userId: session.userId },
       orderBy: { createdAt: "desc" },
       take: 10,
-      select: { id: true, title: true, body: true },
+      select: { id: true, title: true, body: true, type: true, meta: true, createdAt: true },
     }),
     prisma.notification.count({ where: { userId: session.userId, isRead: false } }),
   ]);
-  const activeTimers = await getRunningTimers(session.userId);
+  const activeTimers = await getActiveTimers(session.userId);
+
+  const notes: ClientNote[] = notifications.map((n) => ({
+    id: n.id,
+    title: n.title,
+    body: n.body,
+    type: n.type,
+    href: noteHref(n.type, n.meta),
+    time: formatNoteTime(n.createdAt),
+  }));
 
   return (
     <div className="flex h-dvh overflow-hidden">
@@ -47,13 +57,14 @@ export default async function AppLayout({
         <Topbar
           email={session.email}
           role={session.role}
-          notifications={notifications}
+          notifications={notes}
           unread={unread}
         />
         {needsPunchIn && <PunchInBanner />}
         <main className="flex-1 overflow-y-auto px-6 py-8">
           <div className="animate-rise mx-auto max-w-7xl">{children}</div>
         </main>
+        {/* Within the main content column (not under the sidebar). */}
         <TimerBar timers={activeTimers} />
       </div>
     </div>

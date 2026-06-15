@@ -8,8 +8,8 @@ import { Field } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icons";
 
-export function ClientAdd() {
-  const [open, setOpen] = useState(false);
+export function ClientAdd({ defaultOpen = false }: { defaultOpen?: boolean }) {
+  const [open, setOpen] = useState(defaultOpen);
   const [state, formAction, pending] = useActionState<ClientState, FormData>(createClient, {});
   const ref = useRef<HTMLFormElement>(null);
 

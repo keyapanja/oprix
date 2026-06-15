@@ -8,8 +8,13 @@ import { ClientAdd } from "@/components/clients/client-add";
 
 export const metadata: Metadata = { title: "Clients · Operix" };
 
-export default async function ClientsPage() {
+export default async function ClientsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ new?: string }>;
+}) {
   const session = await requirePage("client:manage");
+  const sp = await searchParams;
 
   const clients = await prisma.client.findMany({
     where: { companyId: session.companyId, deletedAt: null },
@@ -30,7 +35,7 @@ export default async function ClientsPage() {
         title="Clients"
         description={`${clients.length} ${clients.length === 1 ? "client" : "clients"}.`}
       />
-      <ClientAdd />
+      <ClientAdd defaultOpen={sp.new === "1"} />
 
       <Card>
         {clients.length === 0 ? (

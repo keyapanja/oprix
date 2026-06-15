@@ -11,13 +11,18 @@ async function loggedSeconds(userId: string, taskId: string): Promise<number> {
   return Math.round((agg._sum.hours ?? 0) * 3600);
 }
 
-/** Running timers for a user, for the global bar. */
-export async function getRunningTimers(userId: string): Promise<ActiveTimer[]> {
+/**
+ * Active timers (running AND paused) for a user, for the global bar. A timer
+ * stays here until it's finalized (the task leaves a timeable state), so the
+ * user can pause/resume it from any page.
+ */
+export async function getActiveTimers(userId: string): Promise<ActiveTimer[]> {
   const rows = await prisma.taskTimer.findMany({
-    where: { userId, status: "RUNNING" },
+    where: { userId },
     orderBy: { createdAt: "asc" },
     select: {
       taskId: true,
+      status: true,
       accumulatedSeconds: true,
       runStartedAt: true,
       task: {
@@ -30,7 +35,7 @@ export async function getRunningTimers(userId: string): Promise<ActiveTimer[]> {
     taskName: r.task.name,
     projectId: r.task.projectId,
     projectName: r.task.project.name,
-    status: "RUNNING",
+    status: r.status,
     baseSeconds: r.accumulatedSeconds,
     runStartedAtMs: r.runStartedAt ? r.runStartedAt.getTime() : null,
   }));

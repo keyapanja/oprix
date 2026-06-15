@@ -5,7 +5,7 @@ import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
 import { logTaskActivity } from "@/lib/activity";
 import { fmtDurationShort } from "@/lib/timer/shared";
-import { finalizeTaskTimer, canUseTimer } from "@/lib/timer/finalize";
+import { pauseTaskTimer, canUseTimer } from "@/lib/timer/finalize";
 
 export type TimerState = { ok?: boolean; error?: string };
 
@@ -48,11 +48,23 @@ export async function startTimer(taskId: string): Promise<TimerState> {
 
   const existing = await prisma.taskTimer.findUnique({
     where: { taskId_userId: { taskId, userId: session.userId } },
-    select: { id: true },
+    select: { id: true, status: true },
   });
-  if (existing) return { ok: true }; // already running
+  if (existing) {
+    if (existing.status === "RUNNING") return { ok: true }; // already running
+    // Resume a paused timer: re-arm the live run. accumulatedSeconds already
+    // holds the banked total, so the display continues from where it left off.
+    await prisma.taskTimer.update({
+      where: { id: existing.id },
+      data: { status: "RUNNING", runStartedAt: new Date() },
+    });
+    await logTaskActivity(session, taskId, "resumed the timer");
+    revalidatePath(`/tasks/${taskId}`);
+    revalidatePath("/tasks");
+    return { ok: true };
+  }
 
-  // A worker starting/resuming work moves the task into In Progress.
+  // A worker starting work moves the task into In Progress.
   if (isAssignee && (task.status === "TODO" || task.status === "REDO")) {
     await prisma.task.update({
       where: { id: taskId },
@@ -79,15 +91,15 @@ export async function startTimer(taskId: string): Promise<TimerState> {
 }
 
 /**
- * Pause: bank just this run's seconds into the timesheet and clear the live
- * timer. The total stays in TimeEntry, so the task shows "Resume" next time.
+ * Pause: bank this run's seconds into the timesheet but keep the timer row
+ * (status PAUSED) so it stays in the global bar and can be resumed anywhere.
  */
 export async function pauseTimer(taskId: string): Promise<TimerState> {
   const session = await getSession();
   if (!session) return { error: "Not authenticated" };
 
-  const runSeconds = await finalizeTaskTimer(session.companyId, session.userId, taskId);
-  if (runSeconds === null) return { ok: true }; // nothing was running
+  const runSeconds = await pauseTaskTimer(session.companyId, session.userId, taskId);
+  if (runSeconds === null) return { ok: true }; // nothing to pause
 
   await logTaskActivity(
     session,

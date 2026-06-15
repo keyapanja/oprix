@@ -9,14 +9,33 @@ import { TasksTable, type TaskRow } from "@/components/tasks/tasks-table";
 import { getTaskTimerStates } from "@/lib/timer/data";
 import { canUseTimer } from "@/lib/timer/finalize";
 import type { TaskTimerState } from "@/lib/timer/shared";
+import { resolveTaskScope, taskScopeWhere, TASK_SCOPE_LABELS } from "@/lib/tasks/visibility";
 
 export const metadata: Metadata = { title: "Tasks · Operix" };
 
-export default async function TasksPage() {
+export default async function TasksPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ view?: string }>;
+}) {
   const session = await requirePage("task:manage");
+  const sp = await searchParams;
+  const initialView = sp.view === "mine" ? "mine" : sp.view === "created" ? "created" : "all";
+
+  // Enforce the role's task-visibility scope at the query level.
+  const scope = await resolveTaskScope(session.companyId, session.role);
+  let departmentId: string | null = null;
+  if (scope === "TEAM" && session.employeeId) {
+    const emp = await prisma.employee.findUnique({
+      where: { id: session.employeeId },
+      select: { departmentId: true },
+    });
+    departmentId = emp?.departmentId ?? null;
+  }
+  const scopeWhere = taskScopeWhere(scope, session, departmentId);
 
   const tasks = await prisma.task.findMany({
-    where: { project: { companyId: session.companyId, deletedAt: null } },
+    where: { AND: [{ project: { companyId: session.companyId, deletedAt: null } }, scopeWhere] },
     orderBy: { createdAt: "desc" },
     select: {
       id: true,
@@ -26,7 +45,7 @@ export default async function TasksPage() {
       dueDate: true,
       createdById: true,
       project: { select: { name: true } },
-      service: { select: { name: true } },
+      service: { select: { name: true, department: { select: { name: true } } } },
       assignees: { select: { employeeId: true, employee: { select: { fullName: true } } } },
     },
   });
@@ -46,19 +65,25 @@ export default async function TasksPage() {
       name: t.name,
       projectName: t.project.name,
       serviceName: t.service?.name ?? null,
+      departmentName: t.service?.department?.name ?? null,
       status: t.status,
       priority: t.priority,
       assigneeNames: t.assignees.map((a) => a.employee.fullName),
       dueDate: t.dueDate ? t.dueDate.toISOString().slice(0, 10) : null,
+      mine: isAssignee,
+      createdByMe: isReviewer,
       timer: { ...state, locked: !canTime },
     };
   });
+
+  // Advanced (department / service) filters are only meaningful beyond own tasks.
+  const showAdvancedFilters = scope !== "OWN";
 
   return (
     <>
       <PageHeader
         title="Tasks"
-        description={`${rows.length} ${rows.length === 1 ? "task" : "tasks"} across your projects.`}
+        description={`${rows.length} ${rows.length === 1 ? "task" : "tasks"} · showing ${TASK_SCOPE_LABELS[scope].label.toLowerCase()}.`}
         action={
           <Link href="/tasks/new">
             <Button>
@@ -68,7 +93,7 @@ export default async function TasksPage() {
           </Link>
         }
       />
-      <TasksTable rows={rows} canTrack />
+      <TasksTable rows={rows} canTrack initialView={initialView} showAdvancedFilters={showAdvancedFilters} />
     </>
   );
 }

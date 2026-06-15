@@ -9,6 +9,7 @@ import { AddForm } from "@/components/org/add-form";
 import { DeleteButton } from "@/components/org/delete-button";
 import { ServiceList } from "@/components/org/service-list";
 import { PermissionsMatrix } from "@/components/org/permissions-matrix";
+import { TaskScopeMatrix } from "@/components/org/task-scope-matrix";
 import {
   createDepartment,
   createService,
@@ -43,6 +44,7 @@ export function OrgTabs({
   probationPeriods,
   multiLocation,
   accessMatrix,
+  taskScopes,
 }: {
   departments: Dept[];
   services: Svc[];
@@ -52,10 +54,13 @@ export function OrgTabs({
   probationPeriods: Prob[];
   multiLocation: boolean;
   accessMatrix: Record<string, string[]> | null;
+  taskScopes: Record<string, string> | null;
 }) {
   const [tab, setTab] = useState<string>("Departments");
   const deptOptions = departments.map((d) => ({ value: d.id, label: d.name }));
-  const tabs = accessMatrix ? [...BASE_TABS, "Access"] : BASE_TABS;
+  const tabs = [...BASE_TABS];
+  if (accessMatrix) tabs.push("Access");
+  if (taskScopes) tabs.push("Task access");
 
   return (
     <div>
@@ -224,6 +229,8 @@ export function OrgTabs({
       )}
 
       {tab === "Access" && accessMatrix && <PermissionsMatrix initial={accessMatrix} />}
+
+      {tab === "Task access" && taskScopes && <TaskScopeMatrix initial={taskScopes} />}
     </div>
   );
 }

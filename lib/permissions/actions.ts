@@ -6,8 +6,30 @@ import { prisma } from "@/lib/db";
 import { requireCapability } from "@/lib/auth/guard";
 import { EDITABLE_ROLES, EDITABLE_ACTIONS, type Action } from "@/lib/auth/can";
 import { ensureSeeded } from "@/lib/auth/permissions";
+import { TASK_SCOPES, SCOPE_PREFIX, scopeAction, type TaskScope } from "@/lib/tasks/visibility";
 
 export type PermState = { error?: string; ok?: boolean };
+
+/** Set how much of the task board a role can see (All / Team / Own). */
+export async function setTaskScope(role: Role, scope: TaskScope): Promise<PermState> {
+  const session = await requireCapability("roles:manage");
+  if (!EDITABLE_ROLES.includes(role)) return { error: "That role's access can't be changed." };
+  if (!TASK_SCOPES.includes(scope)) return { error: "Unknown scope." };
+
+  // Ensure real permission rows exist first, so the scope row never flips the
+  // company into "configured" mode with no actual grants.
+  await ensureSeeded(session.companyId);
+  await prisma.rolePermission.deleteMany({
+    where: { companyId: session.companyId, role, action: { startsWith: SCOPE_PREFIX } },
+  });
+  await prisma.rolePermission.create({
+    data: { companyId: session.companyId, role, action: scopeAction(scope) },
+  });
+
+  revalidatePath("/organization");
+  revalidatePath("/tasks");
+  return { ok: true };
+}
 
 export async function setRolePermission(
   role: Role,

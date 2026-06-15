@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { punchIn, punchOut } from "@/lib/attendance/self";
 import { nowInZone, to12h } from "@/lib/dates";
 import { Card } from "@/components/ui/card";
@@ -45,6 +46,14 @@ export function PunchCard({
   const [clockOut, setClockOut] = useState(initialOut);
   const [elapsed, setElapsed] = useState(0);
   const [pending, start] = useTransition();
+  const router = useRouter();
+
+  // Adopt refreshed server props — e.g. after punching in from the top banner,
+  // or this card's own router.refresh() — so the card never goes stale.
+  useEffect(() => {
+    setClockIn(initialIn);
+    setClockOut(initialOut);
+  }, [initialIn, initialOut]);
 
   const inProgress = !!clockIn && !clockOut;
   const done = !!clockIn && !!clockOut;
@@ -74,14 +83,20 @@ export function PunchCard({
     start(async () => {
       const res = await punchIn();
       if (res.error) alert(res.error);
-      else if (res.time) setClockIn(res.time);
+      else if (res.time) {
+        setClockIn(res.time); // start the live timer immediately, no refresh needed
+        router.refresh(); // re-render the layout so the punch-in gate/banner lift
+      }
     });
   }
   function onPunchOut() {
     start(async () => {
       const res = await punchOut();
       if (res.error) alert(res.error);
-      else if (res.time) setClockOut(res.time);
+      else if (res.time) {
+        setClockOut(res.time);
+        router.refresh();
+      }
     });
   }
 

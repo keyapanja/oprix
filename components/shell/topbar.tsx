@@ -7,8 +7,7 @@ import { Icon } from "@/components/ui/icons";
 import { roleLabel } from "@/lib/format";
 import { ThemeToggle } from "@/components/shell/theme-toggle";
 import { NotificationBell } from "@/components/shell/notification-bell";
-
-type Note = { id: string; title: string; body: string | null };
+import type { ClientNote } from "@/lib/notifications/categories";
 
 export function Topbar({
   email,
@@ -18,7 +17,7 @@ export function Topbar({
 }: {
   email: string;
   role: Role;
-  notifications: Note[];
+  notifications: ClientNote[];
   unread: number;
 }) {
   const [open, setOpen] = useState(false);
@@ -37,19 +36,6 @@ export function Topbar({
     <header className="glass sticky top-0 z-10 flex h-16 items-center gap-4 border-b border-line px-6">
       <div className="font-display text-lg font-bold tracking-tight text-content lg:hidden">
         Operix
-      </div>
-
-      {/* Search (decorative for now) */}
-      <div className="relative hidden max-w-md flex-1 sm:block">
-        <Icon
-          name="search"
-          className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-faint"
-        />
-        <input
-          type="text"
-          placeholder="Search…"
-          className="h-9 w-full rounded-xl border-none bg-canvas pl-9 pr-3 text-sm text-content placeholder:text-faint focus:outline-none focus:ring-2 focus:ring-brand-500/40"
-        />
       </div>
 
       <div className="ml-auto flex items-center gap-1.5">

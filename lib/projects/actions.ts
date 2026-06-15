@@ -229,13 +229,18 @@ export async function createTask(input: {
   status?: TaskStatus;
   priority?: Priority;
   dueDate?: string | null;
+  /** Explicit assignees from the form. When omitted, the service primary is used. */
+  assigneeIds?: string[];
+  /** Explicit checklist from the form. When omitted, the service template seeds it. */
+  checklist?: { text: string; isDone: boolean }[];
 }): Promise<{ ok?: boolean; error?: string; task?: KanbanTask }> {
   const session = await requireCapability("task:manage");
   const name = input.name.trim();
   if (!name) return { error: "Task name is required" };
   if (!(await ownsProject(session.companyId, input.projectId))) return { error: "Project not found" };
 
-  // The service's primary assignee for this project is auto-assigned.
+  // The service's primary assignee for this project (default when the caller
+  // doesn't pass an explicit assignee list).
   let primaryAssigneeId: string | null = null;
   let projectServiceId: string | null = null;
   if (input.serviceId) {
@@ -247,6 +252,22 @@ export async function createTask(input: {
     projectServiceId = ps?.id ?? null;
   }
 
+  // Resolve assignees: an explicit list from the form wins (validated to this
+  // company); otherwise fall back to the service's primary assignee.
+  let assigneeIds: string[];
+  if (input.assigneeIds !== undefined) {
+    const uniq = [...new Set(input.assigneeIds.filter(Boolean))];
+    const valid = uniq.length
+      ? await prisma.employee.findMany({
+          where: { id: { in: uniq }, companyId: session.companyId, deletedAt: null },
+          select: { id: true },
+        })
+      : [];
+    assigneeIds = valid.map((e) => e.id);
+  } else {
+    assigneeIds = primaryAssigneeId ? [primaryAssigneeId] : [];
+  }
+
   const task = await prisma.task.create({
     data: {
       projectId: input.projectId,
@@ -256,13 +277,23 @@ export async function createTask(input: {
       status: input.status ?? "TODO",
       priority: input.priority ?? "MEDIUM",
       dueDate: input.dueDate ? dateAtUTC(input.dueDate) : null,
-      assignees: primaryAssigneeId ? { create: { employeeId: primaryAssigneeId } } : undefined,
+      assignees: assigneeIds.length ? { create: assigneeIds.map((employeeId) => ({ employeeId })) } : undefined,
     },
     select: TASK_SELECT,
   });
 
-  // Seed the task checklist: the project-specific list first, else the service default.
-  if (input.serviceId) {
+  // Checklist: an explicit list from the form wins; otherwise seed from the
+  // project-specific list, else the service default template.
+  if (input.checklist !== undefined) {
+    const items = input.checklist
+      .map((c) => ({ text: c.text.trim(), isDone: !!c.isDone }))
+      .filter((c) => c.text);
+    if (items.length) {
+      await prisma.checklistItem.createMany({
+        data: items.map((c, i) => ({ taskId: task.id, text: c.text, isDone: c.isDone, orderIndex: i })),
+      });
+    }
+  } else if (input.serviceId) {
     let template: { text: string }[] = [];
     if (projectServiceId) {
       template = await prisma.projectServiceChecklistItem.findMany({
