@@ -11,6 +11,7 @@ import { KanbanBoard } from "@/components/projects/kanban-board";
 import { ProjectStatusControl } from "@/components/projects/project-status";
 import { ProjectServices } from "@/components/projects/project-services";
 import { DeliverablesPanel } from "@/components/projects/deliverables-panel";
+import { MilestonesPanel } from "@/components/projects/milestones-panel";
 import { BackLink } from "@/components/ui/back-link";
 import type { KanbanTask } from "@/lib/projects/actions";
 
@@ -24,7 +25,7 @@ export default async function ProjectDetailPage({
   const { id } = await params;
   const session = await requirePage("project:manage");
 
-  const [project, employees, allServices] = await Promise.all([
+  const [project, employees, allServices, milestones] = await Promise.all([
     prisma.project.findFirst({
       where: { id, companyId: session.companyId, deletedAt: null },
       include: {
@@ -66,12 +67,25 @@ export default async function ProjectDetailPage({
       orderBy: { name: "asc" },
       select: { id: true, name: true },
     }),
+    prisma.milestone.findMany({
+      where: { projectId: id },
+      orderBy: [{ dueDate: "asc" }, { id: "asc" }],
+      select: { id: true, name: true, dueDate: true, tasks: { select: { status: true } } },
+    }),
   ]);
 
   if (!project) notFound();
 
   const usedServiceIds = new Set(project.services.map((ps) => ps.serviceId));
   const available = allServices.filter((s) => !usedServiceIds.has(s.id));
+
+  const milestoneRows = milestones.map((m) => ({
+    id: m.id,
+    name: m.name,
+    dueDate: m.dueDate ? m.dueDate.toISOString().slice(0, 10) : null,
+    done: m.tasks.filter((t) => t.status === "COMPLETED").length,
+    total: m.tasks.length,
+  }));
 
   const initialTasks: KanbanTask[] = project.tasks.map((t) => ({
     id: t.id,
@@ -134,6 +148,8 @@ export default async function ProjectDetailPage({
         available={available}
         employees={employees.map((e) => ({ id: e.id, name: e.fullName }))}
       />
+
+      <MilestonesPanel projectId={project.id} milestones={milestoneRows} />
 
       {project.client && <DeliverablesPanel projectId={project.id} items={project.deliverables} />}
 

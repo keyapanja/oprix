@@ -79,6 +79,41 @@ export async function createLeaveType(
   return { ok: true };
 }
 
+export async function updateLeaveType(
+  _prev: LeaveState,
+  formData: FormData,
+): Promise<LeaveState> {
+  const session = await requireCapability("leave:manage");
+  const id = String(formData.get("id") ?? "");
+  if (!id) return { error: "Missing leave type id" };
+  const parsed = LeaveTypeSchema.safeParse({
+    name: formData.get("name"),
+    description: formData.get("description"),
+    paidType: formData.get("paidType"),
+    allowanceValue: formData.get("allowanceValue"),
+    allowancePeriod: formData.get("allowancePeriod"),
+  });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  const d = parsed.data;
+  try {
+    const res = await prisma.leaveType.updateMany({
+      where: { id, companyId: session.companyId },
+      data: {
+        name: d.name,
+        description: d.description || null,
+        paidType: d.paidType,
+        allowanceValue: d.allowanceValue,
+        allowancePeriod: d.allowancePeriod,
+      },
+    });
+    if (res.count === 0) return { error: "Leave type not found" };
+  } catch {
+    return { error: "A leave type with that name already exists" };
+  }
+  revalidatePath(LEAVE);
+  return { ok: true };
+}
+
 // ---- Self-service: apply for leave or WFH -------------------------------
 const ApplySchema = z.object({
   kind: z.nativeEnum(RequestKind),

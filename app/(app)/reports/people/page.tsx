@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { requirePage } from "@/lib/auth/guard";
 import { prisma } from "@/lib/db";
 import { nowInZone, dateAtUTC } from "@/lib/dates";
@@ -124,7 +125,9 @@ export default async function PeopleReportPage({
               <tbody className="divide-y divide-line">
                 {rows.map((r) => (
                   <tr key={r.id}>
-                    <td className="py-2 pr-4 font-medium text-content">{r.name}</td>
+                    <td className="py-2 pr-4">
+                      <Link href={`/people/${r.id}`} className="font-medium text-content hover:text-accent-strong hover:underline">{r.name}</Link>
+                    </td>
                     <td className="py-2 pr-4 text-muted">{r.dept}</td>
                     <td className="py-2 pr-4 text-muted">{r.role}</td>
                     <td className="py-2 pr-4 text-right tabular-nums text-content">{fmtH(r.hours)}</td>

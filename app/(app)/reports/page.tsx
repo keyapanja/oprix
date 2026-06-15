@@ -4,7 +4,7 @@ import type { TaskStatus } from "@prisma/client";
 import { requirePage } from "@/lib/auth/guard";
 import { prisma } from "@/lib/db";
 import { nowInZone, dateAtUTC, shiftISO } from "@/lib/dates";
-import { humanizeEnum } from "@/lib/format";
+import { humanizeEnum, formatINR } from "@/lib/format";
 import { PageHeader } from "@/components/ui/page-header";
 import { Icon } from "@/components/ui/icons";
 import { KpiGrid, Section } from "@/components/reports/blocks";
@@ -30,6 +30,7 @@ const LINKS = [
   { href: "/reports/people", label: "People", desc: "Per-person hours, tasks, attendance", icon: "users" },
   { href: "/reports/attendance", label: "Attendance", desc: "Presence, late, by department", icon: "calendar" },
   { href: "/reports/leave", label: "Leave", desc: "Leave taken by type and person", icon: "calendarDays" },
+  { href: "/reports/payroll", label: "Payroll", desc: "Salary summary and cost by department", icon: "chart" },
 ];
 
 export default async function ReportsOverviewPage() {
@@ -54,6 +55,7 @@ export default async function ReportsOverviewPage() {
     deptGroups,
     projects,
     departments,
+    salaryAgg,
   ] = await Promise.all([
     prisma.project.count({ where: { companyId, deletedAt: null, status: "ACTIVE" } }),
     prisma.employee.count({ where: { companyId, deletedAt: null } }),
@@ -66,6 +68,10 @@ export default async function ReportsOverviewPage() {
     prisma.employee.groupBy({ by: ["departmentId"], where: { companyId, deletedAt: null }, _count: { _all: true } }),
     prisma.project.findMany({ where: { companyId }, select: { id: true, name: true } }),
     prisma.department.findMany({ where: { companyId }, select: { id: true, name: true } }),
+    prisma.salaryStructure.aggregate({
+      where: { isActive: true, employee: { companyId, deletedAt: null } },
+      _sum: { basic: true, hra: true, specialAllowance: true },
+    }),
   ]);
 
   const projectName = new Map(projects.map((p) => [p.id, p.name]));
@@ -79,6 +85,7 @@ export default async function ReportsOverviewPage() {
     { label: "Open tasks", value: String(openTasks), icon: "check", color: "#8b5cf6" },
     { label: "Hours · this month", value: fmtH(monthHours), icon: "clock", color: "#06b6d4" },
     { label: "Completed · this month", value: String(completedThisMonth), icon: "check", color: "#22c55e" },
+    { label: "Monthly payroll", value: formatINR((salaryAgg._sum.basic ?? 0) + (salaryAgg._sum.hra ?? 0) + (salaryAgg._sum.specialAllowance ?? 0)), icon: "chart", color: "#ec4899" },
   ];
 
   const hoursItems = hoursByProject

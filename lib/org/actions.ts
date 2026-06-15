@@ -139,6 +139,28 @@ export async function createShift(
   return { ok: true };
 }
 
+const ShiftUpdateSchema = ShiftSchema.extend({ id: z.string().min(1, "Missing id") });
+
+export async function updateShift(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const session = await requireCapability("org:manage");
+  const parsed = ShiftUpdateSchema.safeParse({
+    id: formData.get("id"),
+    name: formData.get("name"),
+    startTime: formData.get("startTime"),
+    endTime: formData.get("endTime"),
+    graceMinutes: formData.get("graceMinutes") || 0,
+  });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message };
+  const { id, ...data } = parsed.data;
+  const res = await prisma.workShift.updateMany({ where: { id, companyId: session.companyId }, data });
+  if (res.count === 0) return { error: "Shift not found" };
+  revalidatePath(ORG);
+  return { ok: true };
+}
+
 // ---- Locations ------------------------------------------------------------
 export async function createLocation(
   _prev: ActionState,

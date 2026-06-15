@@ -51,8 +51,10 @@ export const NAV: NavItem[] = [
       { label: "People", href: "/reports/people", icon: "users", action: "report:view" },
       { label: "Attendance", href: "/reports/attendance", icon: "calendar", action: "report:view" },
       { label: "Leave", href: "/reports/leave", icon: "calendarDays", action: "report:view" },
+      { label: "Payroll", href: "/reports/payroll", icon: "chart", action: "report:view" },
     ],
   },
+  { label: "Resource Allocation", href: "/resource", icon: "pie", action: "report:view" },
   {
     label: "Knowledge Base",
     href: "/knowledge-base",

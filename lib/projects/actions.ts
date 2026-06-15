@@ -577,3 +577,83 @@ export async function removeChecklistItem(itemId: string): Promise<ProjectState>
   revalidatePath(`/tasks/${item.taskId}`);
   return { ok: true };
 }
+
+// ---- Task dependencies ----------------------------------------------------
+export async function addTaskDependency(taskId: string, dependsOnId: string): Promise<ProjectState> {
+  const session = await requireCapability("task:manage");
+  if (taskId === dependsOnId) return { error: "A task can't depend on itself" };
+  const tasks = await prisma.task.findMany({
+    where: { id: { in: [taskId, dependsOnId] }, project: { companyId: session.companyId } },
+    select: { id: true, projectId: true },
+  });
+  if (tasks.length !== 2) return { error: "Task not found" };
+  if (tasks[0].projectId !== tasks[1].projectId) return { error: "Tasks must be in the same project" };
+  const reverse = await prisma.taskDependency.findFirst({ where: { taskId: dependsOnId, dependsOnId: taskId }, select: { id: true } });
+  if (reverse) return { error: "That would create a circular dependency" };
+  try {
+    await prisma.taskDependency.create({ data: { taskId, dependsOnId } });
+  } catch {
+    return { error: "That dependency already exists" };
+  }
+  revalidatePath(`/tasks/${taskId}`);
+  return { ok: true };
+}
+
+export async function removeTaskDependency(taskId: string, dependsOnId: string): Promise<ProjectState> {
+  const session = await requireCapability("task:manage");
+  await prisma.taskDependency.deleteMany({
+    where: { taskId, dependsOnId, task: { project: { companyId: session.companyId } } },
+  });
+  revalidatePath(`/tasks/${taskId}`);
+  return { ok: true };
+}
+
+// ---- Milestones -----------------------------------------------------------
+const MilestoneSchema = z.object({
+  projectId: z.string().min(1),
+  name: z.string().trim().min(1, "Name is required").max(120),
+  dueDate: z.string().optional().or(z.literal("")),
+});
+
+export async function createMilestone(_prev: ProjectState, formData: FormData): Promise<ProjectState> {
+  const session = await requireCapability("project:manage");
+  const parsed = MilestoneSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  const d = parsed.data;
+  if (!(await ownsProject(session.companyId, d.projectId))) return { error: "Project not found" };
+  await prisma.milestone.create({
+    data: { projectId: d.projectId, name: d.name, dueDate: d.dueDate ? dateAtUTC(d.dueDate) : null },
+  });
+  revalidatePath(`/projects/${d.projectId}`);
+  return { ok: true };
+}
+
+export async function deleteMilestone(id: string): Promise<ProjectState> {
+  const session = await requireCapability("project:manage");
+  const ms = await prisma.milestone.findFirst({
+    where: { id, project: { companyId: session.companyId } },
+    select: { id: true, projectId: true },
+  });
+  if (!ms) return { error: "Milestone not found" };
+  await prisma.task.updateMany({ where: { milestoneId: id }, data: { milestoneId: null } });
+  await prisma.milestone.delete({ where: { id } });
+  revalidatePath(`/projects/${ms.projectId}`);
+  return { ok: true };
+}
+
+export async function setTaskMilestone(taskId: string, milestoneId: string | null): Promise<ProjectState> {
+  const session = await requireCapability("task:manage");
+  const task = await prisma.task.findFirst({
+    where: { id: taskId, project: { companyId: session.companyId } },
+    select: { projectId: true },
+  });
+  if (!task) return { error: "Task not found" };
+  if (milestoneId) {
+    const ms = await prisma.milestone.findFirst({ where: { id: milestoneId, projectId: task.projectId }, select: { id: true } });
+    if (!ms) return { error: "Invalid milestone" };
+  }
+  await prisma.task.update({ where: { id: taskId }, data: { milestoneId } });
+  revalidatePath(`/tasks/${taskId}`);
+  revalidatePath(`/projects/${task.projectId}`);
+  return { ok: true };
+}

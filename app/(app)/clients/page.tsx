@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card } from "@/components/ui/card";
 import { ClientAdd } from "@/components/clients/client-add";
+import { ClientEdit } from "@/components/clients/client-edit";
 
 export const metadata: Metadata = { title: "Clients · Operix" };
 
@@ -25,6 +26,7 @@ export default async function ClientsPage({
       companyName: true,
       email: true,
       phone: true,
+      address: true,
       _count: { select: { projects: true } },
     },
   });
@@ -48,6 +50,7 @@ export default async function ClientsPage({
                 <th className="px-5 py-3">Company</th>
                 <th className="px-5 py-3">Email</th>
                 <th className="px-5 py-3">Projects</th>
+                <th className="px-5 py-3" />
               </tr>
             </thead>
             <tbody className="divide-y divide-line">
@@ -61,6 +64,9 @@ export default async function ClientsPage({
                   <td className="px-5 py-3 text-muted">{c.companyName ?? "—"}</td>
                   <td className="px-5 py-3 text-muted">{c.email ?? "—"}</td>
                   <td className="px-5 py-3 text-muted">{c._count.projects}</td>
+                  <td className="px-5 py-3 text-right">
+                    <ClientEdit client={c} />
+                  </td>
                 </tr>
               ))}
             </tbody>

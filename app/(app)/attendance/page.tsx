@@ -8,6 +8,9 @@ import { notifyLateLogins } from "@/lib/notifications/late";
 import { PageHeader } from "@/components/ui/page-header";
 import { DateNav } from "@/components/attendance/date-nav";
 import { AttendanceGrid, type AttendanceRow } from "@/components/attendance/attendance-grid";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Icon } from "@/components/ui/icons";
 
 export const metadata: Metadata = { title: "Attendance · Operix" };
 
@@ -114,7 +117,18 @@ export default async function AttendancePage({
 
   return (
     <>
-      <PageHeader title="Attendance" description="Mark and track daily attendance." />
+      <PageHeader
+        title="Attendance"
+        description="Mark and track daily attendance."
+        action={
+          <Link href="/attendance/monthly">
+            <Button variant="secondary" size="sm">
+              <Icon name="calendar" className="size-4" />
+              Monthly view
+            </Button>
+          </Link>
+        }
+      />
       <DateNav date={date} today={today} />
 
       {isHoliday && (

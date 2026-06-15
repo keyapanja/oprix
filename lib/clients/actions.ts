@@ -41,6 +41,32 @@ export async function createClient(
   return { ok: true };
 }
 
+const ClientUpdateSchema = ClientSchema.extend({ id: z.string().min(1, "Missing id") });
+
+export async function updateClient(
+  _prev: ClientState,
+  formData: FormData,
+): Promise<ClientState> {
+  const session = await requireCapability("client:manage");
+  const parsed = ClientUpdateSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  const { id, ...d } = parsed.data;
+  const res = await prisma.client.updateMany({
+    where: { id, companyId: session.companyId, deletedAt: null },
+    data: {
+      name: d.name,
+      companyName: d.companyName || null,
+      email: d.email || null,
+      phone: d.phone || null,
+      address: d.address || null,
+    },
+  });
+  if (res.count === 0) return { error: "Client not found" };
+  revalidatePath("/clients");
+  revalidatePath(`/clients/${id}`);
+  return { ok: true };
+}
+
 export async function softDeleteClient(id: string): Promise<ClientState> {
   const session = await requireCapability("client:manage");
   await prisma.client.updateMany({

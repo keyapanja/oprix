@@ -13,6 +13,7 @@ import { Icon } from "@/components/ui/icons";
 import { AddForm } from "@/components/org/add-form";
 import { RequestForm } from "@/components/leave/request-form";
 import { RequestActions } from "@/components/leave/request-actions";
+import { TypeEdit } from "@/components/leave/type-edit";
 import { createLeaveType, deleteLeaveType } from "@/lib/leave/actions";
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/cn";
@@ -198,7 +199,10 @@ export function LeaveTabs({
                         {t.allowanceValue} / {t.allowancePeriod === "MONTH" ? "month" : "year"}
                       </td>
                       <td className="px-5 py-3 text-right">
-                        <TypeDelete id={t.id} name={t.name} />
+                        <div className="flex items-center justify-end gap-1">
+                          <TypeEdit type={t} />
+                          <TypeDelete id={t.id} name={t.name} />
+                        </div>
                       </td>
                     </tr>
                   ))}

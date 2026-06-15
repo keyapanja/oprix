@@ -9,6 +9,7 @@ import { Field } from "@/components/ui/field";
 import { Combobox } from "@/components/ui/combobox";
 import { AddForm } from "@/components/org/add-form";
 import { DeleteButton } from "@/components/org/delete-button";
+import { ShiftEdit } from "@/components/org/shift-edit";
 import { ServiceList } from "@/components/org/service-list";
 import { PermissionsMatrix } from "@/components/org/permissions-matrix";
 import { TaskScopeMatrix } from "@/components/org/task-scope-matrix";
@@ -123,7 +124,12 @@ export function OrgTabs({
                   `${s.startTime} – ${s.endTime}`,
                   s.graceMinutes > 0 ? `${s.graceMinutes} min` : "—",
                 ],
-                delete: <DeleteButton entity="shift" id={s.id} label={s.name} />,
+                delete: (
+                  <div className="flex items-center justify-end gap-1">
+                    <ShiftEdit shift={s} />
+                    <DeleteButton entity="shift" id={s.id} label={s.name} />
+                  </div>
+                ),
               }))}
             />
           </div>

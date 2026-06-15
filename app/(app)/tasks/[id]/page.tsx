@@ -14,6 +14,8 @@ import { TaskAssignees } from "@/components/tasks/task-assignees";
 import { TaskChecklist } from "@/components/tasks/task-checklist";
 import { TaskEdit } from "@/components/tasks/task-edit";
 import { TaskWorkflow } from "@/components/tasks/task-workflow";
+import { TaskDependencies } from "@/components/tasks/task-dependencies";
+import { TaskMilestone } from "@/components/tasks/task-milestone";
 import { CommentForm } from "@/components/tasks/comment-form";
 import { TaskTimerControl } from "@/components/timer/task-timer-control";
 import { getMyTaskTimer, taskTrackedSeconds } from "@/lib/timer/data";
@@ -62,6 +64,8 @@ export default async function TaskDetailPage({
       },
       service: { select: { name: true } },
       assignees: { select: { employee: { select: { id: true, fullName: true } } } },
+      milestoneId: true,
+      dependsOn: { select: { dependsOn: { select: { id: true, name: true, status: true } } } },
       checklist: { orderBy: { orderIndex: "asc" }, select: { id: true, text: true, isDone: true } },
       comments: { orderBy: { createdAt: "asc" }, select: { id: true, authorId: true, body: true, createdAt: true } },
     },
@@ -86,7 +90,7 @@ export default async function TaskDetailPage({
         ? "Locked — in review"
         : "Not your task";
 
-  const [employees, activity] = await Promise.all([
+  const [employees, activity, projectTasks, milestones] = await Promise.all([
     // Everyone in the workspace — for the assignee picker and @-mentions.
     prisma.employee.findMany({
       where: { companyId: session.companyId, deletedAt: null },
@@ -98,6 +102,17 @@ export default async function TaskDetailPage({
       orderBy: { createdAt: "desc" },
       take: 100,
       select: { id: true, action: true, meta: true, createdAt: true },
+    }),
+    // Other tasks in this project — for the dependency picker.
+    prisma.task.findMany({
+      where: { projectId: task.project.id, NOT: { id: task.id } },
+      orderBy: { createdAt: "asc" },
+      select: { id: true, name: true },
+    }),
+    prisma.milestone.findMany({
+      where: { projectId: task.project.id },
+      orderBy: [{ dueDate: "asc" }, { id: "asc" }],
+      select: { id: true, name: true },
     }),
   ]);
 
@@ -129,13 +144,14 @@ export default async function TaskDetailPage({
   const authors = authorIds.length
     ? await prisma.user.findMany({
         where: { id: { in: authorIds } },
-        select: { id: true, email: true, employee: { select: { fullName: true } } },
+        select: { id: true, email: true, employee: { select: { id: true, fullName: true } } },
       })
     : [];
   const authorName = (uid: string) => {
     const u = authors.find((a) => a.id === uid);
     return u?.employee?.fullName ?? u?.email ?? "Someone";
   };
+  const authorEmpId = (uid: string) => authors.find((a) => a.id === uid)?.employee?.id ?? null;
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -209,6 +225,20 @@ export default async function TaskDetailPage({
 
           <Card>
             <div className="border-b border-line px-5 py-3">
+              <h3 className="text-sm font-semibold text-content">Dependencies</h3>
+            </div>
+            <div className="p-5">
+              <TaskDependencies
+                taskId={task.id}
+                blockers={task.dependsOn.map((d) => ({ id: d.dependsOn.id, name: d.dependsOn.name, status: d.dependsOn.status }))}
+                options={projectTasks}
+                canEdit={isManager}
+              />
+            </div>
+          </Card>
+
+          <Card>
+            <div className="border-b border-line px-5 py-3">
               <h3 className="text-sm font-semibold text-content">Comments</h3>
             </div>
             <div className="space-y-4 p-5">
@@ -224,7 +254,11 @@ export default async function TaskDetailPage({
                       </span>
                       <div className="min-w-0">
                         <p className="text-sm">
-                          <span className="font-medium text-content">{authorName(c.authorId)}</span>{" "}
+                          {authorEmpId(c.authorId) ? (
+                            <Link href={`/people/${authorEmpId(c.authorId)}`} className="font-medium text-content hover:text-accent-strong hover:underline">{authorName(c.authorId)}</Link>
+                          ) : (
+                            <span className="font-medium text-content">{authorName(c.authorId)}</span>
+                          )}{" "}
                           <span className="text-xs text-faint">{fmtDateTime(c.createdAt)}</span>
                         </p>
                         <p className="mt-0.5 whitespace-pre-wrap text-sm text-muted">{c.body}</p>
@@ -276,7 +310,10 @@ export default async function TaskDetailPage({
           <Card className="p-5">
             <h3 className="mb-3 text-sm font-semibold text-content">Details</h3>
 
-            <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-faint">Assignees</p>
+            <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-faint">Milestone</p>
+            <TaskMilestone taskId={task.id} current={task.milestoneId} options={milestones} canEdit={isManager} />
+
+            <p className="mb-1.5 mt-4 text-xs font-medium uppercase tracking-wide text-faint">Assignees</p>
             <TaskAssignees
               taskId={task.id}
               canEdit={isManager}

@@ -1,6 +1,7 @@
 "use client";
 
 import { toast } from "@/components/ui/toast";
+import Link from "next/link";
 import { useState, useTransition } from "react";
 import { addTaskAssignee, removeTaskAssignee } from "@/lib/projects/actions";
 import { Combobox } from "@/components/ui/combobox";
@@ -52,10 +53,12 @@ export function TaskAssignees({
       {list.length === 0 && <span className="text-sm text-muted">No one assigned</span>}
       {list.map((a) => (
         <span key={a.id} className="flex items-center gap-1.5 rounded-full bg-canvas py-1 pl-1 pr-2 text-sm text-content">
-          <span className="gradient-brand flex size-6 items-center justify-center rounded-full text-[10px] font-semibold text-white">
-            {a.name.slice(0, 2).toUpperCase()}
-          </span>
-          {a.name}
+          <Link href={`/people/${a.id}`} className="flex items-center gap-1.5 hover:underline">
+            <span className="gradient-brand flex size-6 items-center justify-center rounded-full text-[10px] font-semibold text-white">
+              {a.name.slice(0, 2).toUpperCase()}
+            </span>
+            {a.name}
+          </Link>
           {canEdit && (
             <button onClick={() => remove(a.id)} className="text-faint hover:text-red-600" aria-label={`Remove ${a.name}`}>
               <Icon name="x" className="size-3.5" />

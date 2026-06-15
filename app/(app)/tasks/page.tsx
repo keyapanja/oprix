@@ -5,7 +5,8 @@ import { prisma } from "@/lib/db";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icons";
-import { TasksTable, type TaskRow } from "@/components/tasks/tasks-table";
+import { type TaskRow } from "@/components/tasks/tasks-table";
+import { TasksWorkspace } from "@/components/tasks/tasks-workspace";
 import { getTaskTimerStates } from "@/lib/timer/data";
 import { canUseTimer } from "@/lib/timer/finalize";
 import type { TaskTimerState } from "@/lib/timer/shared";
@@ -78,6 +79,7 @@ export default async function TasksPage({
 
   // Advanced (department / service) filters are only meaningful beyond own tasks.
   const showAdvancedFilters = scope !== "OWN";
+  const today = new Date().toISOString().slice(0, 10);
 
   return (
     <>
@@ -93,7 +95,7 @@ export default async function TasksPage({
           </Link>
         }
       />
-      <TasksTable rows={rows} canTrack initialView={initialView} showAdvancedFilters={showAdvancedFilters} />
+      <TasksWorkspace rows={rows} canTrack initialView={initialView} showAdvancedFilters={showAdvancedFilters} today={today} />
     </>
   );
 }
