@@ -63,6 +63,12 @@ export const NAV: NavItem[] = [
     ],
   },
   {
+    label: "Knowledge Base",
+    href: "/knowledge-base",
+    icon: "book",
+    children: [{ label: "New article", href: "/knowledge-base/new" }],
+  },
+  {
     label: "Clients",
     href: "/clients",
     icon: "userGroup",
@@ -83,5 +89,4 @@ export const NAV: NavItem[] = [
 // Planned modules shown as disabled hints so the roadmap is visible in the UI.
 export const NAV_SOON: NavItem[] = [
   { label: "Payroll", href: "#", icon: "chart" },
-  { label: "Knowledge Base", href: "#", icon: "book" },
 ];

@@ -23,6 +23,18 @@ export function formatDate(d: Date | string | null | undefined): string {
   });
 }
 
+export function formatDateTime(d: Date | string | null | undefined): string {
+  if (!d) return "—";
+  const date = typeof d === "string" ? new Date(d) : d;
+  return date.toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
 /** Paise (integer) -> "₹12,345.00" */
 export function formatINR(paise: number): string {
   return new Intl.NumberFormat("en-IN", {

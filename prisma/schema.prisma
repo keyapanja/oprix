@@ -241,6 +241,7 @@ model Department {
   services     Service[]
   designations Designation[]
   employees    Employee[]
+  kbArticles   KbArticle[]
 
   @@unique([companyId, name])
   @@index([companyId])
@@ -260,6 +261,7 @@ model Service {
   projectLinks     ProjectService[]
   tasks            Task[]
   checklistTemplate ServiceChecklistItem[]
+  kbArticles       KbArticle[]
 
   @@unique([companyId, name])
   @@index([companyId])
@@ -456,6 +458,7 @@ model Project {
   milestones   Milestone[]
   timeEntries  TimeEntry[]
   deliverables Deliverable[]
+  kbArticles   KbArticle[]
 
   @@index([companyId])
   @@index([clientId])
@@ -893,21 +896,30 @@ model KbCategory {
 }
 
 model KbArticle {
-  id         String   @id @default(cuid())
-  companyId  String
-  categoryId String
-  title      String
-  body       String // current rich-text (HTML/JSON)
-  keywords   String?
-  authorId   String // userId
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id           String   @id @default(cuid())
+  companyId    String
+  categoryId   String? // legacy / optional grouping
+  projectId    String? // the project whose SOP this guide documents (SOPs differ per project)
+  departmentId String? // organised by department…
+  serviceId    String? // …and service (drives the "related guide" link on tasks)
+  title        String
+  body         String // markdown
+  keywords     String?
+  authorId     String // userId — original creator
+  updatedById  String? // userId — last editor
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  category KbCategory          @relation(fields: [categoryId], references: [id])
-  versions KbArticleVersion[]
+  category   KbCategory?        @relation(fields: [categoryId], references: [id])
+  project    Project?           @relation(fields: [projectId], references: [id])
+  department Department?        @relation(fields: [departmentId], references: [id])
+  service    Service?           @relation(fields: [serviceId], references: [id])
+  versions   KbArticleVersion[]
 
   @@index([companyId])
-  @@index([categoryId])
+  @@index([projectId])
+  @@index([departmentId])
+  @@index([serviceId])
 }
 
 model KbArticleVersion {

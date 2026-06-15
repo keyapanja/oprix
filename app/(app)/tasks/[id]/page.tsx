@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import { BackLink } from "@/components/ui/back-link";
 import { requirePage } from "@/lib/auth/guard";
 import { hasPermission } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/db";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Icon } from "@/components/ui/icons";
 import { humanizeEnum, formatDate } from "@/lib/format";
 import { PRIORITY_TONE, TASK_STATUS_TONE, TASK_STATUS_LABEL } from "@/lib/status";
 import { TaskAssignees } from "@/components/tasks/task-assignees";
@@ -101,6 +103,26 @@ export default async function TaskDetailPage({
 
   const myTimer = await getMyTaskTimer(session.userId, id);
   const trackedSeconds = await taskTrackedSeconds(id);
+
+  // Knowledge Base guides for this task — this project's SOP for the service
+  // (SOPs differ per project), plus any general guide for the service. So a
+  // confused worker can jump straight to "how to do this".
+  const kbMatches = task.serviceId
+    ? await prisma.kbArticle.findMany({
+        where: {
+          companyId: session.companyId,
+          serviceId: task.serviceId,
+          OR: [{ projectId: task.project.id }, { projectId: null }],
+        },
+        orderBy: { updatedAt: "desc" },
+        take: 8,
+        select: { id: true, title: true, projectId: true },
+      })
+    : [];
+  // Project-specific SOPs first, then general service guides.
+  const kbArticles = kbMatches
+    .sort((a, b) => Number(b.projectId === task.project.id) - Number(a.projectId === task.project.id))
+    .slice(0, 5);
 
   // Resolve comment authors.
   const authorIds = [...new Set(task.comments.map((c) => c.authorId))];
@@ -217,6 +239,40 @@ export default async function TaskDetailPage({
 
         {/* Sidebar */}
         <div className="space-y-5">
+          {kbArticles.length > 0 && (
+            <Card className="bg-accent-soft/40 p-5 ring-1 ring-inset ring-brand-500/20">
+              <h3 className="mb-1 flex items-center gap-1.5 text-sm font-semibold text-content">
+                <Icon name="book" className="size-4 text-accent-strong" />
+                Related guides
+              </h3>
+              <p className="mb-2.5 text-xs text-muted">
+                Not sure how to do this? Check the {task.service?.name} guide{kbArticles.length > 1 ? "s" : ""}:
+              </p>
+              <ul className="space-y-1">
+                {kbArticles.map((a) => (
+                  <li key={a.id}>
+                    <Link
+                      href={`/knowledge-base/${a.id}`}
+                      className="flex items-center gap-2 rounded-lg bg-surface px-2.5 py-2 text-sm font-medium text-accent-strong shadow-sm transition-colors hover:bg-canvas"
+                    >
+                      <Icon name="book" className="size-3.5 shrink-0" />
+                      <span className="truncate">{a.title}</span>
+                      <span
+                        className={
+                          a.projectId === task.project.id
+                            ? "ml-auto shrink-0 rounded bg-brand-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-brand-600 dark:text-brand-300"
+                            : "ml-auto shrink-0 rounded bg-canvas px-1.5 py-0.5 text-[10px] font-medium text-faint"
+                        }
+                      >
+                        {a.projectId === task.project.id ? "This project" : "General"}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
+
           <Card className="p-5">
             <h3 className="mb-3 text-sm font-semibold text-content">Details</h3>
 
