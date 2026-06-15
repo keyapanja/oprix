@@ -190,7 +190,7 @@ export function Sidebar({
           );
         })}
 
-        {!collapsed && (
+        {!collapsed && NAV_SOON.length > 0 && (
           <p className="px-3 pb-2 pt-6 text-[10px] font-semibold uppercase tracking-wider text-faint">
             Coming soon
           </p>

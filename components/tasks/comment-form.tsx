@@ -1,5 +1,6 @@
 "use client";
 
+import { toast } from "@/components/ui/toast";
 import { useRef, useState, useTransition, type KeyboardEvent } from "react";
 import { useRouter } from "next/navigation";
 import { addComment } from "@/lib/projects/actions";
@@ -72,7 +73,7 @@ export function CommentForm({ taskId, people }: { taskId: string; people: Person
     if (!text) return;
     start(async () => {
       const res = await addComment(taskId, text);
-      if (res.error) alert(res.error);
+      if (res.error) toast.error(res.error);
       else {
         setBody("");
         setQuery(null);

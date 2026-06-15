@@ -1,5 +1,6 @@
 "use client";
 
+import { toast } from "@/components/ui/toast";
 import { useEffect, useRef, useState } from "react";
 import { renderMarkdown } from "@/lib/kb/markdown";
 import { cn } from "@/lib/cn";
@@ -213,7 +214,7 @@ export function RichTextEditor({
     const existing = ancestorTag(sel?.anchorNode ?? null, "A", root);
     if (existing) return exec("unlink");
     if (!sel || sel.isCollapsed) {
-      window.alert("Select the text you want to turn into a link first.");
+      toast.error("Select the text you want to turn into a link first.");
       return;
     }
     const url = window.prompt("Link URL (https://… or /path):", "https://");

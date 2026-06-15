@@ -142,6 +142,11 @@ model Company {
   phone              String?
   employeeCodePrefix String   @default("EMP")
   multiLocation      Boolean  @default(false)
+  // Payroll: which statutory deductions this company is registered for. When a
+  // component is off, it's skipped at payroll time (e.g. small firms with no
+  // PF/ESI registration → Basic can be the full net pay).
+  pfEnabled          Boolean  @default(true)
+  esiEnabled         Boolean  @default(true)
   // Remind everyone the day before a holiday / announcement.
   eventReminderEnabled Boolean @default(false)
   eventReminderTime    String  @default("09:00") // HH:MM in the company timezone

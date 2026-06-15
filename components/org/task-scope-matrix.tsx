@@ -1,5 +1,6 @@
 "use client";
 
+import { toast } from "@/components/ui/toast";
 import { useState, useTransition } from "react";
 import type { Role } from "@prisma/client";
 import { setTaskScope } from "@/lib/permissions/actions";
@@ -31,7 +32,7 @@ export function TaskScopeMatrix({ initial }: { initial: Record<string, string> }
       const res = await setTaskScope(role, scope);
       if (res.error) {
         setScopes((s) => ({ ...s, [role]: prev }));
-        alert(res.error);
+        toast.error(res.error);
       }
     });
   }

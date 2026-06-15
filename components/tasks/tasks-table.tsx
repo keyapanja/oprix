@@ -1,5 +1,7 @@
 "use client";
 
+import { toast } from "@/components/ui/toast";
+import { confirmDialog } from "@/components/ui/confirm";
 import { useEffect, useMemo, useState, useTransition, type MouseEvent } from "react";
 import { useRouter } from "next/navigation";
 import type { TaskStatus, Priority } from "@prisma/client";
@@ -113,14 +115,14 @@ export function TasksTable({
     e.stopPropagation();
     router.push(`/tasks/${id}`);
   }
-  function onDelete(e: MouseEvent, id: string) {
+  async function onDelete(e: MouseEvent, id: string) {
     e.stopPropagation();
-    if (!confirm("Delete this task? This can't be undone.")) return;
+    if (!(await confirmDialog({ message: "Delete this task? This can't be undone.", tone: "danger" }))) return;
     setDeletingId(id);
     startDelete(async () => {
       const res = await deleteTask(id);
       setDeletingId(null);
-      if (res.error) alert(res.error);
+      if (res.error) toast.error(res.error);
       else router.refresh();
     });
   }

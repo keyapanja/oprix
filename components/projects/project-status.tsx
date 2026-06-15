@@ -1,5 +1,6 @@
 "use client";
 
+import { toast } from "@/components/ui/toast";
 import { useState, useTransition } from "react";
 import type { ProjectStatus } from "@prisma/client";
 import { updateProjectStatus } from "@/lib/projects/actions";
@@ -34,7 +35,7 @@ export function ProjectStatusControl({
           setStatus(next);
           start(async () => {
             const res = await updateProjectStatus(id, next);
-            if (res.error) alert(res.error);
+            if (res.error) toast.error(res.error);
           });
         }}
         options={STATUSES.map((s) => ({ value: s, label: humanizeEnum(s) }))}

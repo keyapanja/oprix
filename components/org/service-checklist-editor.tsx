@@ -1,5 +1,6 @@
 "use client";
 
+import { toast } from "@/components/ui/toast";
 import { useState, useTransition } from "react";
 import { addServiceChecklistItem, removeServiceChecklistItem } from "@/lib/org/actions";
 import { Input } from "@/components/ui/input";
@@ -25,7 +26,7 @@ export function ServiceChecklistEditor({
     start(async () => {
       const res = await addServiceChecklistItem(serviceId, t);
       if (res.error) {
-        alert(res.error);
+        toast.error(res.error);
         return;
       }
       if (res.item) setItems((i) => [...i, res.item!]);
@@ -39,7 +40,7 @@ export function ServiceChecklistEditor({
       const res = await removeServiceChecklistItem(id);
       if (res.error) {
         setItems(prev);
-        alert(res.error);
+        toast.error(res.error);
       }
     });
   }

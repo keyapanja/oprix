@@ -74,6 +74,17 @@ export const NAV: NavItem[] = [
     children: [{ label: "New employee", href: "/employees/new", action: "employee:manage" }],
   },
   { label: "Attendance", href: "/attendance", icon: "clock", action: "attendance:manage" },
+  {
+    label: "Payroll",
+    href: "/payroll",
+    icon: "chart",
+    action: "payroll:manage",
+    children: [
+      { label: "Salary structures", href: "/payroll/salaries", action: "payroll:manage" },
+      { label: "Settings", href: "/payroll/settings", action: "payroll:manage" },
+    ],
+  },
+  { label: "Payslips", href: "/payslips", icon: "download", action: "self:service" },
   { label: "Notifications", href: "/notifications", icon: "bell" },
   { label: "Calendar", href: "/calendar", icon: "calendarDays", action: "self:service" },
   {
@@ -87,6 +98,4 @@ export const NAV: NavItem[] = [
 ];
 
 // Planned modules shown as disabled hints so the roadmap is visible in the UI.
-export const NAV_SOON: NavItem[] = [
-  { label: "Payroll", href: "#", icon: "chart" },
-];
+export const NAV_SOON: NavItem[] = [];

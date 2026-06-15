@@ -1,5 +1,7 @@
 "use client";
 
+import { toast } from "@/components/ui/toast";
+import { confirmDialog } from "@/components/ui/confirm";
 import { useState, useTransition } from "react";
 import type { ApprovalStatus, LeavePaidType, AllowancePeriod } from "@prisma/client";
 import { Card } from "@/components/ui/card";
@@ -215,11 +217,11 @@ function TypeDelete({ id, name }: { id: string; name: string }) {
   return (
     <button
       disabled={pending}
-      onClick={() => {
-        if (!confirm(`Delete leave type "${name}"?`)) return;
+      onClick={async () => {
+        if (!(await confirmDialog({ message: `Delete leave type "${name}"?`, tone: "danger" }))) return;
         start(async () => {
           const res = await deleteLeaveType(id);
-          if (res.error) alert(res.error);
+          if (res.error) toast.error(res.error);
         });
       }}
       className="rounded-md p-1.5 text-faint hover:bg-red-50 hover:text-red-600 disabled:opacity-50 dark:hover:bg-red-500/15"

@@ -1,5 +1,6 @@
 "use client";
 
+import { toast } from "@/components/ui/toast";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { TaskStatus } from "@prisma/client";
@@ -60,7 +61,7 @@ export function KanbanBoard({
       const res = await updateTaskStatus(id, status);
       if (res.error) {
         setTasks((ts) => ts.map((t) => (t.id === id ? { ...t, status: prev } : t)));
-        alert(res.error);
+        toast.error(res.error);
       }
     });
   }
@@ -216,7 +217,7 @@ function ColumnAdd({
     start(async () => {
       const res = await createTask({ projectId, name: trimmed, serviceId: serviceId || null, status });
       if (res.error) {
-        alert(res.error);
+        toast.error(res.error);
         return;
       }
       if (res.task) onAdded(res.task);

@@ -1,5 +1,7 @@
 "use client";
 
+import { toast } from "@/components/ui/toast";
+import { confirmDialog } from "@/components/ui/confirm";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { updateTaskMeta, deleteTask } from "@/lib/projects/actions";
@@ -55,11 +57,11 @@ export function TaskEdit({
     });
   }
 
-  function onDelete() {
-    if (!confirm("Delete this task? This can't be undone.")) return;
+  async function onDelete() {
+    if (!(await confirmDialog({ message: "Delete this task? This can't be undone.", tone: "danger" }))) return;
     start(async () => {
       const res = await deleteTask(taskId);
-      if (res.error) alert(res.error);
+      if (res.error) toast.error(res.error);
       else router.push(`/projects/${projectId}`);
     });
   }

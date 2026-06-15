@@ -1,5 +1,6 @@
 "use client";
 
+import { toast } from "@/components/ui/toast";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { TaskStatus } from "@prisma/client";
@@ -33,7 +34,7 @@ export function TaskWorkflow({
   const run = (fn: () => Promise<{ error?: string }>) =>
     start(async () => {
       const res = await fn();
-      if (res.error) alert(res.error);
+      if (res.error) toast.error(res.error);
       else router.refresh();
     });
 

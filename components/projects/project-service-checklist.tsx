@@ -1,5 +1,6 @@
 "use client";
 
+import { toast } from "@/components/ui/toast";
 import { useState, useTransition } from "react";
 import {
   addProjectServiceChecklistItem,
@@ -35,7 +36,7 @@ export function ProjectServiceChecklist({
     start(async () => {
       const res = await addProjectServiceChecklistItem(projectServiceId, t);
       if (res.error) {
-        alert(res.error);
+        toast.error(res.error);
         return;
       }
       if (res.item) commit([...items, res.item]);
@@ -49,7 +50,7 @@ export function ProjectServiceChecklist({
       const res = await removeProjectServiceChecklistItem(id);
       if (res.error) {
         commit(prev);
-        alert(res.error);
+        toast.error(res.error);
       }
     });
   }

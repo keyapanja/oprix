@@ -1,5 +1,7 @@
 "use client";
 
+import { toast } from "@/components/ui/toast";
+import { confirmDialog } from "@/components/ui/confirm";
 import { useTransition } from "react";
 import { deleteOrgEntity } from "@/lib/org/actions";
 import { Icon } from "@/components/ui/icons";
@@ -23,11 +25,11 @@ export function DeleteButton({
 }) {
   const [pending, start] = useTransition();
 
-  function onDelete() {
-    if (!confirm(`Delete "${label}"? This can't be undone.`)) return;
+  async function onDelete() {
+    if (!(await confirmDialog({ message: `Delete "${label}"? This can't be undone.`, tone: "danger" }))) return;
     start(async () => {
       const res = await deleteOrgEntity(entity, id);
-      if (res.error) alert(res.error);
+      if (res.error) toast.error(res.error);
     });
   }
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { toast } from "@/components/ui/toast";
 import { useState, useTransition } from "react";
 import { toggleChecklistItem, addChecklistItem, removeChecklistItem } from "@/lib/projects/actions";
 import { Input } from "@/components/ui/input";
@@ -33,7 +34,7 @@ export function TaskChecklist({
       const res = await toggleChecklistItem(id, next);
       if (res.error) {
         setItems((is) => is.map((i) => (i.id === id ? { ...i, isDone: !next } : i)));
-        alert(res.error);
+        toast.error(res.error);
       }
     });
   }
@@ -43,7 +44,7 @@ export function TaskChecklist({
     start(async () => {
       const res = await addChecklistItem(taskId, t);
       if (res.error) {
-        alert(res.error);
+        toast.error(res.error);
         return;
       }
       if (res.item) setItems((is) => [...is, res.item!]);
@@ -57,7 +58,7 @@ export function TaskChecklist({
       const res = await removeChecklistItem(id);
       if (res.error) {
         setItems(prev);
-        alert(res.error);
+        toast.error(res.error);
       }
     });
   }

@@ -42,3 +42,18 @@ export function formatINR(paise: number): string {
     currency: "INR",
   }).format(paise / 100);
 }
+
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+/** 1-12 -> "June" (empty for out-of-range). */
+export function monthName(month: number): string {
+  return MONTH_NAMES[month - 1] ?? "";
+}
+
+/** (2026, 6) -> "June 2026" */
+export function periodLabel(year: number, month: number): string {
+  return `${monthName(month)} ${year}`;
+}

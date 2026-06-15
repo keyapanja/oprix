@@ -1,5 +1,6 @@
 "use client";
 
+import { toast } from "@/components/ui/toast";
 import { useState, useTransition } from "react";
 import { addTaskAssignee, removeTaskAssignee } from "@/lib/projects/actions";
 import { Combobox } from "@/components/ui/combobox";
@@ -30,7 +31,7 @@ export function TaskAssignees({
       const res = await addTaskAssignee(taskId, empId);
       if (res.error) {
         setList((l) => l.filter((a) => a.id !== empId));
-        alert(res.error);
+        toast.error(res.error);
       }
     });
   }
@@ -41,7 +42,7 @@ export function TaskAssignees({
       const res = await removeTaskAssignee(taskId, empId);
       if (res.error) {
         setList(prev);
-        alert(res.error);
+        toast.error(res.error);
       }
     });
   }

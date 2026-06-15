@@ -64,6 +64,7 @@ export function noteHref(type: string, meta: unknown): string | null {
   if (cat === "Attendance") return "/attendance";
   if (cat === "Leave") return "/leave";
   if (cat === "Announcements") return "/calendar";
+  if (cat === "Payroll") return typeof m.payslipId === "string" ? `/payslips/${m.payslipId}` : "/payslips";
   // Client portal events (deliverable decisions, feedback) point at the project.
   if (cat === "Clients") return typeof m.projectId === "string" ? `/projects/${m.projectId}` : null;
   return null;

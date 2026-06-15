@@ -11,6 +11,8 @@ import { Topbar } from "@/components/shell/topbar";
 import { TimerBar } from "@/components/timer/timer-bar";
 import { PunchInBanner } from "@/components/attendance/punch-banner";
 import { noteHref, formatNoteTime, type ClientNote } from "@/lib/notifications/categories";
+import { Toaster } from "@/components/ui/toast";
+import { ConfirmHost } from "@/components/ui/confirm";
 
 export default async function AppLayout({
   children,
@@ -113,6 +115,8 @@ export default async function AppLayout({
         {/* Within the main content column (not under the sidebar). */}
         <TimerBar timers={activeTimers} />
       </div>
+      <Toaster />
+      <ConfirmHost />
     </div>
   );
 }

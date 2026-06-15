@@ -1,5 +1,6 @@
 "use client";
 
+import { toast } from "@/components/ui/toast";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
@@ -275,7 +276,7 @@ function LocationsSettings({ enabled, locations }: { enabled: boolean; locations
       const res = await setMultiLocation(next);
       if (res.error) {
         setOn(!next);
-        alert(res.error);
+        toast.error(res.error);
       }
     });
   }
@@ -339,7 +340,7 @@ function EventReminderSettings({ enabled, time }: { enabled: boolean; time: stri
   function persist(nextOn: boolean, nextTime: string) {
     start(async () => {
       const res = await setEventReminder({ enabled: nextOn, time: nextTime });
-      if (res.error) alert(res.error);
+      if (res.error) toast.error(res.error);
       else router.refresh();
     });
   }

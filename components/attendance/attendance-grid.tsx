@@ -1,5 +1,7 @@
 "use client";
 
+import { confirmDialog } from "@/components/ui/confirm";
+
 import { useState, useMemo, useTransition } from "react";
 import type { AttendanceType } from "@prisma/client";
 import { markAttendance, resetAttendance } from "@/lib/attendance/actions";
@@ -88,12 +90,13 @@ export function AttendanceGrid({
     setRows((rs) => rs.map((r) => (r.employeeId === employeeId ? { ...r, ...patch } : r)));
   }
 
-  function openEdit(r: AttendanceRow) {
+  async function openEdit(r: AttendanceRow) {
     // If they already clocked in themselves, confirm before overriding their log.
     if (isSelfLogged(r)) {
-      const ok = confirm(
-        `${r.name} has already logged in themselves${r.clockIn ? ` at ${r.clockIn}` : ""}. Do you really want to edit their time logs?`,
-      );
+      const ok = await confirmDialog({
+        message: `${r.name} has already logged in themselves${r.clockIn ? ` at ${r.clockIn}` : ""}. Do you really want to edit their time logs?`,
+        confirmLabel: "Edit anyway",
+      });
       if (!ok) return;
     }
     setEditing(r);
@@ -299,8 +302,8 @@ function AttendanceEditDialog({
       else onSaved({ recordType: type, markedManually: true, clockIn, clockOut });
     });
   }
-  function clear() {
-    if (!confirm(`Clear ${row.name}'s attendance for this day? This removes their punch in/out and status.`)) return;
+  async function clear() {
+    if (!(await confirmDialog({ message: `Clear ${row.name}'s attendance for this day? This removes their punch in/out and status.`, tone: "danger", confirmLabel: "Clear" }))) return;
     setErr(null);
     start(async () => {
       const res = await resetAttendance({ employeeId: row.employeeId, date });

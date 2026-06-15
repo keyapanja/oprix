@@ -1,5 +1,7 @@
 "use client";
 
+import { toast } from "@/components/ui/toast";
+import { confirmDialog } from "@/components/ui/confirm";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -45,7 +47,7 @@ export function ProjectServices({
     if (!toAdd) return;
     start(async () => {
       const res = await addProjectService(projectId, toAdd);
-      if (res.error) alert(res.error);
+      if (res.error) toast.error(res.error);
       else {
         setToAdd("");
         router.refresh();
@@ -83,11 +85,11 @@ export function ProjectServices({
                       <Icon name="chevronDown" className={"size-3.5 transition-transform " + (open ? "rotate-180" : "")} />
                     </button>
                     <button
-                      onClick={() => {
-                        if (!confirm(`Remove ${ps.serviceName} from this project?`)) return;
+                      onClick={async () => {
+                        if (!(await confirmDialog({ message: `Remove ${ps.serviceName} from this project?`, tone: "danger", confirmLabel: "Remove" }))) return;
                         start(async () => {
                           const res = await removeProjectService(ps.id);
-                          if (res.error) alert(res.error);
+                          if (res.error) toast.error(res.error);
                           else router.refresh();
                         });
                       }}
@@ -159,7 +161,7 @@ function PrimaryPicker({
         setCurrent(v);
         start(async () => {
           const res = await setServicePrimary(psId, v || null);
-          if (res.error) alert(res.error);
+          if (res.error) toast.error(res.error);
         });
       }}
     />

@@ -1,5 +1,7 @@
 "use client";
 
+import { toast } from "@/components/ui/toast";
+import { confirmDialog } from "@/components/ui/confirm";
 import { useTransition } from "react";
 import type { ApprovalStatus } from "@prisma/client";
 import { approveLeave, rejectLeave } from "@/lib/leave/actions";
@@ -28,7 +30,7 @@ export function RequestActions({
         onClick={() =>
           start(async () => {
             const res = await approveLeave(id);
-            if (res.error) alert(res.error);
+            if (res.error) toast.error(res.error);
           })
         }
       >
@@ -38,13 +40,13 @@ export function RequestActions({
         size="sm"
         variant="secondary"
         disabled={pending}
-        onClick={() =>
+        onClick={async () => {
+          if (!(await confirmDialog({ message: "Reject this leave request?", tone: "danger", confirmLabel: "Reject" }))) return;
           start(async () => {
-            if (!confirm("Reject this leave request?")) return;
             const res = await rejectLeave(id);
-            if (res.error) alert(res.error);
-          })
-        }
+            if (res.error) toast.error(res.error);
+          });
+        }}
       >
         Reject
       </Button>

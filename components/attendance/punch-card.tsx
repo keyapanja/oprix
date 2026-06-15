@@ -1,5 +1,6 @@
 "use client";
 
+import { toast } from "@/components/ui/toast";
 import { useState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { punchIn, punchOut } from "@/lib/attendance/self";
@@ -82,7 +83,7 @@ export function PunchCard({
   function onPunchIn() {
     start(async () => {
       const res = await punchIn();
-      if (res.error) alert(res.error);
+      if (res.error) toast.error(res.error);
       else if (res.time) {
         setClockIn(res.time); // start the live timer immediately, no refresh needed
         router.refresh(); // re-render the layout so the punch-in gate/banner lift
@@ -92,7 +93,7 @@ export function PunchCard({
   function onPunchOut() {
     start(async () => {
       const res = await punchOut();
-      if (res.error) alert(res.error);
+      if (res.error) toast.error(res.error);
       else if (res.time) {
         setClockOut(res.time);
         router.refresh();

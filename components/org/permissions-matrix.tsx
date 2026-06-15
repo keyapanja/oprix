@@ -1,5 +1,6 @@
 "use client";
 
+import { toast } from "@/components/ui/toast";
 import { useState, useTransition } from "react";
 import type { Role } from "@prisma/client";
 import { setRolePermission } from "@/lib/permissions/actions";
@@ -37,7 +38,7 @@ export function PermissionsMatrix({ initial }: { initial: Record<string, string[
       const res = await setRolePermission(role, action, !has);
       if (res.error) {
         apply(has); // revert
-        alert(res.error);
+        toast.error(res.error);
       }
     });
   }
