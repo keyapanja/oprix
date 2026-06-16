@@ -69,10 +69,14 @@ export async function createDesignation(
   return { ok: true };
 }
 
-// ---- Services -------------------------------------------------------------
+// ---- Services (categories + sub-categories) -------------------------------
+// A CATEGORY is top-level (parentId null) and carries a department. A
+// SUB-CATEGORY lives under a category and inherits its department (stored on the
+// row too, so department-scoped logic — TEAM visibility, KB — keeps working).
 const ServiceSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(80),
   departmentId: z.string().trim().optional().nullable(),
+  parentId: z.string().trim().optional().nullable(),
 });
 
 export async function createService(
@@ -80,17 +84,27 @@ export async function createService(
   formData: FormData,
 ): Promise<ActionState> {
   const session = await requireCapability("org:manage");
-  const raw = {
+  const parsed = ServiceSchema.safeParse({
     name: formData.get("name"),
     departmentId: (formData.get("departmentId") as string) || null,
-  };
-  const parsed = ServiceSchema.safeParse(raw);
+    parentId: (formData.get("parentId") as string) || null,
+  });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message };
+  const { name, parentId } = parsed.data;
 
-  // Ensure the chosen department belongs to this company (tenant safety).
-  if (parsed.data.departmentId) {
+  let departmentId = parsed.data.departmentId || null;
+  if (parentId) {
+    // Sub-category: parent must be a top-level category in this company; inherit
+    // its department.
+    const parent = await prisma.service.findFirst({
+      where: { id: parentId, companyId: session.companyId, parentId: null },
+      select: { departmentId: true },
+    });
+    if (!parent) return { error: "Invalid category" };
+    departmentId = parent.departmentId;
+  } else if (departmentId) {
     const dept = await prisma.department.findFirst({
-      where: { id: parsed.data.departmentId, companyId: session.companyId },
+      where: { id: departmentId, companyId: session.companyId },
       select: { id: true },
     });
     if (!dept) return { error: "Invalid department" };
@@ -98,11 +112,7 @@ export async function createService(
 
   try {
     await prisma.service.create({
-      data: {
-        companyId: session.companyId,
-        name: parsed.data.name,
-        departmentId: parsed.data.departmentId || null,
-      },
+      data: { companyId: session.companyId, name, departmentId, parentId },
     });
   } catch {
     return { error: "A service with that name already exists" };
@@ -277,7 +287,14 @@ export async function deleteOrgEntity(entity: OrgEntity, id: string): Promise<Ac
   const scope = { id, companyId: session.companyId };
   try {
     if (entity === "department") await prisma.department.deleteMany({ where: scope });
-    else if (entity === "service") await prisma.service.deleteMany({ where: scope });
+    else if (entity === "service") {
+      // Don't silently orphan sub-categories — make the admin clear them first.
+      const childCount = await prisma.service.count({
+        where: { parentId: id, companyId: session.companyId },
+      });
+      if (childCount > 0) return { error: "Delete its sub-categories first" };
+      await prisma.service.deleteMany({ where: scope });
+    }
     else if (entity === "designation") await prisma.designation.deleteMany({ where: scope });
     else if (entity === "shift") await prisma.workShift.deleteMany({ where: scope });
     else if (entity === "location") await prisma.location.deleteMany({ where: scope });

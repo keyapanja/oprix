@@ -14,6 +14,7 @@ import { AddForm } from "@/components/org/add-form";
 import { RequestForm } from "@/components/leave/request-form";
 import { RequestActions } from "@/components/leave/request-actions";
 import { TypeEdit } from "@/components/leave/type-edit";
+import { LeaveAllowanceFields } from "@/components/leave/leave-allowance-fields";
 import { createLeaveType, deleteLeaveType } from "@/lib/leave/actions";
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/cn";
@@ -36,6 +37,7 @@ type LType = {
   paidType: LeavePaidType;
   allowanceValue: number;
   allowancePeriod: AllowancePeriod;
+  unlimited: boolean;
 };
 type Opt = { id: string; name: string };
 
@@ -142,7 +144,12 @@ export function LeaveTabs({
       {tab === "Leave types" && (
         <div className="space-y-5">
           <Card className="p-5">
-            <h3 className="mb-3 text-sm font-semibold text-content">Add leave type</h3>
+            <h3 className="mb-1 text-sm font-semibold text-content">Add leave type</h3>
+            <p className="mb-3 text-xs text-muted">
+              <span className="font-medium text-content">Unpaid</span> leave is deducted from salary
+              (loss of pay). Tick <span className="font-medium text-content">No fixed limit</span> for
+              types with no fixed day count (e.g. unpaid leave).
+            </p>
             <AddForm action={createLeaveType}>
               <Field label="Name" htmlFor="lt-name" className="min-w-44">
                 <Input id="lt-name" name="name" placeholder="e.g. Casual Leave" required />
@@ -157,16 +164,7 @@ export function LeaveTabs({
                   options={[{ value: "PAID", label: "Paid" }, { value: "UNPAID", label: "Unpaid" }]}
                 />
               </Field>
-              <Field label="Days" htmlFor="lt-val" className="w-24">
-                <Input id="lt-val" name="allowanceValue" type="number" min={0} max={365} step="0.5" defaultValue={12} />
-              </Field>
-              <Field label="Per" className="w-32">
-                <Combobox
-                  name="allowancePeriod"
-                  defaultValue="YEAR"
-                  options={[{ value: "YEAR", label: "Year" }, { value: "MONTH", label: "Month" }]}
-                />
-              </Field>
+              <LeaveAllowanceFields idPrefix="lt" />
             </AddForm>
           </Card>
 
@@ -196,7 +194,9 @@ export function LeaveTabs({
                         </Badge>
                       </td>
                       <td className="px-5 py-3 text-muted">
-                        {t.allowanceValue} / {t.allowancePeriod === "MONTH" ? "month" : "year"}
+                        {t.unlimited
+                          ? "Unlimited"
+                          : `${t.allowanceValue} / ${t.allowancePeriod === "MONTH" ? "month" : "year"}`}
                       </td>
                       <td className="px-5 py-3 text-right">
                         <div className="flex items-center justify-end gap-1">

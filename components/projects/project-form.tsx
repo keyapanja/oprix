@@ -60,10 +60,13 @@ export function ProjectForm({ clients, services }: { clients: Opt[]; services: O
         </div>
 
         <div className="mt-5 border-t border-line pt-4">
-          <p className="mb-2 text-sm font-medium text-content">Services</p>
+          <p className="mb-1 text-sm font-medium text-content">Categories</p>
+          <p className="mb-2 text-xs text-muted">
+            Pick the service categories this project covers. Tasks are created under their sub-categories.
+          </p>
           {services.length === 0 ? (
             <p className="text-sm text-muted">
-              No services yet — add them in Organization → Services.
+              No categories yet — add them in Organization → Services.
             </p>
           ) : (
             <>
@@ -73,7 +76,7 @@ export function ProjectForm({ clients, services }: { clients: Opt[]; services: O
                   type="text"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search services…"
+                  placeholder="Search categories…"
                   className="h-9 w-full rounded-xl bg-surface pl-9 pr-3 text-sm text-content ring-1 ring-inset ring-line-strong placeholder:text-faint focus:outline-none focus:ring-2 focus:ring-brand-500"
                 />
               </div>
@@ -93,7 +96,7 @@ export function ProjectForm({ clients, services }: { clients: Opt[]; services: O
                 ))}
               </div>
               {q && !services.some((s) => s.name.toLowerCase().includes(q)) && (
-                <p className="mt-2 text-sm text-muted">No services match “{query}”.</p>
+                <p className="mt-2 text-sm text-muted">No categories match “{query}”.</p>
               )}
             </>
           )}

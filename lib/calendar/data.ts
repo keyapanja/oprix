@@ -10,7 +10,7 @@ export type AwayEntry = {
 export type DayCell = { holiday?: string; away: AwayEntry[]; announcements: string[] };
 export type MonthData = {
   byDay: Record<string, DayCell>;
-  announcements: { id: string; title: string; body: string | null; dateISO: string }[];
+  announcements: { id: string; title: string; body: string | null; dateISO: string; authorId: string | null }[];
   holidays: { dateISO: string; name: string }[];
 };
 
@@ -36,7 +36,7 @@ export async function getMonthCalendar(
     prisma.announcement.findMany({
       where: { companyId, date: { gte: start, lt: end } },
       orderBy: { date: "asc" },
-      select: { id: true, title: true, body: true, date: true },
+      select: { id: true, title: true, body: true, date: true, authorId: true },
     }),
     prisma.leaveRequest.findMany({
       where: {
@@ -81,6 +81,7 @@ export async function getMonthCalendar(
       title: a.title,
       body: a.body,
       dateISO: iso(a.date),
+      authorId: a.authorId,
     })),
     holidays: holidays.map((h) => ({ dateISO: iso(h.date), name: h.name })),
   };

@@ -25,6 +25,8 @@ export type TaskRow = {
   priority: Priority;
   assigneeNames: string[];
   dueDate: string | null;
+  /** Date the task was created/assigned (YYYY-MM-DD) — calendar spans from here to dueDate. */
+  assignedDate: string | null;
   mine: boolean;
   createdByMe: boolean;
   timer: { status: TimerStatusUI; baseSeconds: number; runStartedAtMs: number | null; locked: boolean };

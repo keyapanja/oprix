@@ -9,10 +9,11 @@ import { Field } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { RichTextEditor } from "@/components/kb/rich-text-editor";
+import { cn } from "@/lib/cn";
 
 type Project = { id: string; name: string };
 type Dept = { id: string; name: string };
-type Svc = { id: string; name: string; departmentId: string | null };
+type Svc = { id: string; name: string; departmentId: string | null; parentId: string | null };
 
 export function KbForm({
   projects,
@@ -27,7 +28,7 @@ export function KbForm({
   services: Svc[];
   /** Which services each project uses — drives the service list once a project is picked. */
   projectServices: { projectId: string; serviceId: string }[];
-  initial?: { title: string; body: string; projectId: string; departmentId: string; serviceId: string; keywords: string };
+  initial?: { title: string; body: string; externalUrl: string; projectId: string; departmentId: string; serviceId: string; keywords: string };
   articleId?: string;
 }) {
   const router = useRouter();
@@ -37,16 +38,20 @@ export function KbForm({
   const [serviceId, setServiceId] = useState(initial?.serviceId ?? "");
   const [keywords, setKeywords] = useState(initial?.keywords ?? "");
   const [body, setBody] = useState(initial?.body ?? "");
+  const [contentType, setContentType] = useState<"rich" | "link">(initial?.externalUrl ? "link" : "rich");
+  const [externalUrl, setExternalUrl] = useState(initial?.externalUrl ?? "");
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
-  // A project scopes the services to the ones it actually uses; otherwise fall
-  // back to the chosen department, otherwise show everything.
+  // `services` are sub-categories. A project scopes them to the sub-categories of
+  // its linked categories; otherwise fall back to the chosen department, else show all.
   const serviceOpts = useMemo(() => {
     let list = services;
     if (projectId) {
-      const allowed = new Set(projectServices.filter((ps) => ps.projectId === projectId).map((ps) => ps.serviceId));
-      list = services.filter((s) => allowed.has(s.id));
+      const allowedCats = new Set(
+        projectServices.filter((ps) => ps.projectId === projectId).map((ps) => ps.serviceId),
+      );
+      list = services.filter((s) => s.parentId && allowedCats.has(s.parentId));
     } else if (departmentId) {
       list = services.filter((s) => s.departmentId === departmentId);
     }
@@ -62,10 +67,15 @@ export function KbForm({
   function submit() {
     setError(null);
     if (!title.trim()) return setError("Title is required");
-    if (!body.trim()) return setError("Write some content");
+    if (contentType === "link") {
+      if (!externalUrl.trim()) return setError("Enter the external link");
+    } else if (!body.trim()) {
+      return setError("Write some content");
+    }
     const input: ArticleInput = {
       title: title.trim(),
-      body,
+      body: contentType === "link" ? "" : body,
+      externalUrl: contentType === "link" ? externalUrl.trim() : "",
       projectId: projectId || "",
       departmentId: departmentId || "",
       serviceId: serviceId || "",
@@ -86,6 +96,37 @@ export function KbForm({
             {error}
           </div>
         )}
+
+        <div className="mb-5">
+          <span className="mb-2 block text-sm font-medium text-content">Content type</span>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {([
+              { v: "rich", label: "Write content", hint: "Use the editor below" },
+              { v: "link", label: "External link", hint: "Link to an outside resource" },
+            ] as const).map((opt) => (
+              <label
+                key={opt.v}
+                className={cn(
+                  "flex cursor-pointer items-start gap-2.5 rounded-xl border p-3 transition-colors",
+                  contentType === opt.v ? "border-brand-500 bg-accent-soft/40" : "border-line hover:bg-canvas",
+                )}
+              >
+                <input
+                  type="radio"
+                  name="kb-content-type"
+                  checked={contentType === opt.v}
+                  onChange={() => setContentType(opt.v)}
+                  className="mt-0.5 size-4 border-line-strong text-brand-600 focus:ring-brand-500"
+                />
+                <span>
+                  <span className="block text-sm font-medium text-content">{opt.label}</span>
+                  <span className="block text-xs text-muted">{opt.hint}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
+
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Title" htmlFor="kb-title" required className="sm:col-span-2">
             <Input id="kb-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. How to publish a blog post" />
@@ -109,7 +150,7 @@ export function KbForm({
               options={departments.map((d) => ({ value: d.id, label: d.name }))}
             />
           </Field>
-          <Field label="Service" hint="Auto-shows on tasks of this service">
+          <Field label="Sub-category" hint="Auto-shows on tasks of this sub-category">
             <Combobox value={serviceId} onChange={onServiceChange} emptyLabel="— None —" placeholder="— None —" options={serviceOpts} />
           </Field>
           <Field label="Keywords" htmlFor="kb-keywords" hint="Comma-separated, helps search" className="sm:col-span-2">
@@ -118,8 +159,16 @@ export function KbForm({
         </div>
 
         <div className="mt-4">
-          <span className="mb-2 block text-sm font-medium text-content">Content</span>
-          <RichTextEditor value={body} onChange={setBody} placeholder="Write the guide… format with the toolbar above." />
+          {contentType === "link" ? (
+            <Field label="External link" htmlFor="kb-url" required hint="Opens in a new tab from tasks and the article list">
+              <Input id="kb-url" value={externalUrl} onChange={(e) => setExternalUrl(e.target.value)} placeholder="https://example.com/guide" />
+            </Field>
+          ) : (
+            <>
+              <span className="mb-2 block text-sm font-medium text-content">Content</span>
+              <RichTextEditor value={body} onChange={setBody} placeholder="Write the guide… format with the toolbar above." />
+            </>
+          )}
         </div>
       </Card>
 

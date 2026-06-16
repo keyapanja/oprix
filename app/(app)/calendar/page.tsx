@@ -52,12 +52,16 @@ export default async function CalendarPage({
         currentYm={currentYm}
         canManage={canManage}
         canApplyLeave={canApplyLeave}
+        currentUserId={session.userId}
+        isSuperAdmin={session.role === "SUPER_ADMIN"}
         balances={balances.map((b) => ({
           typeId: b.typeId,
           name: b.name,
           remaining: b.remaining,
           allowance: b.allowance,
           period: b.period,
+          unlimited: b.unlimited,
+          used: b.used,
         }))}
       />
     </>

@@ -71,6 +71,7 @@ export async function createAnnouncement(
   const ann = await prisma.announcement.create({
     data: {
       companyId: session.companyId,
+      authorId: session.userId,
       title: d.title,
       body: d.body || null,
       date: dateAtUTC(d.date),
@@ -94,9 +95,44 @@ export async function createAnnouncement(
   return { ok: true };
 }
 
+/** Edit an announcement — only its author (a Super Admin can edit any). */
+export async function updateAnnouncement(id: string, formData: FormData): Promise<CalendarState> {
+  const session = await requireCapability("org:manage");
+  const ann = await prisma.announcement.findFirst({
+    where: { id, companyId: session.companyId },
+    select: { authorId: true },
+  });
+  if (!ann) return { error: "Announcement not found" };
+  if (ann.authorId !== session.userId && session.role !== "SUPER_ADMIN") {
+    return { error: "Only the author can edit this announcement." };
+  }
+  const parsed = AnnouncementSchema.safeParse({
+    title: formData.get("title"),
+    body: formData.get("body"),
+    date: formData.get("date"),
+  });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message };
+  const d = parsed.data;
+  await prisma.announcement.update({
+    where: { id },
+    data: { title: d.title, body: d.body || null, date: dateAtUTC(d.date) },
+  });
+  revalidatePath(CAL);
+  return { ok: true };
+}
+
+/** Delete an announcement — only its author (a Super Admin can delete any). */
 export async function deleteAnnouncement(id: string): Promise<CalendarState> {
   const session = await requireCapability("org:manage");
-  await prisma.announcement.deleteMany({ where: { id, companyId: session.companyId } });
+  const ann = await prisma.announcement.findFirst({
+    where: { id, companyId: session.companyId },
+    select: { authorId: true },
+  });
+  if (!ann) return { error: "Announcement not found" };
+  if (ann.authorId !== session.userId && session.role !== "SUPER_ADMIN") {
+    return { error: "Only the author can delete this announcement." };
+  }
+  await prisma.announcement.delete({ where: { id } });
   revalidatePath(CAL);
   return { ok: true };
 }

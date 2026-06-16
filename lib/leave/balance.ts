@@ -10,6 +10,7 @@ export type LeaveBalance = {
   used: number;
   remaining: number;
   period: AllowancePeriod;
+  unlimited: boolean;
 };
 
 // Current month or current year, as a [start, end) UTC range.
@@ -58,6 +59,7 @@ export async function computeBalances(
       description: true,
       allowanceValue: true,
       allowancePeriod: true,
+      unlimited: true,
     },
   });
 
@@ -72,6 +74,7 @@ export async function computeBalances(
       used,
       remaining: Math.max(0, t.allowanceValue - used),
       period: t.allowancePeriod,
+      unlimited: t.unlimited,
     });
   }
   return out;
@@ -84,9 +87,10 @@ export async function remainingForType(
 ): Promise<number | null> {
   const t = await prisma.leaveType.findFirst({
     where: { id: typeId, companyId },
-    select: { allowanceValue: true, allowancePeriod: true },
+    select: { allowanceValue: true, allowancePeriod: true, unlimited: true },
   });
   if (!t) return null;
+  if (t.unlimited) return Number.POSITIVE_INFINITY; // no fixed cap — apply freely
   const used = await usedDays(companyId, employeeId, typeId, t.allowancePeriod);
   return Math.max(0, t.allowanceValue - used);
 }

@@ -30,6 +30,7 @@ type Dept = { id: string; name: string };
 type Svc = {
   id: string;
   name: string;
+  parentId: string | null;
   department: { name: string } | null;
   checklist: { id: string; text: string }[];
 };
@@ -67,6 +68,10 @@ export function OrgTabs({
 }) {
   const [tab, setTab] = useState<string>("Company");
   const deptOptions = departments.map((d) => ({ value: d.id, label: d.name }));
+  // Only top-level services (categories) can parent a sub-category.
+  const categoryOptions = services
+    .filter((s) => !s.parentId)
+    .map((s) => ({ value: s.id, label: s.name }));
   const tabs = [...BASE_TABS];
   if (accessMatrix) tabs.push("Access");
   if (taskScopes) tabs.push("Task access");
@@ -190,21 +195,44 @@ export function OrgTabs({
 
       {tab === "Services" && (
         <div className="space-y-5">
-          <Card className="p-5">
-            <h3 className="mb-3 text-sm font-semibold text-content">Add service</h3>
-            <AddForm action={createService}>
-              <Field label="Service name" htmlFor="service-name" className="min-w-56">
-                <Input id="service-name" name="name" placeholder="e.g. Web Development" required />
-              </Field>
-              <Field label="Department" className="min-w-52">
-                <Combobox name="departmentId" options={deptOptions} placeholder="— None —" emptyLabel="— None —" />
-              </Field>
-            </AddForm>
-          </Card>
+          <p className="text-sm text-muted">
+            Services are organized as <span className="font-medium text-content">categories</span> and{" "}
+            <span className="font-medium text-content">sub-categories</span>. Projects link to categories;
+            tasks are created under a sub-category, which seeds the task checklist.
+          </p>
+          <div className="grid gap-5 lg:grid-cols-2">
+            <Card className="p-5">
+              <h3 className="mb-3 text-sm font-semibold text-content">Add category</h3>
+              <AddForm action={createService}>
+                <Field label="Category name" htmlFor="cat-name" className="min-w-56">
+                  <Input id="cat-name" name="name" placeholder="e.g. Web Development" required />
+                </Field>
+                <Field label="Department" className="min-w-52" hint="Sub-categories inherit this">
+                  <Combobox name="departmentId" options={deptOptions} placeholder="— None —" emptyLabel="— None —" />
+                </Field>
+              </AddForm>
+            </Card>
+            <Card className="p-5">
+              <h3 className="mb-3 text-sm font-semibold text-content">Add sub-category</h3>
+              {categoryOptions.length === 0 ? (
+                <p className="text-sm text-muted">Add a category first, then create sub-categories under it.</p>
+              ) : (
+                <AddForm action={createService}>
+                  <Field label="Sub-category name" htmlFor="sub-name" className="min-w-56">
+                    <Input id="sub-name" name="name" placeholder="e.g. Landing Page" required />
+                  </Field>
+                  <Field label="Category" className="min-w-52">
+                    <Combobox name="parentId" options={categoryOptions} placeholder="Select category" />
+                  </Field>
+                </AddForm>
+              )}
+            </Card>
+          </div>
           <ServiceList
             services={services.map((s) => ({
               id: s.id,
               name: s.name,
+              parentId: s.parentId,
               departmentName: s.department?.name ?? null,
               checklist: s.checklist,
             }))}

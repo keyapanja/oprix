@@ -1,10 +1,10 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition, type ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
 import { createTask } from "@/lib/projects/actions";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { Input, Textarea } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
@@ -13,63 +13,112 @@ import { Icon } from "@/components/ui/icons";
 import { humanizeEnum } from "@/lib/format";
 import { cn } from "@/lib/cn";
 
-type Emp = { id: string; name: string };
-type Svc = { id: string; name: string; primaryAssigneeId: string | null; checklist: string[] };
-type Proj = { id: string; name: string; services: Svc[] };
+type Dept = { id: string; name: string };
+type Emp = { id: string; name: string; departmentId: string | null };
+type SubCat = {
+  id: string;
+  name: string;
+  categoryName: string;
+  departmentId: string | null;
+  checklist: string[];
+};
+type Proj = { id: string; name: string; subcategories: SubCat[] };
 type CheckItem = { text: string; isDone: boolean };
 
 const PRIORITIES = ["LOW", "MEDIUM", "HIGH", "URGENT"];
 const STATUSES = ["TODO", "IN_PROGRESS", "REVIEW", "COMPLETED"];
+const NO_DEPT = "__none__"; // sub-categories whose category has no department
 
-export function NewTaskForm({ projects, employees }: { projects: Proj[]; employees: Emp[] }) {
+function fmtBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+
+export function NewTaskForm({
+  projects,
+  departments,
+  employees,
+}: {
+  projects: Proj[];
+  departments: Dept[];
+  employees: Emp[];
+}) {
   const router = useRouter();
   const [projectId, setProjectId] = useState("");
-  const [serviceId, setServiceId] = useState("");
+  const [departmentId, setDepartmentId] = useState("");
+  const [serviceId, setServiceId] = useState(""); // a sub-category = "task type"
   const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
   const [priority, setPriority] = useState("MEDIUM");
   const [status, setStatus] = useState("TODO");
   const [dueDate, setDueDate] = useState("");
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [checklist, setChecklist] = useState<CheckItem[]>([]);
   const [checkText, setCheckText] = useState("");
+  const [files, setFiles] = useState<File[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
   const empById = useMemo(() => new Map(employees.map((e) => [e.id, e])), [employees]);
+  const deptName = useMemo(() => new Map(departments.map((d) => [d.id, d.name])), [departments]);
+  const project = useMemo(() => projects.find((p) => p.id === projectId), [projects, projectId]);
 
-  const serviceOpts = useMemo(() => {
-    const p = projects.find((x) => x.id === projectId);
-    return (p?.services ?? []).map((s) => ({ value: s.id, label: s.name }));
-  }, [projects, projectId]);
+  // Departments this project actually has task types in.
+  const deptOptions = useMemo(() => {
+    if (!project) return [] as { value: string; label: string }[];
+    const keys = new Set(project.subcategories.map((s) => s.departmentId ?? NO_DEPT));
+    const opts = departments.filter((d) => keys.has(d.id)).map((d) => ({ value: d.id, label: d.name }));
+    if (keys.has(NO_DEPT)) opts.push({ value: NO_DEPT, label: "No department" });
+    return opts;
+  }, [project, departments]);
 
+  // Task types (sub-categories) within the chosen department.
+  const taskTypeOptions = useMemo(() => {
+    if (!project || !departmentId) return [] as { value: string; label: string }[];
+    return project.subcategories
+      .filter((s) => (s.departmentId ?? NO_DEPT) === departmentId)
+      .map((s) => ({ value: s.id, label: s.name }));
+  }, [project, departmentId]);
+
+  // Assignees are scoped to the chosen department.
+  const deptEmployees = useMemo(() => {
+    if (!departmentId || departmentId === NO_DEPT) return employees;
+    return employees.filter((e) => e.departmentId === departmentId);
+  }, [employees, departmentId]);
   const availableAssignees = useMemo(
-    () => employees.filter((e) => !assigneeIds.includes(e.id)),
-    [employees, assigneeIds],
+    () => deptEmployees.filter((e) => !assigneeIds.includes(e.id)),
+    [deptEmployees, assigneeIds],
   );
 
   function onProjectChange(v: string) {
     setProjectId(v);
+    setDepartmentId("");
     setServiceId("");
     setAssigneeIds([]);
     setChecklist([]);
   }
-
-  // Picking a service pre-fills its primary assignee + checklist (both editable below).
-  function onServiceChange(v: string) {
+  function onDepartmentChange(v: string) {
+    setDepartmentId(v);
+    setServiceId("");
+    setChecklist([]);
+    // Drop assignees outside the new department.
+    setAssigneeIds((ids) =>
+      v && v !== NO_DEPT ? ids.filter((id) => empById.get(id)?.departmentId === v) : ids,
+    );
+  }
+  function onTaskTypeChange(v: string) {
     setServiceId(v);
-    const svc = projects.find((p) => p.id === projectId)?.services.find((s) => s.id === v);
-    setAssigneeIds(svc?.primaryAssigneeId ? [svc.primaryAssigneeId] : []);
-    setChecklist((svc?.checklist ?? []).map((text) => ({ text, isDone: false })));
+    const sub = project?.subcategories.find((s) => s.id === v);
+    setChecklist((sub?.checklist ?? []).map((text) => ({ text, isDone: false })));
   }
 
   function addAssignee(id: string) {
-    if (!id || assigneeIds.includes(id)) return;
-    setAssigneeIds((l) => [...l, id]);
+    if (id && !assigneeIds.includes(id)) setAssigneeIds((l) => [...l, id]);
   }
   function removeAssignee(id: string) {
     setAssigneeIds((l) => l.filter((x) => x !== id));
   }
-
   function addCheckItem() {
     const t = checkText.trim();
     if (!t) return;
@@ -82,6 +131,14 @@ export function NewTaskForm({ projects, employees }: { projects: Proj[]; employe
   function removeCheck(i: number) {
     setChecklist((l) => l.filter((_, idx) => idx !== i));
   }
+  function onFilesPicked(e: ChangeEvent<HTMLInputElement>) {
+    const picked = Array.from(e.target.files ?? []);
+    setFiles((f) => [...f, ...picked]);
+    e.target.value = "";
+  }
+  function removeFile(i: number) {
+    setFiles((f) => f.filter((_, idx) => idx !== i));
+  }
 
   function submit() {
     setError(null);
@@ -91,6 +148,7 @@ export function NewTaskForm({ projects, employees }: { projects: Proj[]; employe
       const res = await createTask({
         projectId,
         name: name.trim(),
+        description: description.trim() || null,
         serviceId: serviceId || null,
         priority: priority as "LOW" | "MEDIUM" | "HIGH" | "URGENT",
         status: status as "TODO" | "IN_PROGRESS" | "REVIEW" | "COMPLETED",
@@ -98,8 +156,23 @@ export function NewTaskForm({ projects, employees }: { projects: Proj[]; employe
         assigneeIds,
         checklist,
       });
-      if (res.error) setError(res.error);
-      else if (res.task) router.push(`/tasks/${res.task.id}`);
+      if (res.error) return setError(res.error);
+      if (!res.task) return;
+
+      if (files.length) {
+        try {
+          const fd = new FormData();
+          for (const f of files) fd.append("files", f);
+          const up = await fetch(`/api/tasks/${res.task.id}/attachments`, { method: "POST", body: fd });
+          if (!up.ok) {
+            const j = await up.json().catch(() => ({}));
+            setError(`Task created, but uploading files failed: ${j.error || up.statusText}`);
+          }
+        } catch {
+          setError("Task created, but uploading files failed.");
+        }
+      }
+      router.push(`/tasks/${res.task.id}`);
     });
   }
 
@@ -122,18 +195,41 @@ export function NewTaskForm({ projects, employees }: { projects: Proj[]; employe
               options={projects.map((p) => ({ value: p.id, label: p.name }))}
             />
           </Field>
-          <Field label="Service" hint={projectId ? undefined : "Pick a project first"}>
+          <Field
+            label="Department"
+            hint={!projectId ? "Pick a project first" : deptOptions.length ? undefined : "This project has no departments"}
+          >
+            <Combobox
+              value={departmentId}
+              onChange={onDepartmentChange}
+              disabled={!projectId}
+              placeholder={projectId ? "Select department" : "—"}
+              options={deptOptions}
+            />
+          </Field>
+          <Field
+            label="Task type"
+            hint={!departmentId ? "Pick a department first" : taskTypeOptions.length ? undefined : "No task types in this department"}
+          >
             <Combobox
               value={serviceId}
-              onChange={onServiceChange}
-              disabled={!projectId}
+              onChange={onTaskTypeChange}
+              disabled={!departmentId}
               emptyLabel="— None —"
-              placeholder={projectId ? "— None —" : "—"}
-              options={serviceOpts}
+              placeholder={departmentId ? "— None —" : "—"}
+              options={taskTypeOptions}
             />
           </Field>
           <Field label="Task name" htmlFor="t-name" required className="sm:col-span-2">
             <Input id="t-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Design the landing page" />
+          </Field>
+          <Field label="Description" htmlFor="t-desc" className="sm:col-span-2">
+            <Textarea
+              id="t-desc"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="What needs to be done, context, links…"
+            />
           </Field>
           <Field label="Priority">
             <Combobox value={priority} onChange={setPriority} options={PRIORITIES.map((p) => ({ value: p, label: humanizeEnum(p) }))} />
@@ -145,10 +241,14 @@ export function NewTaskForm({ projects, employees }: { projects: Proj[]; employe
             <DatePicker value={dueDate} onChange={setDueDate} />
           </Field>
 
-          {/* Assignees — primary pre-selected on service pick; editable here */}
+          {/* Assignees — scoped to the sub-category's department */}
           <Field
             label="Assignees"
-            hint={serviceId ? "Service primary pre-selected — remove or add more" : "Add the people who'll work on this task"}
+            hint={
+              departmentId && departmentId !== NO_DEPT
+                ? `Showing people in ${deptName.get(departmentId) ?? "this department"}`
+                : "Add the people who'll work on this task"
+            }
             className="sm:col-span-2"
           >
             <div className="flex flex-wrap items-center gap-2">
@@ -168,7 +268,7 @@ export function NewTaskForm({ projects, employees }: { projects: Proj[]; employe
                   </span>
                 );
               })}
-              {availableAssignees.length > 0 && (
+              {availableAssignees.length > 0 ? (
                 <div className="w-52">
                   <Combobox
                     value=""
@@ -177,16 +277,15 @@ export function NewTaskForm({ projects, employees }: { projects: Proj[]; employe
                     options={availableAssignees.map((e) => ({ value: e.id, label: e.name }))}
                   />
                 </div>
+              ) : (
+                departmentId && departmentId !== NO_DEPT &&
+                deptEmployees.length === 0 && <span className="text-xs text-faint">No employees in this department yet.</span>
               )}
             </div>
           </Field>
 
-          {/* Checklist — seeded from the service template; fully editable here */}
-          <Field
-            label="Checklist"
-            hint={checklist.length ? `${doneCount}/${checklist.length} done` : undefined}
-            className="sm:col-span-2"
-          >
+          {/* Checklist — seeded from the sub-category template; editable */}
+          <Field label="Checklist" hint={checklist.length ? `${doneCount}/${checklist.length} done` : undefined} className="sm:col-span-2">
             <div>
               {checklist.length > 0 && (
                 <ul className="mb-2 space-y-1">
@@ -199,12 +298,7 @@ export function NewTaskForm({ projects, employees }: { projects: Proj[]; employe
                         className="size-4 rounded border-line-strong text-brand-600 focus:ring-brand-500"
                       />
                       <span className={cn("flex-1 text-sm", it.isDone ? "text-faint line-through" : "text-content")}>{it.text}</span>
-                      <button
-                        type="button"
-                        onClick={() => removeCheck(i)}
-                        className="text-faint opacity-0 hover:text-red-600 group-hover:opacity-100"
-                        aria-label="Remove item"
-                      >
+                      <button type="button" onClick={() => removeCheck(i)} className="text-faint opacity-0 hover:text-red-600 group-hover:opacity-100" aria-label="Remove item">
                         <Icon name="trash" className="size-4" />
                       </button>
                     </li>
@@ -227,10 +321,32 @@ export function NewTaskForm({ projects, employees }: { projects: Proj[]; employe
               </div>
             </div>
           </Field>
+
+          {/* Attachments — stored on the server, not the database */}
+          <Field label="Attachments" hint="Stored on the server · max 100 MB each" className="sm:col-span-2">
+            <div>
+              {files.length > 0 && (
+                <ul className="mb-2 space-y-1">
+                  {files.map((f, i) => (
+                    <li key={i} className="flex items-center gap-2 rounded-lg bg-canvas px-2.5 py-1.5 text-sm">
+                      <Icon name="folder" className="size-4 shrink-0 text-faint" />
+                      <span className="flex-1 truncate text-content">{f.name}</span>
+                      <span className="shrink-0 text-xs text-faint">{fmtBytes(f.size)}</span>
+                      <button type="button" onClick={() => removeFile(i)} className="shrink-0 text-faint hover:text-red-600" aria-label={`Remove ${f.name}`}>
+                        <Icon name="x" className="size-3.5" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-canvas px-3 py-2 text-sm font-medium text-content ring-1 ring-inset ring-line transition-colors hover:bg-surface">
+                <Icon name="plus" className="size-4" />
+                Add files
+                <input type="file" multiple className="hidden" onChange={onFilesPicked} />
+              </label>
+            </div>
+          </Field>
         </div>
-        <p className="mt-3 text-xs text-muted">
-          Picking a service pre-fills its primary person and checklist above — adjust them before creating.
-        </p>
       </Card>
 
       <div className="flex justify-end gap-3">

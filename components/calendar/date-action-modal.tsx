@@ -22,6 +22,8 @@ type Balance = {
   remaining: number;
   allowance: number;
   period: "MONTH" | "YEAR";
+  unlimited: boolean;
+  used: number;
 };
 type Mode = "leave" | "holiday" | "announcement";
 

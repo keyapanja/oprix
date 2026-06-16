@@ -51,12 +51,13 @@ export async function createLeaveType(
   formData: FormData,
 ): Promise<LeaveState> {
   const session = await requireCapability("leave:manage");
+  const unlimited = formData.get("unlimited") === "on";
   const parsed = LeaveTypeSchema.safeParse({
     name: formData.get("name"),
     description: formData.get("description"),
     paidType: formData.get("paidType"),
-    allowanceValue: formData.get("allowanceValue"),
-    allowancePeriod: formData.get("allowancePeriod"),
+    allowanceValue: unlimited ? 0 : formData.get("allowanceValue"),
+    allowancePeriod: unlimited ? "YEAR" : formData.get("allowancePeriod"),
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
   const d = parsed.data;
@@ -70,6 +71,7 @@ export async function createLeaveType(
         paidType: d.paidType,
         allowanceValue: d.allowanceValue,
         allowancePeriod: d.allowancePeriod,
+        unlimited,
       },
     });
   } catch {
@@ -86,12 +88,13 @@ export async function updateLeaveType(
   const session = await requireCapability("leave:manage");
   const id = String(formData.get("id") ?? "");
   if (!id) return { error: "Missing leave type id" };
+  const unlimited = formData.get("unlimited") === "on";
   const parsed = LeaveTypeSchema.safeParse({
     name: formData.get("name"),
     description: formData.get("description"),
     paidType: formData.get("paidType"),
-    allowanceValue: formData.get("allowanceValue"),
-    allowancePeriod: formData.get("allowancePeriod"),
+    allowanceValue: unlimited ? 0 : formData.get("allowanceValue"),
+    allowancePeriod: unlimited ? "YEAR" : formData.get("allowancePeriod"),
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
   const d = parsed.data;
@@ -104,6 +107,7 @@ export async function updateLeaveType(
         paidType: d.paidType,
         allowanceValue: d.allowanceValue,
         allowancePeriod: d.allowancePeriod,
+        unlimited,
       },
     });
     if (res.count === 0) return { error: "Leave type not found" };

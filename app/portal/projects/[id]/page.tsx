@@ -113,9 +113,8 @@ export default async function PortalProjectDetailPage({ params }: { params: Prom
         </section>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        {/* Work / tasks */}
-        <div className="space-y-3 lg:col-span-2">
+      <div className="space-y-6">
+        <div className="space-y-3">
           <h2 className="text-sm font-semibold uppercase tracking-wider text-faint">Work</h2>
           {project.tasks.length === 0 ? (
             <Card className="px-5 py-10 text-center text-sm text-muted">No tasks yet.</Card>
@@ -133,33 +132,6 @@ export default async function PortalProjectDetailPage({ params }: { params: Prom
                   </div>
                 );
               })}
-            </Card>
-          )}
-        </div>
-
-        {/* Milestones */}
-        <div className="space-y-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-faint">Milestones</h2>
-          {project.milestones.length === 0 ? (
-            <Card className="px-5 py-8 text-center text-sm text-muted">No milestones.</Card>
-          ) : (
-            <Card className="p-5">
-              <ul className="space-y-3">
-                {project.milestones.map((m) => (
-                  <li key={m.id} className="flex gap-3 text-sm">
-                    <Icon
-                      name="check"
-                      className={m.reachedAt ? "mt-0.5 size-4 shrink-0 text-emerald-500" : "mt-0.5 size-4 shrink-0 text-faint"}
-                    />
-                    <div>
-                      <p className={m.reachedAt ? "font-medium text-content" : "text-content"}>{m.name}</p>
-                      <p className="text-xs text-faint">
-                        {m.reachedAt ? `Reached ${formatDate(m.reachedAt)}` : m.dueDate ? `Due ${formatDate(m.dueDate)}` : "No date"}
-                      </p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
             </Card>
           )}
         </div>

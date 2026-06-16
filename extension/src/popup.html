@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      :root {
+        --bg: #ffffff;
+        --surface: #f8fafc;
+        --line: #e2e8f0;
+        --text: #0f172a;
+        --muted: #64748b;
+        --brand: #059669;
+        --brand-hover: #047857;
+        --danger: #dc2626;
+        --switch-off: #cbd5e1;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0b1220;
+          --surface: #111a2e;
+          --line: #1e293b;
+          --text: #e2e8f0;
+          --muted: #94a3b8;
+          --brand: #10b981;
+          --brand-hover: #34d399;
+          --danger: #f87171;
+          --switch-off: #475569;
+        }
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; }
+      body {
+        width: 320px;
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        font-size: 14px;
+      }
+      .head { display: flex; align-items: center; gap: 8px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+      .brand { font-weight: 700; }
+      .dot { width: 8px; height: 8px; border-radius: 9999px; background: #94a3b8; }
+      .dot.on { background: var(--brand); }
+      .body { padding: 14px 16px; display: grid; gap: 12px; }
+      .muted { color: var(--muted); font-size: 12px; }
+      button {
+        font: inherit; cursor: pointer; border-radius: 10px; border: 1px solid var(--line);
+        background: var(--surface); color: var(--text); padding: 9px 12px; width: 100%;
+      }
+      button.primary { background: var(--brand); border-color: var(--brand); color: #fff; font-weight: 600; }
+      button.primary:hover { background: var(--brand-hover); }
+      button.danger { color: var(--danger); }
+      .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+      .row label { color: var(--muted); }
+      select, .seg { font: inherit; }
+      select { border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--text); padding: 6px 8px; }
+      .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+      .seg button { width: auto; border: 0; border-radius: 0; padding: 6px 10px; background: var(--bg); }
+      .seg button.active { background: var(--brand); color: #fff; }
+      .link { background: none; border: 0; color: var(--brand); width: auto; padding: 4px 0; text-align: left; }
+      .err { color: var(--danger); font-size: 12px; min-height: 0; }
+      .toggle-card { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+        border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; background: var(--surface); }
+      .tc-title { font-weight: 600; }
+      .tc-sub { color: var(--muted); font-size: 11.5px; margin-top: 2px; }
+      .switch { position: relative; display: inline-block; width: 42px; height: 24px; flex: 0 0 auto; }
+      .switch input { opacity: 0; width: 0; height: 0; margin: 0; }
+      .slider { position: absolute; inset: 0; background: var(--switch-off); border-radius: 9999px;
+        transition: .2s; cursor: pointer; }
+      .slider::before { content: ""; position: absolute; height: 18px; width: 18px; left: 3px; top: 3px;
+        background: #fff; border-radius: 50%; transition: .2s; box-shadow: 0 1px 3px rgba(0,0,0,.3); }
+      .switch input:checked + .slider { background: var(--brand); }
+      .switch input:checked + .slider::before { transform: translateX(18px); }
+    </style>
+  </head>
+  <body>
+    <div class="head">
+      <span class="brand">Operix Companion</span>
+      <span id="dot" class="dot" style="margin-left:auto"></span>
+    </div>
+    <div class="body" id="app"><div class="muted">Loading…</div></div>
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

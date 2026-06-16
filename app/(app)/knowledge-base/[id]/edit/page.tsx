@@ -15,11 +15,12 @@ export default async function EditArticlePage({ params }: { params: Promise<{ id
   const [article, projects, departments, services, projectServices] = await Promise.all([
     prisma.kbArticle.findFirst({
       where: { id, companyId: session.companyId },
-      select: { id: true, title: true, body: true, keywords: true, projectId: true, departmentId: true, serviceId: true },
+      select: { id: true, title: true, body: true, externalUrl: true, keywords: true, projectId: true, departmentId: true, serviceId: true },
     }),
     prisma.project.findMany({ where: { companyId: session.companyId, deletedAt: null }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
     prisma.department.findMany({ where: { companyId: session.companyId }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
-    prisma.service.findMany({ where: { companyId: session.companyId }, orderBy: { name: "asc" }, select: { id: true, name: true, departmentId: true } }),
+    // Sub-categories only — articles attach at the sub-category level (tasks carry a sub-category).
+    prisma.service.findMany({ where: { companyId: session.companyId, parentId: { not: null } }, orderBy: { name: "asc" }, select: { id: true, name: true, departmentId: true, parentId: true } }),
     prisma.projectService.findMany({ where: { project: { companyId: session.companyId } }, select: { projectId: true, serviceId: true } }),
   ]);
   if (!article) notFound();
@@ -39,6 +40,7 @@ export default async function EditArticlePage({ params }: { params: Promise<{ id
         initial={{
           title: article.title,
           body: article.body,
+          externalUrl: article.externalUrl ?? "",
           projectId: article.projectId ?? "",
           departmentId: article.departmentId ?? "",
           serviceId: article.serviceId ?? "",

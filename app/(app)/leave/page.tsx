@@ -57,7 +57,7 @@ export default async function LeavePage() {
         orderBy: { name: "asc" },
         select: {
           id: true, name: true, description: true, paidType: true,
-          allowanceValue: true, allowancePeriod: true,
+          allowanceValue: true, allowancePeriod: true, unlimited: true,
         },
       })
     : [];
@@ -84,6 +84,8 @@ export default async function LeavePage() {
               remaining: b.remaining,
               allowance: b.allowance,
               period: b.period,
+              unlimited: b.unlimited,
+              used: b.used,
             }))}
           />
 

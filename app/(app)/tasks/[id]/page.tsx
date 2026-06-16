@@ -12,12 +12,12 @@ import { humanizeEnum, formatDate } from "@/lib/format";
 import { PRIORITY_TONE, TASK_STATUS_TONE, TASK_STATUS_LABEL } from "@/lib/status";
 import { TaskAssignees } from "@/components/tasks/task-assignees";
 import { TaskChecklist } from "@/components/tasks/task-checklist";
+import { AttachmentsPanel } from "@/components/attachments/attachments-panel";
 import { TaskEdit } from "@/components/tasks/task-edit";
 import { TaskWorkflow } from "@/components/tasks/task-workflow";
-import { TaskDependencies } from "@/components/tasks/task-dependencies";
-import { TaskMilestone } from "@/components/tasks/task-milestone";
 import { CommentForm } from "@/components/tasks/comment-form";
 import { TaskTimerControl } from "@/components/timer/task-timer-control";
+import { LiveRefresh } from "@/components/timer/live-refresh";
 import { getMyTaskTimer, taskTrackedSeconds } from "@/lib/timer/data";
 import { canUseTimer } from "@/lib/timer/finalize";
 import { fmtHm } from "@/lib/timer/shared";
@@ -59,14 +59,26 @@ export default async function TaskDetailPage({
         select: {
           id: true,
           name: true,
-          services: { select: { serviceId: true, service: { select: { name: true } } } },
+          services: {
+            select: {
+              serviceId: true,
+              service: {
+                select: {
+                  name: true,
+                  children: { orderBy: { name: "asc" }, select: { id: true, name: true } },
+                },
+              },
+            },
+          },
         },
       },
       service: { select: { name: true } },
       assignees: { select: { employee: { select: { id: true, fullName: true } } } },
-      milestoneId: true,
-      dependsOn: { select: { dependsOn: { select: { id: true, name: true, status: true } } } },
       checklist: { orderBy: { orderIndex: "asc" }, select: { id: true, text: true, isDone: true } },
+      attachments: {
+        orderBy: { createdAt: "desc" },
+        select: { id: true, fileName: true, mimeType: true, sizeBytes: true, createdAt: true },
+      },
       comments: { orderBy: { createdAt: "asc" }, select: { id: true, authorId: true, body: true, createdAt: true } },
     },
   });
@@ -90,7 +102,7 @@ export default async function TaskDetailPage({
         ? "Locked — in review"
         : "Not your task";
 
-  const [employees, activity, projectTasks, milestones] = await Promise.all([
+  const [employees, activity] = await Promise.all([
     // Everyone in the workspace — for the assignee picker and @-mentions.
     prisma.employee.findMany({
       where: { companyId: session.companyId, deletedAt: null },
@@ -102,17 +114,6 @@ export default async function TaskDetailPage({
       orderBy: { createdAt: "desc" },
       take: 100,
       select: { id: true, action: true, meta: true, createdAt: true },
-    }),
-    // Other tasks in this project — for the dependency picker.
-    prisma.task.findMany({
-      where: { projectId: task.project.id, NOT: { id: task.id } },
-      orderBy: { createdAt: "asc" },
-      select: { id: true, name: true },
-    }),
-    prisma.milestone.findMany({
-      where: { projectId: task.project.id },
-      orderBy: [{ dueDate: "asc" }, { id: "asc" }],
-      select: { id: true, name: true },
     }),
   ]);
 
@@ -131,7 +132,7 @@ export default async function TaskDetailPage({
         },
         orderBy: { updatedAt: "desc" },
         take: 8,
-        select: { id: true, title: true, projectId: true },
+        select: { id: true, title: true, projectId: true, externalUrl: true },
       })
     : [];
   // Project-specific SOPs first, then general service guides.
@@ -155,6 +156,7 @@ export default async function TaskDetailPage({
 
   return (
     <div className="mx-auto max-w-6xl">
+      <LiveRefresh seconds={10} />
       <div className="mb-3">
         <BackLink href={`/projects/${task.project.id}`}>{task.project.name}</BackLink>
       </div>
@@ -182,7 +184,9 @@ export default async function TaskDetailPage({
               <TaskEdit
                 taskId={task.id}
                 projectId={task.project.id}
-                services={task.project.services.map((s) => ({ id: s.serviceId, name: s.service.name }))}
+                services={task.project.services.flatMap((ps) =>
+                  ps.service.children.map((sub) => ({ id: sub.id, name: `${ps.service.name} › ${sub.name}` })),
+                )}
                 initial={{
                   name: task.name,
                   description: task.description ?? "",
@@ -199,22 +203,11 @@ export default async function TaskDetailPage({
         )}
       </Card>
 
-      {/* Review workflow — submit / review / approve */}
-      <Card className="mb-5 p-5">
-        <h3 className="mb-3 text-sm font-semibold text-content">Workflow</h3>
-        <TaskWorkflow
-          taskId={task.id}
-          status={task.status}
-          finalLink={task.finalLink}
-          canSubmit={canSubmit}
-          canReview={canReview}
-        />
-      </Card>
-
       <div className="grid gap-5 lg:grid-cols-3">
-        {/* Main column */}
-        <div className="space-y-5 lg:col-span-2">
-          <Card>
+        {/* Main column — Workflow stays on top on mobile, but sits after the
+            Checklist in the 2-column (lg) layout via responsive order. */}
+        <div className="flex flex-col gap-5 lg:col-span-2">
+          <Card className="order-2 lg:order-1">
             <div className="border-b border-line px-5 py-3">
               <h3 className="text-sm font-semibold text-content">Checklist</h3>
             </div>
@@ -223,21 +216,38 @@ export default async function TaskDetailPage({
             </div>
           </Card>
 
-          <Card>
+          {/* Review workflow — submit / review / approve */}
+          <Card className="order-1 p-5 lg:order-2">
+            <h3 className="mb-3 text-sm font-semibold text-content">Workflow</h3>
+            <TaskWorkflow
+              taskId={task.id}
+              status={task.status}
+              finalLink={task.finalLink}
+              canSubmit={canSubmit}
+              canReview={canReview}
+            />
+          </Card>
+
+          <Card className="order-3">
             <div className="border-b border-line px-5 py-3">
-              <h3 className="text-sm font-semibold text-content">Dependencies</h3>
+              <h3 className="text-sm font-semibold text-content">Attachments</h3>
             </div>
             <div className="p-5">
-              <TaskDependencies
-                taskId={task.id}
-                blockers={task.dependsOn.map((d) => ({ id: d.dependsOn.id, name: d.dependsOn.name, status: d.dependsOn.status }))}
-                options={projectTasks}
-                canEdit={isManager}
+              <AttachmentsPanel
+                uploadUrl={`/api/tasks/${task.id}/attachments`}
+                canEdit={isManager || isAssignee}
+                initial={task.attachments.map((a) => ({
+                  id: a.id,
+                  fileName: a.fileName,
+                  mimeType: a.mimeType,
+                  sizeBytes: a.sizeBytes,
+                  createdAt: a.createdAt.toISOString(),
+                }))}
               />
             </div>
           </Card>
 
-          <Card>
+          <Card className="order-4">
             <div className="border-b border-line px-5 py-3">
               <h3 className="text-sm font-semibold text-content">Comments</h3>
             </div>
@@ -283,26 +293,41 @@ export default async function TaskDetailPage({
                 Not sure how to do this? Check the {task.service?.name} guide{kbArticles.length > 1 ? "s" : ""}:
               </p>
               <ul className="space-y-1">
-                {kbArticles.map((a) => (
-                  <li key={a.id}>
-                    <Link
-                      href={`/knowledge-base/${a.id}`}
-                      className="flex items-center gap-2 rounded-lg bg-surface px-2.5 py-2 text-sm font-medium text-accent-strong shadow-sm transition-colors hover:bg-canvas"
-                    >
-                      <Icon name="book" className="size-3.5 shrink-0" />
+                {kbArticles.map((a) => {
+                  const isExternal = !!a.externalUrl;
+                  const cls =
+                    "flex items-center gap-2 rounded-lg bg-surface px-2.5 py-2 text-sm font-medium text-accent-strong shadow-sm transition-colors hover:bg-canvas";
+                  const inner = (
+                    <>
+                      <Icon name={isExternal ? "externalLink" : "book"} className="size-3.5 shrink-0" />
                       <span className="truncate">{a.title}</span>
                       <span
                         className={
-                          a.projectId === task.project.id
-                            ? "ml-auto shrink-0 rounded bg-brand-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-brand-600 dark:text-brand-300"
-                            : "ml-auto shrink-0 rounded bg-canvas px-1.5 py-0.5 text-[10px] font-medium text-faint"
+                          isExternal
+                            ? "ml-auto shrink-0 rounded bg-canvas px-1.5 py-0.5 text-[10px] font-medium text-faint"
+                            : a.projectId === task.project.id
+                              ? "ml-auto shrink-0 rounded bg-brand-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-brand-600 dark:text-brand-300"
+                              : "ml-auto shrink-0 rounded bg-canvas px-1.5 py-0.5 text-[10px] font-medium text-faint"
                         }
                       >
-                        {a.projectId === task.project.id ? "This project" : "General"}
+                        {isExternal ? "Link" : a.projectId === task.project.id ? "This project" : "General"}
                       </span>
-                    </Link>
-                  </li>
-                ))}
+                    </>
+                  );
+                  return (
+                    <li key={a.id}>
+                      {isExternal ? (
+                        <a href={a.externalUrl!} target="_blank" rel="noopener noreferrer" className={cls}>
+                          {inner}
+                        </a>
+                      ) : (
+                        <Link href={`/knowledge-base/${a.id}`} className={cls}>
+                          {inner}
+                        </Link>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             </Card>
           )}
@@ -310,10 +335,7 @@ export default async function TaskDetailPage({
           <Card className="p-5">
             <h3 className="mb-3 text-sm font-semibold text-content">Details</h3>
 
-            <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-faint">Milestone</p>
-            <TaskMilestone taskId={task.id} current={task.milestoneId} options={milestones} canEdit={isManager} />
-
-            <p className="mb-1.5 mt-4 text-xs font-medium uppercase tracking-wide text-faint">Assignees</p>
+            <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-faint">Assignees</p>
             <TaskAssignees
               taskId={task.id}
               canEdit={isManager}

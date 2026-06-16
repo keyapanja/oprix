@@ -16,8 +16,9 @@ export default async function NewProjectPage() {
       orderBy: { name: "asc" },
       select: { id: true, name: true },
     }),
+    // Projects link to top-level categories only.
     prisma.service.findMany({
-      where: { companyId: session.companyId },
+      where: { companyId: session.companyId, parentId: null },
       orderBy: { name: "asc" },
       select: { id: true, name: true },
     }),

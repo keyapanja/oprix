@@ -191,6 +191,7 @@ model Holiday {
 model Announcement {
   id        String   @id @default(cuid())
   companyId String
+  authorId  String? // userId who posted it (null = legacy)
   title     String
   body      String?
   date      DateTime @db.Date
@@ -263,15 +264,22 @@ model Department {
 }
 
 // Service lines the company offers (Web Dev, Content, Paid Ads…). Formerly "Team".
+// A Service is either a CATEGORY (parentId = null) or a SUB-CATEGORY (parentId
+// set). Projects link to categories; tasks pick a sub-category. The department
+// lives on the category and sub-categories inherit it (used for task-assignee
+// filtering and TEAM visibility).
 model Service {
   id           String   @id @default(cuid())
   companyId    String
   departmentId String?
+  parentId     String? // null = category (top-level); set = sub-category
   name         String
   createdAt    DateTime @default(now())
 
   company          Company                @relation(fields: [companyId], references: [id])
   department       Department?            @relation(fields: [departmentId], references: [id])
+  parent           Service?               @relation("ServiceTree", fields: [parentId], references: [id])
+  children         Service[]              @relation("ServiceTree")
   employees        Employee[]
   projectLinks     ProjectService[]
   tasks            Task[]
@@ -280,6 +288,7 @@ model Service {
 
   @@unique([companyId, name])
   @@index([companyId])
+  @@index([parentId])
 }
 
 // Default checklist a service seeds onto every task created under it.
@@ -351,8 +360,29 @@ model User {
   employee      Employee?      @relation(fields: [employeeId], references: [id])
   client        Client?        @relation(fields: [clientId], references: [id])
   notifications Notification[]
+  extensionTokens ExtensionToken[]
 
   @@unique([companyId, email])
+  @@index([companyId])
+}
+
+// Long-lived bearer tokens for the browser extension (and future API clients).
+// The raw token is shown once at connect time; only its SHA-256 hash is stored.
+// Also the backing store for "connected devices" + sign-out-everywhere.
+model ExtensionToken {
+  id         String    @id @default(cuid())
+  companyId  String
+  userId     String
+  tokenHash  String    @unique // sha-256 hex of the raw token
+  label      String // device label, e.g. "Chrome on Windows"
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+  expiresAt  DateTime? // null = no hard expiry
+  revokedAt  DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
   @@index([companyId])
 }
 
@@ -474,10 +504,10 @@ model Project {
   client       Client?          @relation(fields: [clientId], references: [id])
   services     ProjectService[]
   tasks        Task[]
-  milestones   Milestone[]
   timeEntries  TimeEntry[]
   deliverables Deliverable[]
   kbArticles   KbArticle[]
+  attachments  Attachment[]
 
   @@index([companyId])
   @@index([clientId])
@@ -498,7 +528,6 @@ model Task {
   status       TaskStatus @default(TODO)
   startedAt    DateTime? // first moved to In Progress
   completedAt  DateTime? // moved to Completed
-  milestoneId  String?
   orderIndex   Int        @default(0)
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
@@ -509,14 +538,11 @@ model Task {
   assignee     Employee?        @relation("Assignee", fields: [assigneeId], references: [id])
   service      Service?         @relation(fields: [serviceId], references: [id])
   assignees    TaskAssignee[]
-  milestone    Milestone?       @relation(fields: [milestoneId], references: [id])
   checklist    ChecklistItem[]
   comments     Comment[]
   attachments  Attachment[]
   timeEntries  TimeEntry[]
   timers       TaskTimer[]
-  dependsOn    TaskDependency[] @relation("Dependent")
-  dependents   TaskDependency[] @relation("Prerequisite")
 
   @@index([projectId])
   @@index([assigneeId])
@@ -589,17 +615,6 @@ model TaskTimer {
   @@index([taskId])
 }
 
-model TaskDependency {
-  id           String @id @default(cuid())
-  taskId       String // the dependent task
-  dependsOnId  String // the prerequisite task
-
-  task      Task @relation("Dependent", fields: [taskId], references: [id])
-  dependsOn Task @relation("Prerequisite", fields: [dependsOnId], references: [id])
-
-  @@unique([taskId, dependsOnId])
-}
-
 model ChecklistItem {
   id        String  @id @default(cuid())
   taskId    String
@@ -610,19 +625,6 @@ model ChecklistItem {
   task Task @relation(fields: [taskId], references: [id])
 
   @@index([taskId])
-}
-
-model Milestone {
-  id        String    @id @default(cuid())
-  projectId String
-  name      String
-  dueDate   DateTime?
-  reachedAt DateTime?
-
-  project Project @relation(fields: [projectId], references: [id])
-  tasks   Task[]
-
-  @@index([projectId])
 }
 
 model Comment {
@@ -641,6 +643,7 @@ model Comment {
 model Attachment {
   id         String   @id @default(cuid())
   taskId     String?
+  projectId  String?
   fileKey    String
   fileName   String
   mimeType   String?
@@ -648,9 +651,11 @@ model Attachment {
   uploadedBy String // userId
   createdAt  DateTime @default(now())
 
-  task Task? @relation(fields: [taskId], references: [id])
+  task    Task?    @relation(fields: [taskId], references: [id])
+  project Project? @relation(fields: [projectId], references: [id])
 
   @@index([taskId])
+  @@index([projectId])
 }
 
 // ============================================================
@@ -697,8 +702,9 @@ model LeaveType {
   name            String // Casual, Sick, Paid, Unpaid
   description     String?
   paidType        LeavePaidType   @default(PAID)
-  allowanceValue  Float           @default(0) // days granted per period
+  allowanceValue  Float           @default(0) // days granted per period (ignored when unlimited)
   allowancePeriod AllowancePeriod @default(YEAR)
+  unlimited       Boolean         @default(false) // no fixed day count — apply freely (e.g. unpaid)
   annualQuota     Float           @default(0) // deprecated; kept for back-compat
 
   company   Company        @relation(fields: [companyId], references: [id])
@@ -926,7 +932,8 @@ model KbArticle {
   departmentId String? // organised by department…
   serviceId    String? // …and service (drives the "related guide" link on tasks)
   title        String
-  body         String // markdown
+  body         String // markdown (empty for external-link articles)
+  externalUrl  String? // when set, this is an external-link article (opens in a new tab)
   keywords     String?
   authorId     String // userId — original creator
   updatedById  String? // userId — last editor

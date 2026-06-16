@@ -19,6 +19,7 @@ export default async function KnowledgeBasePage() {
     select: {
       id: true,
       title: true,
+      externalUrl: true,
       keywords: true,
       updatedAt: true,
       updatedById: true,
@@ -41,6 +42,7 @@ export default async function KnowledgeBasePage() {
   const items: KbItem[] = articles.map((a) => ({
     id: a.id,
     title: a.title,
+    externalUrl: a.externalUrl,
     keywords: a.keywords,
     projectName: a.project?.name ?? null,
     deptName: a.department?.name ?? null,

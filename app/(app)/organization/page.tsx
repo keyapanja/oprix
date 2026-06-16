@@ -22,6 +22,7 @@ export default async function OrganizationPage() {
         select: {
           id: true,
           name: true,
+          parentId: true,
           department: { select: { name: true } },
           checklistTemplate: { orderBy: { orderIndex: "asc" }, select: { id: true, text: true } },
         },
@@ -81,6 +82,7 @@ export default async function OrganizationPage() {
         services={services.map((s) => ({
           id: s.id,
           name: s.name,
+          parentId: s.parentId,
           department: s.department,
           checklist: s.checklistTemplate,
         }))}

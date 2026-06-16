@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Combobox } from "@/components/ui/combobox";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icons";
+import { LeaveAllowanceFields } from "@/components/leave/leave-allowance-fields";
 
 export type LeaveTypeRow = {
   id: string;
@@ -17,6 +18,7 @@ export type LeaveTypeRow = {
   paidType: "PAID" | "UNPAID";
   allowanceValue: number;
   allowancePeriod: "YEAR" | "MONTH";
+  unlimited: boolean;
 };
 
 function TypeForm({ type, onDone, onCancel }: { type: LeaveTypeRow; onDone: () => void; onCancel: () => void }) {
@@ -38,16 +40,16 @@ function TypeForm({ type, onDone, onCancel }: { type: LeaveTypeRow; onDone: () =
       <Field label="Description" htmlFor="et-desc">
         <Input id="et-desc" name="description" defaultValue={type.description ?? ""} placeholder="Short note (optional)" />
       </Field>
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Field label="Paid?">
+      <div className="flex flex-wrap gap-4">
+        <Field label="Paid?" className="w-32">
           <Combobox name="paidType" defaultValue={type.paidType} options={[{ value: "PAID", label: "Paid" }, { value: "UNPAID", label: "Unpaid" }]} />
         </Field>
-        <Field label="Days" htmlFor="et-val">
-          <Input id="et-val" name="allowanceValue" type="number" min={0} max={365} step="0.5" defaultValue={type.allowanceValue} />
-        </Field>
-        <Field label="Per">
-          <Combobox name="allowancePeriod" defaultValue={type.allowancePeriod} options={[{ value: "YEAR", label: "Year" }, { value: "MONTH", label: "Month" }]} />
-        </Field>
+        <LeaveAllowanceFields
+          defaultUnlimited={type.unlimited}
+          defaultDays={type.allowanceValue}
+          defaultPeriod={type.allowancePeriod}
+          idPrefix="et"
+        />
       </div>
       <div className="flex justify-end gap-2">
         <Button type="button" variant="secondary" onClick={onCancel}>Cancel</Button>

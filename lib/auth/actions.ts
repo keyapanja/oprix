@@ -67,6 +67,13 @@ export async function loginAction(
     clientId: user.clientId,
   });
 
+  // Return the user to where they were headed (e.g. the extension connect page)
+  // when it's a safe internal path; otherwise role-home.
+  const next = String(formData.get("next") ?? "");
+  const safeNext =
+    next.startsWith("/") && !next.startsWith("//") && !next.includes("://") ? next : null;
+  if (safeNext) redirect(safeNext);
+
   // Clients land in their portal; everyone else in the internal app.
   redirect(user.role === "CLIENT" ? "/portal" : "/dashboard");
 }

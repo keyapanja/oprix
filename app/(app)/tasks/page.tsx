@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icons";
 import { type TaskRow } from "@/components/tasks/tasks-table";
 import { TasksWorkspace } from "@/components/tasks/tasks-workspace";
+import { LiveRefresh } from "@/components/timer/live-refresh";
 import { getTaskTimerStates } from "@/lib/timer/data";
 import { canUseTimer } from "@/lib/timer/finalize";
 import type { TaskTimerState } from "@/lib/timer/shared";
@@ -44,6 +45,7 @@ export default async function TasksPage({
       status: true,
       priority: true,
       dueDate: true,
+      createdAt: true,
       createdById: true,
       project: { select: { name: true } },
       service: { select: { name: true, department: { select: { name: true } } } },
@@ -71,6 +73,7 @@ export default async function TasksPage({
       priority: t.priority,
       assigneeNames: t.assignees.map((a) => a.employee.fullName),
       dueDate: t.dueDate ? t.dueDate.toISOString().slice(0, 10) : null,
+      assignedDate: t.createdAt.toISOString().slice(0, 10),
       mine: isAssignee,
       createdByMe: isReviewer,
       timer: { ...state, locked: !canTime },
@@ -83,6 +86,7 @@ export default async function TasksPage({
 
   return (
     <>
+      <LiveRefresh seconds={10} />
       <PageHeader
         title="Tasks"
         description={`${rows.length} ${rows.length === 1 ? "task" : "tasks"} · showing ${TASK_SCOPE_LABELS[scope].label.toLowerCase()}.`}

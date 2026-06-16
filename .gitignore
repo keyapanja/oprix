@@ -13,6 +13,9 @@ next-env.d.ts
 /build
 /dist
 
+# ---- User uploads (stored on disk, served via /api/files) ----
+/uploads/
+
 # ---- Environment & secrets ----
 .env
 .env*.local

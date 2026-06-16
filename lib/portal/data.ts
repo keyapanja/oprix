@@ -45,10 +45,6 @@ export async function getClientProject(clientId: string, companyId: string, proj
       priority: true,
       startDate: true,
       dueDate: true,
-      milestones: {
-        orderBy: { dueDate: "asc" },
-        select: { id: true, name: true, dueDate: true, reachedAt: true },
-      },
       tasks: {
         orderBy: { createdAt: "asc" },
         // No assignees / timers / cost — progress only.

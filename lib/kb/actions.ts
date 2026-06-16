@@ -10,7 +10,8 @@ export type KbState = { ok?: boolean; error?: string; id?: string };
 
 const ArticleSchema = z.object({
   title: z.string().trim().min(1, "Title is required").max(200),
-  body: z.string().trim().min(1, "Write some content").max(50000),
+  body: z.string().trim().max(50000).optional().or(z.literal("")),
+  externalUrl: z.string().trim().max(2000).optional().or(z.literal("")),
   projectId: z.string().optional().or(z.literal("")),
   departmentId: z.string().optional().or(z.literal("")),
   serviceId: z.string().optional().or(z.literal("")),
@@ -19,11 +20,39 @@ const ArticleSchema = z.object({
 export type ArticleInput = {
   title: string;
   body: string;
+  externalUrl?: string;
   projectId?: string;
   departmentId?: string;
   serviceId?: string;
   keywords?: string;
 };
+
+// An article is EITHER written content (markdown body) OR an external link.
+function normalizeUrl(raw: string): string | null {
+  let u = raw.trim();
+  if (!u) return null;
+  if (!/^https?:\/\//i.test(u)) u = `https://${u}`;
+  try {
+    const parsed = new URL(u);
+    return parsed.protocol === "http:" || parsed.protocol === "https:" ? parsed.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+function resolveContent(
+  input: { body?: string; externalUrl?: string },
+): { error: string } | { body: string; externalUrl: string | null } {
+  const rawUrl = (input.externalUrl ?? "").trim();
+  if (rawUrl) {
+    const url = normalizeUrl(rawUrl);
+    if (!url) return { error: "Enter a valid link (https://…)" };
+    return { body: "", externalUrl: url }; // link article — no body
+  }
+  const body = (input.body ?? "").trim();
+  if (!body) return { error: "Write some content or add an external link" };
+  return { body, externalUrl: null };
+}
 
 async function validateLinks(
   companyId: string,
@@ -52,6 +81,8 @@ export async function createArticle(input: ArticleInput): Promise<KbState> {
   const parsed = ArticleSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
   const d = parsed.data;
+  const content = resolveContent(d);
+  if ("error" in content) return { error: content.error };
   const bad = await validateLinks(session.companyId, d.projectId, d.departmentId, d.serviceId);
   if (bad) return { error: bad };
 
@@ -59,14 +90,15 @@ export async function createArticle(input: ArticleInput): Promise<KbState> {
     data: {
       companyId: session.companyId,
       title: d.title,
-      body: d.body,
+      body: content.body,
+      externalUrl: content.externalUrl,
       projectId: d.projectId || null,
       departmentId: d.departmentId || null,
       serviceId: d.serviceId || null,
       keywords: d.keywords || null,
       authorId: session.userId,
       updatedById: session.userId,
-      versions: { create: { title: d.title, body: d.body, editorId: session.userId } },
+      versions: { create: { title: d.title, body: content.body, editorId: session.userId } },
     },
     select: { id: true },
   });
@@ -81,6 +113,8 @@ export async function updateArticle(id: string, input: ArticleInput): Promise<Kb
   const parsed = ArticleSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
   const d = parsed.data;
+  const content = resolveContent(d);
+  if ("error" in content) return { error: content.error };
 
   const existing = await prisma.kbArticle.findFirst({ where: { id, companyId: session.companyId }, select: { id: true } });
   if (!existing) return { error: "Article not found" };
@@ -91,13 +125,14 @@ export async function updateArticle(id: string, input: ArticleInput): Promise<Kb
     where: { id },
     data: {
       title: d.title,
-      body: d.body,
+      body: content.body,
+      externalUrl: content.externalUrl,
       projectId: d.projectId || null,
       departmentId: d.departmentId || null,
       serviceId: d.serviceId || null,
       keywords: d.keywords || null,
       updatedById: session.userId,
-      versions: { create: { title: d.title, body: d.body, editorId: session.userId } },
+      versions: { create: { title: d.title, body: content.body, editorId: session.userId } },
     },
   });
   revalidatePath("/knowledge-base");

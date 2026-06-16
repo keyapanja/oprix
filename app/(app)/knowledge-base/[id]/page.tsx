@@ -24,6 +24,7 @@ export default async function ArticlePage({ params }: { params: Promise<{ id: st
       id: true,
       title: true,
       body: true,
+      externalUrl: true,
       authorId: true,
       updatedById: true,
       createdAt: true,
@@ -81,10 +82,25 @@ export default async function ArticlePage({ params }: { params: Promise<{ id: st
                 {canDelete && <DeleteArticleButton id={id} />}
               </div>
             </div>
-            <div
-              className="mt-5 border-t border-line pt-5 text-[15px] text-content"
-              dangerouslySetInnerHTML={{ __html: renderMarkdown(article.body) }}
-            />
+            {article.externalUrl ? (
+              <div className="mt-5 border-t border-line pt-5">
+                <a
+                  href={article.externalUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 rounded-xl bg-accent-soft px-4 py-2.5 text-sm font-medium text-accent-strong ring-1 ring-inset ring-brand-500/20 transition-colors hover:bg-accent-soft/70"
+                >
+                  <Icon name="externalLink" className="size-4" />
+                  Open external resource
+                </a>
+                <p className="mt-2 break-all text-xs text-faint">{article.externalUrl}</p>
+              </div>
+            ) : (
+              <div
+                className="mt-5 border-t border-line pt-5 text-[15px] text-content"
+                dangerouslySetInnerHTML={{ __html: renderMarkdown(article.body) }}
+              />
+            )}
           </Card>
         </div>
 

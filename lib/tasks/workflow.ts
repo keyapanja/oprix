@@ -6,6 +6,7 @@ import { getSession } from "@/lib/auth/session";
 import { hasPermission } from "@/lib/auth/permissions";
 import { logTaskActivity, actorLabel } from "@/lib/activity";
 import { finalizeTaskTimer } from "@/lib/timer/finalize";
+import { submitForReviewFor } from "@/lib/tasks/workflow-core";
 
 export type WorkflowState = { ok?: boolean; error?: string };
 
@@ -50,32 +51,17 @@ async function ctx(session: Sess, task: LoadedTask) {
   return { isElevated, isAssignee, isReviewer };
 }
 
-/** Worker submits the work (with a final output/preview link) for review. */
+/** Worker submits the work (with a final output/preview link) for review.
+ *  Logic lives in lib/tasks/workflow-core so the extension API reuses it. */
 export async function submitForReview(taskId: string, finalLink: string): Promise<WorkflowState> {
   const session = await getSession();
   if (!session) return { error: "Not authenticated" };
-  const task = await loadTask(session, taskId);
-  if (!task) return { error: "Task not found" };
-  const { isElevated, isAssignee } = await ctx(session, task);
-
-  if (!isAssignee && !isElevated) return { error: "Only an assignee can submit this task." };
-  if (!["TODO", "IN_PROGRESS", "REDO"].includes(task.status)) {
-    return { error: "This task can't be submitted from its current status." };
+  const res = await submitForReviewFor(session, taskId, finalLink);
+  if (res.ok) {
+    revalidatePath(`/tasks/${taskId}`);
+    revalidatePath("/tasks");
   }
-  const link = finalLink.trim();
-  if (!link) return { error: "Add the final output / preview link before submitting." };
-
-  await finalizeTaskTimer(session.companyId, session.userId, taskId);
-  await prisma.task.update({ where: { id: taskId }, data: { status: "REVIEW", finalLink: link } });
-
-  const actor = await actorLabel(session.userId);
-  if (task.createdById) {
-    await notify([task.createdById], "Task ready for review", `${actor} submitted “${task.name}” for review`, taskId, session.userId);
-  }
-  await logTaskActivity(session, taskId, "submitted the work for review");
-  revalidatePath(`/tasks/${taskId}`);
-  revalidatePath("/tasks");
-  return { ok: true };
+  return res;
 }
 
 /** Reviewer requests changes → Redo. The submitted link is archived to history and cleared. */

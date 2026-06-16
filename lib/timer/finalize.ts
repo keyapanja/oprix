@@ -105,11 +105,12 @@ export async function pauseTaskTimer(
 }
 
 /**
- * Whether a person may run the timer on a task right now:
- * - an assignee (the worker) while the task is theirs to work on, or
- * - the creator (the reviewer) while it's waiting for review.
+ * Whether a person may run the timer on a task right now: an assignee (the
+ * worker) while the task is in a WORK state (To Do / In Progress / Redo). Once
+ * the task is submitted (Review onward) the timer is finalized and shown
+ * read-only everywhere — the worker's tracking is done.
  */
-export function canUseTimer(status: string, isAssignee: boolean, isReviewer: boolean): boolean {
+export function canUseTimer(status: string, isAssignee: boolean, _isReviewer: boolean): boolean {
   const workStates = status === "TODO" || status === "IN_PROGRESS" || status === "REDO";
-  return (isAssignee && workStates) || (isReviewer && status === "REVIEW");
+  return isAssignee && workStates;
 }

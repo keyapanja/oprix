@@ -4,44 +4,32 @@ import { toast } from "@/components/ui/toast";
 import { confirmDialog } from "@/components/ui/confirm";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import {
-  addProjectService,
-  removeProjectService,
-  setServicePrimary,
-} from "@/lib/projects/actions";
+import Link from "next/link";
+import { addProjectService, removeProjectService } from "@/lib/projects/actions";
 import { Card } from "@/components/ui/card";
 import { Combobox } from "@/components/ui/combobox";
 import { Icon } from "@/components/ui/icons";
-import { ProjectServiceChecklist } from "@/components/projects/project-service-checklist";
 
 type Opt = { id: string; name: string };
-type ChecklistItem = { id: string; text: string };
+type SubCat = { id: string; name: string };
 type PS = {
   id: string;
-  serviceName: string;
-  primaryAssigneeId: string | null;
-  checklist: ChecklistItem[];
+  categoryName: string;
+  subcategories: SubCat[];
 };
 
 export function ProjectServices({
   projectId,
   items,
   available,
-  employees,
 }: {
   projectId: string;
   items: PS[];
   available: Opt[];
-  employees: Opt[];
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [toAdd, setToAdd] = useState("");
-  const [openId, setOpenId] = useState<string | null>(null);
-  const [counts, setCounts] = useState<Record<string, number>>(() =>
-    Object.fromEntries(items.map((ps) => [ps.id, ps.checklist.length])),
-  );
-  const empOpts = employees.map((e) => ({ value: e.id, label: e.name }));
 
   function add() {
     if (!toAdd) return;
@@ -55,73 +43,77 @@ export function ProjectServices({
     });
   }
 
+  function remove(ps: PS) {
+    start(async () => {
+      const ok = await confirmDialog({
+        message: `Remove ${ps.categoryName} from this project?`,
+        tone: "danger",
+        confirmLabel: "Remove",
+      });
+      if (!ok) return;
+      const res = await removeProjectService(ps.id);
+      if (res.error) toast.error(res.error);
+      else router.refresh();
+    });
+  }
+
   return (
     <Card className="mb-6">
       <div className="flex items-center justify-between border-b border-line px-5 py-3.5">
-        <h3 className="text-sm font-semibold text-content">Services, assignees &amp; checklists</h3>
+        <h3 className="text-sm font-semibold text-content">Service categories</h3>
       </div>
       <div className="p-5">
+        <p className="mb-4 text-sm text-muted">
+          Tasks on this project are created under a category&rsquo;s sub-category. Manage sub-categories and
+          their checklists in{" "}
+          <Link href="/organization" className="font-medium text-accent-strong hover:underline">
+            Organization → Services
+          </Link>
+          .
+        </p>
+
         {items.length === 0 ? (
-          <p className="text-sm text-muted">No services on this project yet.</p>
+          <p className="text-sm text-muted">No categories on this project yet.</p>
         ) : (
           <div className="space-y-2">
-            {items.map((ps) => {
-              const count = counts[ps.id] ?? ps.checklist.length;
-              const open = openId === ps.id;
-              return (
-                <div key={ps.id} className="rounded-xl border border-line">
-                  <div className="flex flex-wrap items-center gap-3 px-3 py-2">
-                    <span className="min-w-32 font-medium text-content">{ps.serviceName}</span>
-                    <span className="text-xs text-faint">Primary:</span>
-                    <div className="w-56">
-                      <PrimaryPicker psId={ps.id} value={ps.primaryAssigneeId} options={empOpts} />
-                    </div>
-                    <button
-                      onClick={() => setOpenId(open ? null : ps.id)}
-                      className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-muted ring-1 ring-inset ring-line-strong transition-colors hover:bg-canvas hover:text-content"
-                    >
-                      <Icon name="check" className="size-3.5" />
-                      Checklist ({count})
-                      <Icon name="chevronDown" className={"size-3.5 transition-transform " + (open ? "rotate-180" : "")} />
-                    </button>
-                    <button
-                      onClick={async () => {
-                        if (!(await confirmDialog({ message: `Remove ${ps.serviceName} from this project?`, tone: "danger", confirmLabel: "Remove" }))) return;
-                        start(async () => {
-                          const res = await removeProjectService(ps.id);
-                          if (res.error) toast.error(res.error);
-                          else router.refresh();
-                        });
-                      }}
-                      className="ml-auto rounded-md p-1.5 text-faint hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/15"
-                      aria-label={`Remove ${ps.serviceName}`}
-                    >
-                      <Icon name="trash" className="size-4" />
-                    </button>
-                  </div>
-                  {open && (
-                    <div className="border-t border-line px-3 py-3">
-                      <ProjectServiceChecklist
-                        projectServiceId={ps.id}
-                        initial={ps.checklist}
-                        onCountChange={(n) => setCounts((c) => ({ ...c, [ps.id]: n }))}
-                      />
-                    </div>
-                  )}
+            {items.map((ps) => (
+              <div key={ps.id} className="rounded-xl border border-line px-3 py-2.5">
+                <div className="flex flex-wrap items-center gap-3">
+                  <Icon name="folder" className="size-4 shrink-0 text-accent-strong" />
+                  <span className="font-medium text-content">{ps.categoryName}</span>
+                  <button
+                    onClick={() => remove(ps)}
+                    disabled={pending}
+                    className="ml-auto rounded-md p-1.5 text-faint hover:bg-red-50 hover:text-red-600 disabled:opacity-50 dark:hover:bg-red-500/15"
+                    aria-label={`Remove ${ps.categoryName}`}
+                  >
+                    <Icon name="trash" className="size-4" />
+                  </button>
                 </div>
-              );
-            })}
+                {ps.subcategories.length > 0 ? (
+                  <div className="mt-2 flex flex-wrap gap-1.5 pl-7">
+                    {ps.subcategories.map((sub) => (
+                      <span key={sub.id} className="rounded-md bg-canvas px-2 py-0.5 text-xs text-muted">
+                        {sub.name}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-1.5 pl-7 text-xs text-faint">No sub-categories yet — add them in Organization.</p>
+                )}
+              </div>
+            ))}
           </div>
         )}
 
         {available.length > 0 && (
           <div className="mt-4 flex flex-wrap items-end gap-3 border-t border-line pt-4">
             <div className="w-64">
-              <label className="mb-1 block text-xs font-medium text-muted">Add a service</label>
+              <label className="mb-1 block text-xs font-medium text-muted">Add a category</label>
               <Combobox
                 value={toAdd}
                 onChange={setToAdd}
-                placeholder="Select service"
+                placeholder="Select category"
                 options={available.map((s) => ({ value: s.id, label: s.name }))}
               />
             </div>
@@ -136,34 +128,5 @@ export function ProjectServices({
         )}
       </div>
     </Card>
-  );
-}
-
-function PrimaryPicker({
-  psId,
-  value,
-  options,
-}: {
-  psId: string;
-  value: string | null;
-  options: { value: string; label: string }[];
-}) {
-  const [current, setCurrent] = useState(value ?? "");
-  const [pending, start] = useTransition();
-  return (
-    <Combobox
-      value={current}
-      disabled={pending}
-      emptyLabel="— None —"
-      placeholder="— None —"
-      options={options}
-      onChange={(v) => {
-        setCurrent(v);
-        start(async () => {
-          const res = await setServicePrimary(psId, v || null);
-          if (res.error) toast.error(res.error);
-        });
-      }}
-    />
   );
 }

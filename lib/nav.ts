@@ -54,7 +54,6 @@ export const NAV: NavItem[] = [
       { label: "Payroll", href: "/reports/payroll", icon: "chart", action: "report:view" },
     ],
   },
-  { label: "Resource Allocation", href: "/resource", icon: "pie", action: "report:view" },
   {
     label: "Knowledge Base",
     href: "/knowledge-base",

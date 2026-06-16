@@ -93,7 +93,7 @@ export function TaskEdit({
               <Textarea value={desc} onChange={(e) => setDesc(e.target.value)} />
             </Field>
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Service">
+              <Field label="Sub-category">
                 <Combobox
                   value={serviceId}
                   onChange={setServiceId}

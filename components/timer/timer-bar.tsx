@@ -1,16 +1,17 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { pauseTimer, startTimer } from "@/lib/timer/actions";
+import { pauseTimer, startTimer, getMyActiveTimers } from "@/lib/timer/actions";
 import { Icon } from "@/components/ui/icons";
 import { fmtClock, liveSeconds, type ActiveTimer } from "@/lib/timer/shared";
 
-export function TimerBar({ timers }: { timers: ActiveTimer[] }) {
+export function TimerBar({ timers: initial }: { timers: ActiveTimer[] }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [now, setNow] = useState<number | null>(null);
+  const [timers, setTimers] = useState<ActiveTimer[]>(initial);
 
   // One shared 1s tick for the whole bar; null pre-mount avoids hydration drift.
   useEffect(() => {
@@ -18,6 +19,32 @@ export function TimerBar({ timers }: { timers: ActiveTimer[] }) {
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, []);
+
+  // Live sync: poll the user's active timers so a start/pause done elsewhere
+  // (the browser extension, another tab/device) shows here without a reload.
+  const refresh = useCallback(async () => {
+    try {
+      setTimers(await getMyActiveTimers());
+    } catch {
+      /* transient; next tick retries */
+    }
+  }, []);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (!document.hidden) refresh();
+    }, 8000);
+    const onVisible = () => {
+      if (!document.hidden) refresh();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+    };
+  }, [refresh]);
 
   if (timers.length === 0) return null;
 
@@ -27,7 +54,8 @@ export function TimerBar({ timers }: { timers: ActiveTimer[] }) {
   const act = (fn: () => Promise<unknown>) =>
     start(async () => {
       await fn();
-      router.refresh();
+      await refresh(); // update this bar immediately
+      router.refresh(); // and any open task page
     });
 
   return (

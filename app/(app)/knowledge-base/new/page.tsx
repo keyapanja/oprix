@@ -13,7 +13,8 @@ export default async function NewArticlePage() {
   const [projects, departments, services, projectServices] = await Promise.all([
     prisma.project.findMany({ where: { companyId: session.companyId, deletedAt: null }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
     prisma.department.findMany({ where: { companyId: session.companyId }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
-    prisma.service.findMany({ where: { companyId: session.companyId }, orderBy: { name: "asc" }, select: { id: true, name: true, departmentId: true } }),
+    // Sub-categories only — articles attach at the sub-category level (tasks carry a sub-category).
+    prisma.service.findMany({ where: { companyId: session.companyId, parentId: { not: null } }, orderBy: { name: "asc" }, select: { id: true, name: true, departmentId: true, parentId: true } }),
     prisma.projectService.findMany({ where: { project: { companyId: session.companyId } }, select: { projectId: true, serviceId: true } }),
   ]);
 

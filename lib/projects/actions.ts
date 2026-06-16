@@ -11,6 +11,8 @@ import { hasPermission } from "@/lib/auth/permissions";
 import { dateAtUTC } from "@/lib/dates";
 import { humanizeEnum } from "@/lib/format";
 import { logActivity, actorLabel, logTaskActivity } from "@/lib/activity";
+import { canEditTask, toggleChecklistItemFor } from "@/lib/projects/task-access";
+import { deleteUpload } from "@/lib/uploads";
 
 export type ProjectState = { error?: string; ok?: boolean };
 
@@ -42,11 +44,11 @@ export async function createProject(
     if (!client) return { error: "Invalid client" };
   }
 
-  // Selected services (checkboxes) that belong to this company.
+  // Projects link to CATEGORIES (top-level services) only.
   const serviceIds = formData.getAll("serviceIds").map(String).filter(Boolean);
   const validServices = serviceIds.length
     ? await prisma.service.findMany({
-        where: { id: { in: serviceIds }, companyId: session.companyId },
+        where: { id: { in: serviceIds }, companyId: session.companyId, parentId: null },
         select: { id: true },
       })
     : [];
@@ -88,6 +90,36 @@ export async function softDeleteProject(id: string): Promise<ProjectState> {
   return { ok: true };
 }
 
+const ProjectMetaSchema = z.object({
+  name: z.string().trim().min(1, "Name is required").max(140),
+  description: z.string().trim().max(2000).optional().or(z.literal("")),
+  priority: z.nativeEnum(Priority),
+  startDate: z.string().optional().or(z.literal("")),
+  dueDate: z.string().optional().or(z.literal("")),
+});
+
+/** Edit a project's core fields (name, description, priority, dates). */
+export async function updateProject(id: string, formData: FormData): Promise<ProjectState> {
+  const session = await requireCapability("project:manage");
+  if (!(await ownsProject(session.companyId, id))) return { error: "Project not found" };
+  const parsed = ProjectMetaSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  const d = parsed.data;
+  await prisma.project.update({
+    where: { id },
+    data: {
+      name: d.name,
+      description: d.description || null,
+      priority: d.priority,
+      startDate: d.startDate ? dateAtUTC(d.startDate) : null,
+      dueDate: d.dueDate ? dateAtUTC(d.dueDate) : null,
+    },
+  });
+  revalidatePath(`/projects/${id}`);
+  revalidatePath("/projects");
+  return { ok: true };
+}
+
 // ---- Project services -----------------------------------------------------
 async function ownsProject(companyId: string, projectId: string): Promise<boolean> {
   return (await prisma.project.count({ where: { id: projectId, companyId } })) > 0;
@@ -110,8 +142,8 @@ async function seedProjectServiceChecklist(projectServiceId: string, serviceId: 
 export async function addProjectService(projectId: string, serviceId: string): Promise<ProjectState> {
   const session = await requireCapability("project:manage");
   if (!(await ownsProject(session.companyId, projectId))) return { error: "Project not found" };
-  const svc = await prisma.service.findFirst({ where: { id: serviceId, companyId: session.companyId }, select: { id: true } });
-  if (!svc) return { error: "Invalid service" };
+  const svc = await prisma.service.findFirst({ where: { id: serviceId, companyId: session.companyId, parentId: null }, select: { id: true } });
+  if (!svc) return { error: "Invalid category" };
   let projectServiceId: string;
   try {
     const ps = await prisma.projectService.create({ data: { projectId, serviceId }, select: { id: true } });
@@ -225,13 +257,14 @@ function toKanban(t: {
 export async function createTask(input: {
   projectId: string;
   name: string;
-  serviceId?: string | null;
+  description?: string | null;
+  serviceId?: string | null; // a sub-category
   status?: TaskStatus;
   priority?: Priority;
   dueDate?: string | null;
-  /** Explicit assignees from the form. When omitted, the service primary is used. */
+  /** Explicit assignees from the form (the picker is scoped to the sub-category's department). */
   assigneeIds?: string[];
-  /** Explicit checklist from the form. When omitted, the service template seeds it. */
+  /** Explicit checklist from the form. When omitted, the sub-category template seeds it. */
   checklist?: { text: string; isDone: boolean }[];
 }): Promise<{ ok?: boolean; error?: string; task?: KanbanTask }> {
   const session = await requireCapability("task:manage");
@@ -239,39 +272,23 @@ export async function createTask(input: {
   if (!name) return { error: "Task name is required" };
   if (!(await ownsProject(session.companyId, input.projectId))) return { error: "Project not found" };
 
-  // The service's primary assignee for this project (default when the caller
-  // doesn't pass an explicit assignee list).
-  let primaryAssigneeId: string | null = null;
-  let projectServiceId: string | null = null;
-  if (input.serviceId) {
-    const ps = await prisma.projectService.findUnique({
-      where: { projectId_serviceId: { projectId: input.projectId, serviceId: input.serviceId } },
-      select: { id: true, primaryAssigneeId: true },
-    });
-    primaryAssigneeId = ps?.primaryAssigneeId ?? null;
-    projectServiceId = ps?.id ?? null;
-  }
-
-  // Resolve assignees: an explicit list from the form wins (validated to this
-  // company); otherwise fall back to the service's primary assignee.
-  let assigneeIds: string[];
-  if (input.assigneeIds !== undefined) {
+  // Assignees come straight from the form (its picker is already scoped to the
+  // sub-category's department). Validate they belong to this company.
+  let assigneeIds: string[] = [];
+  if (input.assigneeIds?.length) {
     const uniq = [...new Set(input.assigneeIds.filter(Boolean))];
-    const valid = uniq.length
-      ? await prisma.employee.findMany({
-          where: { id: { in: uniq }, companyId: session.companyId, deletedAt: null },
-          select: { id: true },
-        })
-      : [];
+    const valid = await prisma.employee.findMany({
+      where: { id: { in: uniq }, companyId: session.companyId, deletedAt: null },
+      select: { id: true },
+    });
     assigneeIds = valid.map((e) => e.id);
-  } else {
-    assigneeIds = primaryAssigneeId ? [primaryAssigneeId] : [];
   }
 
   const task = await prisma.task.create({
     data: {
       projectId: input.projectId,
       name,
+      description: input.description?.trim() || null,
       serviceId: input.serviceId || null,
       createdById: session.userId, // creator acts as the reviewer in the review flow
       status: input.status ?? "TODO",
@@ -283,7 +300,7 @@ export async function createTask(input: {
   });
 
   // Checklist: an explicit list from the form wins; otherwise seed from the
-  // project-specific list, else the service default template.
+  // sub-category's default template.
   if (input.checklist !== undefined) {
     const items = input.checklist
       .map((c) => ({ text: c.text.trim(), isDone: !!c.isDone }))
@@ -294,21 +311,11 @@ export async function createTask(input: {
       });
     }
   } else if (input.serviceId) {
-    let template: { text: string }[] = [];
-    if (projectServiceId) {
-      template = await prisma.projectServiceChecklistItem.findMany({
-        where: { projectServiceId },
-        orderBy: { orderIndex: "asc" },
-        select: { text: true },
-      });
-    }
-    if (!template.length) {
-      template = await prisma.serviceChecklistItem.findMany({
-        where: { serviceId: input.serviceId },
-        orderBy: { orderIndex: "asc" },
-        select: { text: true },
-      });
-    }
+    const template = await prisma.serviceChecklistItem.findMany({
+      where: { serviceId: input.serviceId },
+      orderBy: { orderIndex: "asc" },
+      select: { text: true },
+    });
     if (template.length) {
       await prisma.checklistItem.createMany({
         data: template.map((c, i) => ({ taskId: task.id, text: c.text, orderIndex: i })),
@@ -327,6 +334,39 @@ export async function createTask(input: {
 
   revalidatePath(`/projects/${input.projectId}`);
   return { ok: true, task: toKanban(task) };
+}
+
+/** Remove a task or project attachment (deletes the file from disk + the row). */
+export async function deleteAttachment(attachmentId: string): Promise<ProjectState> {
+  const session = await getSession();
+  if (!session) return { error: "Not authenticated" };
+  const att = await prisma.attachment.findFirst({
+    where: {
+      id: attachmentId,
+      OR: [
+        { task: { project: { companyId: session.companyId } } },
+        { project: { companyId: session.companyId } },
+      ],
+    },
+    select: { id: true, fileKey: true, taskId: true, projectId: true },
+  });
+  if (!att) return { error: "Attachment not found" };
+
+  // Task attachments: anyone who can edit the task. Project attachments: project:manage.
+  if (att.taskId) {
+    if (!(await canEditTask(session, att.taskId))) return { error: "No access" };
+  } else if (att.projectId) {
+    const canManage = await hasPermission(session.companyId, session.role, "project:manage");
+    if (!canManage || !(await ownsProject(session.companyId, att.projectId))) return { error: "No access" };
+  } else {
+    return { error: "No access" };
+  }
+
+  await prisma.attachment.delete({ where: { id: att.id } });
+  await deleteUpload(att.fileKey);
+  if (att.taskId) revalidatePath(`/tasks/${att.taskId}`);
+  if (att.projectId) revalidatePath(`/projects/${att.projectId}`);
+  return { ok: true };
 }
 
 export async function updateTaskStatus(taskId: string, status: TaskStatus): Promise<ProjectState> {
@@ -448,11 +488,12 @@ export async function deleteTask(taskId: string): Promise<ProjectState> {
 
   // Remove every child row first (FKs), then the task itself.
   await prisma.task.updateMany({ where: { parentTaskId: taskId }, data: { parentTaskId: null } });
-  await prisma.taskDependency.deleteMany({ where: { OR: [{ taskId }, { dependsOnId: taskId }] } });
   await prisma.taskTimer.deleteMany({ where: { taskId } });
   await prisma.timeEntry.deleteMany({ where: { taskId } });
   await prisma.checklistItem.deleteMany({ where: { taskId } });
+  const atts = await prisma.attachment.findMany({ where: { taskId }, select: { fileKey: true } });
   await prisma.attachment.deleteMany({ where: { taskId } });
+  for (const a of atts) await deleteUpload(a.fileKey);
   await prisma.taskAssignee.deleteMany({ where: { taskId } });
   await prisma.comment.deleteMany({ where: { taskId } });
   await prisma.task.delete({ where: { id: taskId } });
@@ -515,33 +556,16 @@ export async function addComment(taskId: string, body: string): Promise<ProjectS
 }
 
 // ---- Task checklist (creator/assignee or manager) -------------------------
-type Session = NonNullable<Awaited<ReturnType<typeof getSession>>>;
-
-async function canEditTask(session: Session, taskId: string): Promise<boolean> {
-  const task = await prisma.task.findFirst({
-    where: { id: taskId, project: { companyId: session.companyId } },
-    select: { assignees: { select: { employeeId: true } } },
-  });
-  if (!task) return false;
-  const isManager = await hasPermission(session.companyId, session.role, "task:manage");
-  const isAssignee =
-    !!session.employeeId && task.assignees.some((a) => a.employeeId === session.employeeId);
-  return isManager || isAssignee;
-}
+// The access check (canEditTask) and toggle (toggleChecklistItemFor) live in
+// lib/projects/task-access.ts so the extension API can reuse them; the Server
+// Actions below add web revalidation.
 
 export async function toggleChecklistItem(itemId: string, isDone: boolean): Promise<ProjectState> {
   const session = await getSession();
   if (!session) return { error: "Not authenticated" };
-  const item = await prisma.checklistItem.findFirst({
-    where: { id: itemId, task: { project: { companyId: session.companyId } } },
-    select: { taskId: true, text: true },
-  });
-  if (!item) return { error: "Item not found" };
-  if (!(await canEditTask(session, item.taskId))) return { error: "No access" };
-  await prisma.checklistItem.update({ where: { id: itemId }, data: { isDone } });
-  await logTaskActivity(session, item.taskId, `${isDone ? "checked" : "unchecked"} '${item.text}'`);
-  revalidatePath(`/tasks/${item.taskId}`);
-  return { ok: true };
+  const res = await toggleChecklistItemFor(session, itemId, isDone);
+  if (res.taskId) revalidatePath(`/tasks/${res.taskId}`);
+  return res.error ? { error: res.error } : { ok: true };
 }
 
 export async function addChecklistItem(
@@ -578,82 +602,4 @@ export async function removeChecklistItem(itemId: string): Promise<ProjectState>
   return { ok: true };
 }
 
-// ---- Task dependencies ----------------------------------------------------
-export async function addTaskDependency(taskId: string, dependsOnId: string): Promise<ProjectState> {
-  const session = await requireCapability("task:manage");
-  if (taskId === dependsOnId) return { error: "A task can't depend on itself" };
-  const tasks = await prisma.task.findMany({
-    where: { id: { in: [taskId, dependsOnId] }, project: { companyId: session.companyId } },
-    select: { id: true, projectId: true },
-  });
-  if (tasks.length !== 2) return { error: "Task not found" };
-  if (tasks[0].projectId !== tasks[1].projectId) return { error: "Tasks must be in the same project" };
-  const reverse = await prisma.taskDependency.findFirst({ where: { taskId: dependsOnId, dependsOnId: taskId }, select: { id: true } });
-  if (reverse) return { error: "That would create a circular dependency" };
-  try {
-    await prisma.taskDependency.create({ data: { taskId, dependsOnId } });
-  } catch {
-    return { error: "That dependency already exists" };
-  }
-  revalidatePath(`/tasks/${taskId}`);
-  return { ok: true };
-}
-
-export async function removeTaskDependency(taskId: string, dependsOnId: string): Promise<ProjectState> {
-  const session = await requireCapability("task:manage");
-  await prisma.taskDependency.deleteMany({
-    where: { taskId, dependsOnId, task: { project: { companyId: session.companyId } } },
-  });
-  revalidatePath(`/tasks/${taskId}`);
-  return { ok: true };
-}
-
-// ---- Milestones -----------------------------------------------------------
-const MilestoneSchema = z.object({
-  projectId: z.string().min(1),
-  name: z.string().trim().min(1, "Name is required").max(120),
-  dueDate: z.string().optional().or(z.literal("")),
-});
-
-export async function createMilestone(_prev: ProjectState, formData: FormData): Promise<ProjectState> {
-  const session = await requireCapability("project:manage");
-  const parsed = MilestoneSchema.safeParse(Object.fromEntries(formData));
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
-  const d = parsed.data;
-  if (!(await ownsProject(session.companyId, d.projectId))) return { error: "Project not found" };
-  await prisma.milestone.create({
-    data: { projectId: d.projectId, name: d.name, dueDate: d.dueDate ? dateAtUTC(d.dueDate) : null },
-  });
-  revalidatePath(`/projects/${d.projectId}`);
-  return { ok: true };
-}
-
-export async function deleteMilestone(id: string): Promise<ProjectState> {
-  const session = await requireCapability("project:manage");
-  const ms = await prisma.milestone.findFirst({
-    where: { id, project: { companyId: session.companyId } },
-    select: { id: true, projectId: true },
-  });
-  if (!ms) return { error: "Milestone not found" };
-  await prisma.task.updateMany({ where: { milestoneId: id }, data: { milestoneId: null } });
-  await prisma.milestone.delete({ where: { id } });
-  revalidatePath(`/projects/${ms.projectId}`);
-  return { ok: true };
-}
-
-export async function setTaskMilestone(taskId: string, milestoneId: string | null): Promise<ProjectState> {
-  const session = await requireCapability("task:manage");
-  const task = await prisma.task.findFirst({
-    where: { id: taskId, project: { companyId: session.companyId } },
-    select: { projectId: true },
-  });
-  if (!task) return { error: "Task not found" };
-  if (milestoneId) {
-    const ms = await prisma.milestone.findFirst({ where: { id: milestoneId, projectId: task.projectId }, select: { id: true } });
-    if (!ms) return { error: "Invalid milestone" };
-  }
-  await prisma.task.update({ where: { id: taskId }, data: { milestoneId } });
-  revalidatePath(`/tasks/${taskId}`);
-  revalidatePath(`/projects/${task.projectId}`);
-  return { ok: true };
-}
+// (Task milestones were removed.)

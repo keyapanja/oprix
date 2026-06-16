@@ -13,9 +13,9 @@ const FEATURES = [
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ set?: string }>;
+  searchParams: Promise<{ set?: string; next?: string }>;
 }) {
-  const { set } = await searchParams;
+  const { set, next } = await searchParams;
   return (
     <main className="grid min-h-dvh lg:grid-cols-2">
       {/* Brand hero */}
@@ -77,7 +77,7 @@ export default async function LoginPage({
               Password set! You can sign in now.
             </div>
           )}
-          <LoginForm />
+          <LoginForm next={next} />
         </div>
       </div>
     </main>

@@ -8,6 +8,7 @@ import { Icon } from "@/components/ui/icons";
 export type KbItem = {
   id: string;
   title: string;
+  externalUrl: string | null;
   keywords: string | null;
   projectName: string | null;
   deptName: string | null;
@@ -60,33 +61,45 @@ export function KbList({ items }: { items: KbItem[] }) {
           <div key={dept}>
             <h2 className="mb-2 px-1 text-xs font-semibold uppercase tracking-wider text-faint">{dept}</h2>
             <Card className="divide-y divide-line overflow-hidden">
-              {list.map((a) => (
-                <Link
-                  key={a.id}
-                  href={`/knowledge-base/${a.id}`}
-                  className="flex items-center gap-3 px-5 py-3.5 transition-colors hover:bg-canvas"
-                >
-                  <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-accent-strong">
-                    <Icon name="book" className="size-4" />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-medium text-content">{a.title}</span>
-                      {a.projectName && (
-                        <span className="inline-flex items-center gap-1 rounded bg-brand-500/10 px-1.5 py-0.5 text-[10px] font-medium text-brand-600 dark:text-brand-300">
-                          <Icon name="briefcase" className="size-2.5" />
-                          {a.projectName}
-                        </span>
-                      )}
-                      {a.serviceName && (
-                        <span className="rounded bg-canvas px-1.5 py-0.5 text-[10px] font-medium text-muted">{a.serviceName}</span>
-                      )}
+              {list.map((a) => {
+                const isExternal = !!a.externalUrl;
+                const cls = "flex items-center gap-3 px-5 py-3.5 transition-colors hover:bg-canvas";
+                const inner = (
+                  <>
+                    <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-accent-strong">
+                      <Icon name={isExternal ? "externalLink" : "book"} className="size-4" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium text-content">{a.title}</span>
+                        {a.projectName && (
+                          <span className="inline-flex items-center gap-1 rounded bg-brand-500/10 px-1.5 py-0.5 text-[10px] font-medium text-brand-600 dark:text-brand-300">
+                            <Icon name="briefcase" className="size-2.5" />
+                            {a.projectName}
+                          </span>
+                        )}
+                        {a.serviceName && (
+                          <span className="rounded bg-canvas px-1.5 py-0.5 text-[10px] font-medium text-muted">{a.serviceName}</span>
+                        )}
+                        {isExternal && (
+                          <span className="rounded bg-canvas px-1.5 py-0.5 text-[10px] font-medium text-faint">External link</span>
+                        )}
+                      </div>
+                      <p className="mt-0.5 text-xs text-faint">Updated by {a.updatedBy} · {a.updatedAt}</p>
                     </div>
-                    <p className="mt-0.5 text-xs text-faint">Updated by {a.updatedBy} · {a.updatedAt}</p>
-                  </div>
-                  <Icon name="chevronRight" className="size-4 shrink-0 text-faint" />
-                </Link>
-              ))}
+                    <Icon name={isExternal ? "externalLink" : "chevronRight"} className="size-4 shrink-0 text-faint" />
+                  </>
+                );
+                return isExternal ? (
+                  <a key={a.id} href={a.externalUrl!} target="_blank" rel="noopener noreferrer" className={cls}>
+                    {inner}
+                  </a>
+                ) : (
+                  <Link key={a.id} href={`/knowledge-base/${a.id}`} className={cls}>
+                    {inner}
+                  </Link>
+                );
+              })}
             </Card>
           </div>
         ))

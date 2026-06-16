@@ -9,9 +9,10 @@ import { humanizeEnum, formatDate } from "@/lib/format";
 import { PRIORITY_TONE } from "@/lib/status";
 import { KanbanBoard } from "@/components/projects/kanban-board";
 import { ProjectStatusControl } from "@/components/projects/project-status";
+import { ProjectEdit } from "@/components/projects/project-edit";
 import { ProjectServices } from "@/components/projects/project-services";
+import { AttachmentsPanel } from "@/components/attachments/attachments-panel";
 import { DeliverablesPanel } from "@/components/projects/deliverables-panel";
-import { MilestonesPanel } from "@/components/projects/milestones-panel";
 import { BackLink } from "@/components/ui/back-link";
 import type { KanbanTask } from "@/lib/projects/actions";
 
@@ -25,7 +26,7 @@ export default async function ProjectDetailPage({
   const { id } = await params;
   const session = await requirePage("project:manage");
 
-  const [project, employees, allServices, milestones] = await Promise.all([
+  const [project, allCategories] = await Promise.all([
     prisma.project.findFirst({
       where: { id, companyId: session.companyId, deletedAt: null },
       include: {
@@ -35,9 +36,12 @@ export default async function ProjectDetailPage({
           select: {
             id: true,
             serviceId: true,
-            primaryAssigneeId: true,
-            service: { select: { name: true } },
-            checklist: { orderBy: { orderIndex: "asc" }, select: { id: true, text: true } },
+            service: {
+              select: {
+                name: true,
+                children: { orderBy: { name: "asc" }, select: { id: true, name: true } },
+              },
+            },
           },
         },
         tasks: {
@@ -55,37 +59,24 @@ export default async function ProjectDetailPage({
           orderBy: { submittedAt: "desc" },
           select: { id: true, name: true, description: true, link: true, status: true, feedback: true },
         },
+        attachments: {
+          orderBy: { createdAt: "desc" },
+          select: { id: true, fileName: true, mimeType: true, sizeBytes: true, createdAt: true },
+        },
       },
     }),
-    prisma.employee.findMany({
-      where: { companyId: session.companyId, deletedAt: null },
-      orderBy: { fullName: "asc" },
-      select: { id: true, fullName: true },
-    }),
+    // Only top-level categories can be linked to a project.
     prisma.service.findMany({
-      where: { companyId: session.companyId },
+      where: { companyId: session.companyId, parentId: null },
       orderBy: { name: "asc" },
       select: { id: true, name: true },
-    }),
-    prisma.milestone.findMany({
-      where: { projectId: id },
-      orderBy: [{ dueDate: "asc" }, { id: "asc" }],
-      select: { id: true, name: true, dueDate: true, tasks: { select: { status: true } } },
     }),
   ]);
 
   if (!project) notFound();
 
   const usedServiceIds = new Set(project.services.map((ps) => ps.serviceId));
-  const available = allServices.filter((s) => !usedServiceIds.has(s.id));
-
-  const milestoneRows = milestones.map((m) => ({
-    id: m.id,
-    name: m.name,
-    dueDate: m.dueDate ? m.dueDate.toISOString().slice(0, 10) : null,
-    done: m.tasks.filter((t) => t.status === "COMPLETED").length,
-    total: m.tasks.length,
-  }));
+  const available = allCategories.filter((s) => !usedServiceIds.has(s.id));
 
   const initialTasks: KanbanTask[] = project.tasks.map((t) => ({
     id: t.id,
@@ -122,6 +113,16 @@ export default async function ProjectDetailPage({
           <div className="flex items-center gap-2">
             <Badge tone={PRIORITY_TONE[project.priority]}>{humanizeEnum(project.priority)}</Badge>
             <ProjectStatusControl id={project.id} status={project.status} />
+            <ProjectEdit
+              projectId={project.id}
+              initial={{
+                name: project.name,
+                description: project.description ?? "",
+                priority: project.priority,
+                startDate: project.startDate ? project.startDate.toISOString().slice(0, 10) : "",
+                dueDate: project.dueDate ? project.dueDate.toISOString().slice(0, 10) : "",
+              }}
+            />
           </div>
         </div>
 
@@ -141,21 +142,38 @@ export default async function ProjectDetailPage({
         projectId={project.id}
         items={project.services.map((ps) => ({
           id: ps.id,
-          serviceName: ps.service.name,
-          primaryAssigneeId: ps.primaryAssigneeId,
-          checklist: ps.checklist,
+          categoryName: ps.service.name,
+          subcategories: ps.service.children,
         }))}
         available={available}
-        employees={employees.map((e) => ({ id: e.id, name: e.fullName }))}
       />
 
-      <MilestonesPanel projectId={project.id} milestones={milestoneRows} />
+      <Card className="mb-6">
+        <div className="border-b border-line px-5 py-3.5">
+          <h3 className="text-sm font-semibold text-content">Attachments</h3>
+        </div>
+        <div className="p-5">
+          <AttachmentsPanel
+            uploadUrl={`/api/projects/${project.id}/attachments`}
+            canEdit
+            initial={project.attachments.map((a) => ({
+              id: a.id,
+              fileName: a.fileName,
+              mimeType: a.mimeType,
+              sizeBytes: a.sizeBytes,
+              createdAt: a.createdAt.toISOString(),
+            }))}
+          />
+        </div>
+      </Card>
 
       {project.client && <DeliverablesPanel projectId={project.id} items={project.deliverables} />}
 
       <KanbanBoard
         projectId={project.id}
-        services={project.services.map((ps) => ({ id: ps.serviceId, name: ps.service.name }))}
+        services={project.services.flatMap((ps) =>
+          ps.service.children.map((sub) => ({ id: sub.id, name: `${ps.service.name} › ${sub.name}` })),
+        )}
         initialTasks={initialTasks}
       />
     </div>

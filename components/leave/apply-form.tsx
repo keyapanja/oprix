@@ -16,6 +16,8 @@ type Balance = {
   remaining: number;
   allowance: number;
   period: "MONTH" | "YEAR";
+  unlimited: boolean;
+  used: number;
 };
 
 export function ApplyForm({
@@ -66,9 +68,15 @@ export function ApplyForm({
   }, [start, end, singleDay, half]);
 
   const periodWord = selected?.period === "MONTH" ? "month" : "year";
-  const exhausted = kind === "LEAVE" && !!selected && selected.remaining <= 0;
+  // Unlimited types have no fixed cap, so they're never exhausted / over balance.
+  const exhausted =
+    kind === "LEAVE" && !!selected && !selected.unlimited && selected.remaining <= 0;
   const overBalance =
-    kind === "LEAVE" && !!selected && requestedDays > 0 && requestedDays > selected.remaining;
+    kind === "LEAVE" &&
+    !!selected &&
+    !selected.unlimited &&
+    requestedDays > 0 &&
+    requestedDays > selected.remaining;
   const blocked = exhausted || overBalance;
 
   const form = (
@@ -115,7 +123,9 @@ export function ApplyForm({
               />
               {selected && (
                 <p className={cn("mt-1.5 text-xs font-medium", exhausted ? "text-red-600 dark:text-red-400" : "text-accent-strong")}>
-                  {selected.remaining} of {selected.allowance} days remaining (per {periodWord})
+                  {selected.unlimited
+                    ? `No fixed limit · ${selected.used} used this ${periodWord}`
+                    : `${selected.remaining} of ${selected.allowance} days remaining (per ${periodWord})`}
                 </p>
               )}
             </Field>

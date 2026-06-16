@@ -34,14 +34,25 @@ const homeFor = (role: string) => (role === "CLIENT" ? "/portal" : "/dashboard")
 
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
+
+  // The extension API authenticates with bearer tokens (no session cookie) and
+  // sets its own CORS — let it through untouched, including OPTIONS preflight.
+  // Without this, no-cookie API calls would be 302'd to /login.
+  if (pathname.startsWith("/api/ext/")) {
+    return NextResponse.next();
+  }
+
   const isPublic = PUBLIC_PATHS.some((p) => pathname.startsWith(p));
   const session = await readSession(req);
 
-  // Unauthenticated → bounce to login (preserve intended destination).
+  // Unauthenticated → bounce to login (preserve the FULL intended destination,
+  // query included — the extension connect flow needs its params back).
   if (!session && !isPublic) {
+    const dest = pathname + req.nextUrl.search;
     const url = req.nextUrl.clone();
     url.pathname = "/login";
-    if (pathname !== "/") url.searchParams.set("next", pathname);
+    url.search = "";
+    if (pathname !== "/") url.searchParams.set("next", dest);
     return NextResponse.redirect(url);
   }
 

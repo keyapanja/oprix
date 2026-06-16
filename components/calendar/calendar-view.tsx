@@ -6,6 +6,7 @@ import type { MonthData } from "@/lib/calendar/data";
 import { Card } from "@/components/ui/card";
 import { Icon } from "@/components/ui/icons";
 import { DateActionModal } from "@/components/calendar/date-action-modal";
+import { AnnouncementActions } from "@/components/calendar/announcement-actions";
 import { cn } from "@/lib/cn";
 
 type Balance = {
@@ -14,6 +15,8 @@ type Balance = {
   remaining: number;
   allowance: number;
   period: "MONTH" | "YEAR";
+  unlimited: boolean;
+  used: number;
 };
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -37,6 +40,8 @@ export function CalendarView({
   canManage,
   canApplyLeave,
   balances,
+  currentUserId,
+  isSuperAdmin,
 }: {
   ym: string;
   data: MonthData;
@@ -45,6 +50,8 @@ export function CalendarView({
   canManage: boolean;
   canApplyLeave: boolean;
   balances: Balance[];
+  currentUserId: string;
+  isSuperAdmin: boolean;
 }) {
   const router = useRouter();
   const go = (next: string) => router.push(`/calendar?ym=${next}`);
@@ -206,16 +213,20 @@ export function CalendarView({
               <p className="text-sm text-muted">No announcements this month.</p>
             ) : (
               <ul className="space-y-3">
-                {data.announcements.map((a) => (
-                  <li key={a.id}>
-                    <div className="flex items-center gap-2">
-                      <span className="size-2 rounded-full bg-amber-500" />
-                      <p className="text-sm font-medium text-content">{a.title}</p>
-                      <span className="ml-auto text-xs text-faint">{a.dateISO.slice(8)}</span>
-                    </div>
-                    {a.body && <p className="mt-0.5 pl-4 text-sm text-muted">{a.body}</p>}
-                  </li>
-                ))}
+                {data.announcements.map((a) => {
+                  const canEdit = isSuperAdmin || a.authorId === currentUserId;
+                  return (
+                    <li key={a.id}>
+                      <div className="flex items-center gap-2">
+                        <span className="size-2 shrink-0 rounded-full bg-amber-500" />
+                        <p className="text-sm font-medium text-content">{a.title}</p>
+                        <span className="ml-auto text-xs text-faint">{a.dateISO.slice(8)}</span>
+                        {canEdit && <AnnouncementActions announcement={a} />}
+                      </div>
+                      {a.body && <p className="mt-0.5 pl-4 text-sm text-muted">{a.body}</p>}
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </div>

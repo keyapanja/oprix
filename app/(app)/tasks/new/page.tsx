@@ -10,33 +10,45 @@ export const metadata: Metadata = { title: "New task · Operix" };
 export default async function NewTaskPage() {
   const session = await requirePage("task:manage");
 
-  const [projects, employees] = await Promise.all([
+  const [projects, departments, employees] = await Promise.all([
     prisma.project.findMany({
       where: { companyId: session.companyId, deletedAt: null },
       orderBy: { createdAt: "desc" },
       select: {
         id: true,
         name: true,
+        // A project links categories; tasks pick one of their sub-categories.
         services: {
+          where: { service: { parentId: null } },
           orderBy: { service: { name: "asc" } },
           select: {
-            serviceId: true,
-            primaryAssigneeId: true,
             service: {
               select: {
                 name: true,
-                checklistTemplate: { orderBy: { orderIndex: "asc" }, select: { text: true } },
+                children: {
+                  orderBy: { name: "asc" },
+                  select: {
+                    id: true,
+                    name: true,
+                    departmentId: true,
+                    checklistTemplate: { orderBy: { orderIndex: "asc" }, select: { text: true } },
+                  },
+                },
               },
             },
-            checklist: { orderBy: { orderIndex: "asc" }, select: { text: true } },
           },
         },
       },
     }),
+    prisma.department.findMany({
+      where: { companyId: session.companyId },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
     prisma.employee.findMany({
       where: { companyId: session.companyId, deletedAt: null },
       orderBy: { fullName: "asc" },
-      select: { id: true, fullName: true },
+      select: { id: true, fullName: true, departmentId: true },
     }),
   ]);
 
@@ -50,15 +62,18 @@ export default async function NewTaskPage() {
         projects={projects.map((p) => ({
           id: p.id,
           name: p.name,
-          services: p.services.map((s) => ({
-            id: s.serviceId,
-            name: s.service.name,
-            primaryAssigneeId: s.primaryAssigneeId,
-            // Project-specific checklist if present, else the service default template.
-            checklist: (s.checklist.length ? s.checklist : s.service.checklistTemplate).map((c) => c.text),
-          })),
+          subcategories: p.services.flatMap((ps) =>
+            ps.service.children.map((sub) => ({
+              id: sub.id,
+              name: sub.name,
+              categoryName: ps.service.name,
+              departmentId: sub.departmentId,
+              checklist: sub.checklistTemplate.map((c) => c.text),
+            })),
+          ),
         }))}
-        employees={employees.map((e) => ({ id: e.id, name: e.fullName }))}
+        departments={departments}
+        employees={employees.map((e) => ({ id: e.id, name: e.fullName, departmentId: e.departmentId }))}
       />
     </div>
   );
