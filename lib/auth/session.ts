@@ -3,6 +3,7 @@ import { cache } from "react";
 import { cookies } from "next/headers";
 import { SignJWT, jwtVerify } from "jose";
 import type { Role } from "@prisma/client";
+import { prisma } from "@/lib/db";
 
 // ---------------------------------------------------------------------------
 // Session = a signed JWT in an httpOnly cookie. We only need email/password
@@ -50,19 +51,32 @@ export const getSession = cache(async (): Promise<SessionUser | null> => {
   const store = await cookies();
   const token = store.get(COOKIE_NAME)?.value;
   if (!token) return null;
-  try {
-    const { payload } = await jwtVerify(token, secret());
-    return {
-      userId: payload.userId as string,
-      companyId: payload.companyId as string,
-      role: payload.role as Role,
-      email: payload.email as string,
-      employeeId: (payload.employeeId as string | null) ?? null,
-      clientId: (payload.clientId as string | null) ?? null,
-    };
-  } catch {
-    return null;
-  }
+
+  const verified = await jwtVerify(token, secret(), { algorithms: ["HS256"] }).catch(() => null);
+  if (!verified) return null;
+  const { payload } = verified;
+
+  const userId = payload.userId as string;
+  const companyId = payload.companyId as string;
+
+  // Re-check the account is still active and read the CURRENT role from the DB,
+  // so deactivation and role changes take effect immediately rather than only
+  // after the 7-day token expiry. getSession is request-cached (React cache),
+  // so this is at most one lookup per request.
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { isActive: true, role: true, companyId: true },
+  });
+  if (!user || !user.isActive || user.companyId !== companyId) return null;
+
+  return {
+    userId,
+    companyId,
+    role: user.role,
+    email: payload.email as string,
+    employeeId: (payload.employeeId as string | null) ?? null,
+    clientId: (payload.clientId as string | null) ?? null,
+  };
 });
 
 export async function destroySession(): Promise<void> {

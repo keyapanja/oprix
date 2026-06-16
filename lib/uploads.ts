@@ -41,3 +41,16 @@ export async function deleteUpload(key: string): Promise<void> {
     /* already gone — fine */
   }
 }
+
+const MIME_BY_EXT: Record<string, string> = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+  ".gif": "image/gif",
+};
+
+/** Best-effort content type from a stored key's extension (avatars/logos store no mime). */
+export function mimeFromKey(key: string): string {
+  return MIME_BY_EXT[path.extname(key).toLowerCase()] ?? "application/octet-stream";
+}

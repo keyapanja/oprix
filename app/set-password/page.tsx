@@ -8,9 +8,10 @@ export const metadata: Metadata = { title: "Set password · Operix" };
 export default async function SetPasswordPage({
   searchParams,
 }: {
-  searchParams: Promise<{ token?: string }>;
+  searchParams: Promise<{ token?: string; reset?: string }>;
 }) {
-  const { token } = await searchParams;
+  const { token, reset } = await searchParams;
+  const isReset = reset === "1";
 
   let valid = false;
   let email = "";
@@ -37,9 +38,12 @@ export default async function SetPasswordPage({
 
         {valid ? (
           <>
-            <h1 className="text-2xl font-bold tracking-tight text-content">Set your password</h1>
+            <h1 className="text-2xl font-bold tracking-tight text-content">
+              {isReset ? "Reset your password" : "Set your password"}
+            </h1>
             <p className="mb-6 mt-1.5 text-sm text-muted">
-              Welcome! Choose a password for <span className="font-medium text-content">{email}</span>.
+              {isReset ? "Choose a new password for " : "Welcome! Choose a password for "}
+              <span className="font-medium text-content">{email}</span>.
             </p>
             <SetPasswordForm token={token!} />
           </>
@@ -47,7 +51,7 @@ export default async function SetPasswordPage({
           <div className="rounded-2xl border border-line bg-surface p-6 text-center shadow-card">
             <h1 className="text-lg font-semibold text-content">Link invalid or expired</h1>
             <p className="mt-2 text-sm text-muted">
-              This setup link is no longer valid. Ask an administrator to re-invite you.
+              This link is no longer valid or has expired. Request a new one from the sign-in page.
             </p>
             <Link href="/login" className="mt-4 inline-block text-sm font-medium text-accent-strong hover:underline">
               Go to sign in →

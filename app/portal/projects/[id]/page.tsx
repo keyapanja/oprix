@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { requirePortal } from "@/lib/auth/guard";
 import { getClientProject, progressOf } from "@/lib/portal/data";
+import { safeHref } from "@/lib/url";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Icon } from "@/components/ui/icons";
@@ -92,7 +93,7 @@ export default async function PortalProjectDetailPage({ params }: { params: Prom
                 </div>
                 {t.finalLink && (
                   <a
-                    href={t.finalLink}
+                    href={safeHref(t.finalLink)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1.5 text-sm font-medium text-accent-strong hover:underline"

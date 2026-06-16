@@ -11,7 +11,7 @@ import { formatINR } from "@/lib/format";
 export const metadata: Metadata = { title: "Payroll report · Operix" };
 
 export default async function PayrollReportPage() {
-  const session = await requirePage("report:view");
+  const session = await requirePage("payroll:manage");
 
   const employees = await prisma.employee.findMany({
     where: { companyId: session.companyId, deletedAt: null },

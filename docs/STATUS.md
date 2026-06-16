@@ -19,7 +19,7 @@ _Last updated: 2026-06-16 (pm) — **Services are now categories → sub-categor
 
 ## Modules live (build-verified: `tsc` green + `next build` passes)
 - **Auth/RBAC** — login, logout, `proxy.ts` route guard (role-aware: CLIENT → `/portal`, staff → app), `/set-password`. Dynamic permissions (`RolePermission`, `lib/auth/permissions.ts`, **Organization → Access** matrix); Super Admin always full.
-- **Dashboard** — role-aware; punch in/out card (live timer, shift grace, late flag).
+- **Dashboard** — role-aware; punch in/out card (live timer, shift grace, late flag); greeting adapts to punch state (no "punch in" prompt once the day is done); **personal widgets** — your tasks due today + latest notifications (5, with "view all"). Greeting hour/date are company-tz-aware.
 - **Organization** — single **Company** tab (profile + sidebar branding; work shifts [**now editable**], locations, probation, day-before reminder), Departments, **Services (category → sub-category tree)**, Designations, Access matrix, Task access. A category carries the department; sub-categories inherit it and hold the checklist template tasks seed from.
 - **Employees** — directory, create/edit, profile, emergency contacts, email invite + resend.
 - **User profiles** — `/profile` (self) + `/people/[id]` (Active/Away badge). **Names across the app now link to `/people/[id]`** (monthly attendance, People report, task assignees, comment authors).
@@ -60,7 +60,7 @@ _Last updated: 2026-06-16 (pm) — **Services are now categories → sub-categor
 
 ## Key conventions / decisions
 - **Multi-tenant**: every tenant row carries `companyId`; all queries scope by it; server actions re-check ownership.
-- **No UI libraries** — charts, Markdown renderer, combobox, datepicker, modal, WYSIWYG, toast, confirm dialog all hand-rolled. Images (KB/profile/logo) are **URL-based** until file storage lands.
+- **No UI libraries** — charts, Markdown renderer, combobox, datepicker, modal, WYSIWYG, toast, confirm dialog all hand-rolled. **Profile avatars + the company logo upload to disk** (reserved `Employee.photoKey` / `Company.logoKey`, served via scoped `/api/people/[id]/avatar` + `/api/org/logo`, route URL stored in the existing `avatarUrl`/`logoUrl` so render sites are unchanged; shared `ImageUpload` component). KB article images remain URL-in-markdown. Avatars fall back to **first+last-name initials**.
 - **UI feedback**: use `toast` (`@/components/ui/toast`) + `confirmDialog` (`@/components/ui/confirm`) — never native `alert()`/`confirm()`.
 - **Times**: company-local wall-clock; 12-hour display; "today" via company timezone (`nowInZone`). **Money**: integer paise.
 - **Payroll**: statutory rates live in `lib/payroll/config.ts` (config, not magic numbers); calc is pure; company-level PF/ESI toggles; payslips are immutable frozen snapshots; LOP per-day = Gross ÷ 30.
@@ -70,15 +70,15 @@ _Last updated: 2026-06-16 (pm) — **Services are now categories → sub-categor
 - **Uploads on disk**: `uploads/` at repo root (gitignored); never store bytes in Postgres. Traversal-guarded keys (`lib/uploads.ts`); serving is auth + company-scoped. `Attachment` is polymorphic (`taskId` OR `projectId`); the `AttachmentsPanel` component is shared, parameterized by upload endpoint.
 
 ## Pending / what's left
-- **Auth & security (scoped, not built — see the session doc / scoping workflow):**
-  - Forgot-password / self-service reset — **no schema change** (reuses invite token + SMTP); **recommended before launch**.
+- **Auth & security:**
+  - Forgot-password / self-service reset — **✅ built** (`/forgot-password` → reset email → reuses `/set-password`; rides the existing `setupToken` mechanism, 1-hour expiry, no account enumeration; no schema change).
   - Active-session management — needs a `User.tokenVersion` column ("sign out everywhere") or a `Session` table (per-device list).
   - **SSO / Google — deferred until the site is live** (needs Google OAuth creds + the production redirect URL).
 - **Audit trail** for sensitive actions (payroll, permission edits, deletions) + viewer — scoped (extends `ActivityLog`).
 - **Data export/import** — bulk employee CSV import, company data export (GDPR/portability), soft-delete recovery (`deletedAt` trash/restore) — scoped.
 - **Form Builder** (planned next phase) — drag-drop forms (referral/feedback/onboarding/POSH), JSON storage, form-data reports.
-- **File uploads** — **task & project attachments now land on local disk** (`uploads/`, gitignored; `lib/uploads.ts`; POST `/api/tasks/[id]/attachments` + `/api/projects/[id]/attachments`; auth-gated GET `/api/files/[id]`; 100 MB/file cap; `Attachment` carries `taskId` OR `projectId`; bytes never in the DB; shared `AttachmentsPanel` UI). **On a multi-instance host this needs a shared volume or object storage (Supabase Storage / presigned).** Still unwired elsewhere: avatars/logos, employee docs, payslip PDFs, file deliverables.
-- **Scheduled jobs / cron** — none; reminders + late-check are lazy (page-load) triggers.
+- **File uploads** — **task & project attachments now land on local disk** (`uploads/`, gitignored; `lib/uploads.ts`; POST `/api/tasks/[id]/attachments` + `/api/projects/[id]/attachments`; auth-gated GET `/api/files/[id]`; 100 MB/file cap; `Attachment` carries `taskId` OR `projectId`; bytes never in the DB; shared `AttachmentsPanel` UI). **On a multi-instance host this needs a shared volume or object storage (Supabase Storage / presigned).** Profile avatars + company logo are also on disk now (reserved `photoKey`/`logoKey`). Still unwired elsewhere: employee docs, payslip PDFs, file deliverables.
+- **Scheduled jobs / cron** — **✅ endpoint built**: secured `GET/POST /api/cron` (`CRON_SECRET`, proxy-exempt) runs day-before reminders + late-login notices across all companies (`lib/cron/jobs.ts`, idempotent). **Still TODO: wire an external scheduler** (Windows Task Scheduler / system cron / cron-job.org / platform cron) to hit it ~hourly. The lazy page-load triggers remain as a fallback.
 - **Timesheet views/approval (Module 7)** — timer creates PENDING `TimeEntry` rows; no approval UI yet.
 - **Automated tests** — none (isolation/permission tests especially).
 - **Client Portal** — client-side live walkthrough (needs a real CLIENT login).
@@ -88,7 +88,8 @@ _Last updated: 2026-06-16 (pm) — **Services are now categories → sub-categor
 ## Go-live readiness (2026-06-15)
 - **`next build`** was green at 45 routes; now **44** after removing the Resource Allocation page (`/resource`) — source TypeScript clean (`tsc` green; the route-type validator regenerates on the next build). All routes are **dynamic/server-rendered** → deploy to a **Node host** (not static export). The 29 react-hooks lint warnings do **not** block the build.
 - **Before flipping live:** set host env vars (`DATABASE_URL`, `DIRECT_URL`, a fresh `AUTH_SECRET`, `SMTP_*`) and **`APP_URL` = the live domain** (invite/reset email links depend on it); clean test artifacts from the shared DB (a June payroll draft run, seeded KB articles, placeholder logo); confirm the company's PF/ESI toggle state (**PF was toggled OFF during LOP testing**).
-- **Recommended before real users:** build forgot-password reset; walk the Client Portal client-side end-to-end with a real CLIENT login.
+- **Recommended before real users:** wire the `/api/cron` scheduler; walk the Client Portal client-side end-to-end with a real CLIENT login. (Forgot-password reset is now built.)
+- **Pre-launch security pass (2026-06-16):** parallel module audit done; the 🔴 blockers are **fixed** — stored-XSS (KB markdown quote-escape + href; task `finalLink` http(s)-validated at store + `safeHref` at render; uploaded SVG neutralized via CSP `sandbox`+`nosniff` on serve routes + SVG rejected for avatars/logos), leave **self-approval** (can't approve own; HR step ≠ manager), salary-report **over-exposure** (`/reports/payroll` + the payroll KPI now require `payroll:manage`), and **immediate offboarding** (`getSession` re-checks `isActive` + reads current role, so deactivation/role-change apply at once). Remaining 🟡 fast-follow (not blockers): finalize timers on Kanban-move / multi-assignee / unassign; case-insensitive email on login+reset; manager-created leave balance check + duplicate/overlap guard; overnight punch-out; and (before the **extension** ships) CORS fail-closed + `/auth/login` rate-limit.
 
 ## Workflow caveats (Windows)
 - Dev server on **port 3000**; restart after **schema changes** (`npm run db:push`) and after **renaming/removing an exported symbol** (Turbopack stale-module error). Stop it before `db:push`/`next build` (it holds the engine DLL + `.next` → EPERM).

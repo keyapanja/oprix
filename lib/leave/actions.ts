@@ -270,10 +270,16 @@ export async function approveLeave(id: string): Promise<LeaveState> {
       status: true,
       startDate: true,
       endDate: true,
+      managerApprovedById: true,
       employee: { select: { user: { select: { id: true } } } },
     },
   });
   if (!req) return { error: "Request not found" };
+
+  // Segregation of duties: you can't approve your own leave request.
+  if (req.employee.user?.id === session.userId) {
+    return { error: "You can't approve your own leave request." };
+  }
 
   let newStatus: "MANAGER_APPROVED" | "HR_APPROVED";
   if (req.status === "PENDING") {
@@ -283,6 +289,10 @@ export async function approveLeave(id: string): Promise<LeaveState> {
       data: { status: newStatus, managerApprovedById: session.userId },
     });
   } else if (req.status === "MANAGER_APPROVED") {
+    // The final (HR) approval must be a different person than the manager step.
+    if (req.managerApprovedById === session.userId) {
+      return { error: "The final approval must be done by someone other than the manager who approved it." };
+    }
     newStatus = "HR_APPROVED";
     await prisma.leaveRequest.update({
       where: { id },

@@ -9,11 +9,11 @@ export type ProfileState = { ok?: boolean; error?: string };
 
 const ProfileSchema = z.object({
   nickname: z.string().trim().max(60).optional().or(z.literal("")),
-  avatarUrl: z.string().trim().url("Enter a valid image URL").max(500).optional().or(z.literal("")),
   bio: z.string().trim().max(500).optional().or(z.literal("")),
 });
 
-export type ProfileInput = { nickname?: string; avatarUrl?: string; bio?: string };
+// avatarUrl is managed by the upload route (POST/DELETE /api/profile/avatar), not here.
+export type ProfileInput = { nickname?: string; bio?: string };
 
 /** Any signed-in user can edit their own profile. */
 export async function updateMyProfile(input: ProfileInput): Promise<ProfileState> {
@@ -27,7 +27,6 @@ export async function updateMyProfile(input: ProfileInput): Promise<ProfileState
     where: { id: session.userId },
     data: {
       nickname: d.nickname || null,
-      avatarUrl: d.avatarUrl || null,
       bio: d.bio || null,
     },
   });

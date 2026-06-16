@@ -43,14 +43,14 @@ export function ProjectServices({
     });
   }
 
-  function remove(ps: PS) {
+  async function remove(ps: PS) {
+    const ok = await confirmDialog({
+      message: `Remove ${ps.categoryName} from this project?`,
+      tone: "danger",
+      confirmLabel: "Remove",
+    });
+    if (!ok) return;
     start(async () => {
-      const ok = await confirmDialog({
-        message: `Remove ${ps.categoryName} from this project?`,
-        tone: "danger",
-        confirmLabel: "Remove",
-      });
-      if (!ok) return;
       const res = await removeProjectService(ps.id);
       if (res.error) toast.error(res.error);
       else router.refresh();

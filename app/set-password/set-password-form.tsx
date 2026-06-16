@@ -3,7 +3,7 @@
 import { useActionState } from "react";
 import { setPasswordAction, type SetPasswordState } from "@/lib/auth/actions";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Field } from "@/components/ui/field";
 
 export function SetPasswordForm({ token }: { token: string }) {
@@ -21,10 +21,10 @@ export function SetPasswordForm({ token }: { token: string }) {
         </div>
       )}
       <Field label="New password" htmlFor="password" required>
-        <Input id="password" name="password" type="password" placeholder="••••••••" autoComplete="new-password" required />
+        <PasswordInput id="password" name="password" placeholder="••••••••" autoComplete="new-password" required />
       </Field>
       <Field label="Confirm password" htmlFor="confirm" required>
-        <Input id="confirm" name="confirm" type="password" placeholder="••••••••" autoComplete="new-password" required />
+        <PasswordInput id="confirm" name="confirm" placeholder="••••••••" autoComplete="new-password" required />
       </Field>
       <Button type="submit" className="w-full" disabled={pending}>
         {pending ? "Saving…" : "Set password & continue"}

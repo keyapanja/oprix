@@ -15,6 +15,7 @@ export function Topbar({
   email,
   role,
   name,
+  avatarName,
   avatarUrl,
   notifications,
   unread,
@@ -22,6 +23,7 @@ export function Topbar({
   email: string;
   role: Role;
   name: string;
+  avatarName: string;
   avatarUrl: string | null;
   notifications: ClientNote[];
   unread: number;
@@ -55,7 +57,7 @@ export function Topbar({
             onClick={() => setOpen((v) => !v)}
             className="flex items-center gap-2.5 rounded-xl p-1 pr-2 transition-colors hover:bg-canvas"
           >
-            <Avatar name={name} src={avatarUrl} size="sm" />
+            <Avatar name={avatarName} src={avatarUrl} size="sm" />
             <span className="hidden text-left sm:block">
               <span className="block max-w-[12rem] truncate text-sm font-medium leading-tight text-content">
                 {name}

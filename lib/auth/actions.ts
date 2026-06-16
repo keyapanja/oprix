@@ -1,10 +1,12 @@
 "use server";
 
 import { z } from "zod";
+import { randomBytes } from "crypto";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { verifyPassword, hashPassword } from "@/lib/auth/password";
 import { createSession, destroySession } from "@/lib/auth/session";
+import { appUrl, sendPasswordResetEmail } from "@/lib/email";
 
 const LoginSchema = z.object({
   email: z.string().email("Enter a valid email"),
@@ -110,7 +112,7 @@ export async function setPasswordAction(
     select: { id: true, setupTokenExpiresAt: true },
   });
   if (!user || !user.setupTokenExpiresAt || user.setupTokenExpiresAt < new Date()) {
-    return { error: "This link is invalid or has expired. Ask an admin to re-invite you." };
+    return { error: "This link is invalid or has expired. Request a new one." };
   }
 
   await prisma.user.update({
@@ -124,4 +126,54 @@ export async function setPasswordAction(
   });
 
   redirect("/login?set=1");
+}
+
+// ---- Forgot password (self-service reset) ---------------------------------
+const ForgotSchema = z.object({ email: z.string().email("Enter a valid email") });
+export type ForgotState = { ok?: boolean; error?: string };
+
+/**
+ * Starts a self-service reset: issues a short-lived setup token (the same
+ * mechanism invites use) and emails a reset link to /set-password. Always
+ * reports success so the form can't be used to discover which emails exist.
+ */
+export async function requestPasswordReset(
+  _prev: ForgotState,
+  formData: FormData,
+): Promise<ForgotState> {
+  const parsed = ForgotSchema.safeParse({ email: formData.get("email") });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Enter a valid email" };
+  const email = parsed.data.email.trim();
+
+  const user = await prisma.user.findFirst({
+    where: { email, isActive: true },
+    select: {
+      id: true,
+      company: { select: { name: true } },
+      employee: { select: { fullName: true } },
+      client: { select: { name: true } },
+    },
+  });
+
+  if (user) {
+    const token = randomBytes(32).toString("hex");
+    const expires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { setupToken: token, setupTokenExpiresAt: expires },
+    });
+    try {
+      await sendPasswordResetEmail({
+        to: email,
+        name: user.employee?.fullName ?? user.client?.name ?? email.split("@")[0],
+        companyName: user.company?.name ?? "Operix",
+        link: appUrl(`/set-password?token=${token}&reset=1`),
+      });
+    } catch (e) {
+      console.error("[reset] email failed:", e);
+    }
+  }
+
+  // Same response whether or not the account exists (no enumeration).
+  return { ok: true };
 }

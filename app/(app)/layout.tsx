@@ -55,7 +55,7 @@ export default async function AppLayout({
     }),
     prisma.user.findUnique({
       where: { id: session.userId },
-      select: { nickname: true, avatarUrl: true },
+      select: { nickname: true, avatarUrl: true, employee: { select: { fullName: true } } },
     }),
   ]);
 
@@ -104,6 +104,7 @@ export default async function AppLayout({
           email={session.email}
           role={session.role}
           name={me?.nickname || session.email}
+          avatarName={me?.employee?.fullName || me?.nickname || session.email}
           avatarUrl={me?.avatarUrl ?? null}
           notifications={notes}
           unread={unread}

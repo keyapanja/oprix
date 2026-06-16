@@ -7,11 +7,11 @@ import { Card } from "@/components/ui/card";
 import { Field } from "@/components/ui/field";
 import { Input, Textarea } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { ImageUpload } from "@/components/ui/image-upload";
 
 type FormState = {
   name: string;
   tagline: string;
-  logoUrl: string;
   businessType: string;
   website: string;
   email: string;
@@ -35,7 +35,6 @@ export function CompanyInfoForm({ company }: { company: CompanyInfo }) {
   const [form, setForm] = useState<FormState>({
     name: company.name,
     tagline: company.tagline ?? "",
-    logoUrl: company.logoUrl ?? "",
     businessType: company.businessType ?? "",
     website: company.website ?? "",
     email: company.email ?? "",
@@ -71,25 +70,27 @@ export function CompanyInfoForm({ company }: { company: CompanyInfo }) {
       </p>
 
       <div className="mt-5 grid gap-4 sm:grid-cols-2">
-        <div className="flex items-center gap-4 sm:col-span-2">
-          {form.logoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={form.logoUrl}
-              alt="Company logo"
-              className="size-14 shrink-0 rounded-xl object-cover ring-1 ring-inset ring-line"
-            />
-          ) : (
-            <span className="gradient-brand flex size-14 shrink-0 items-center justify-center rounded-xl text-xl font-bold text-white">
-              {(form.name || "?").slice(0, 1).toUpperCase()}
-            </span>
-          )}
-          <div className="flex-1">
-            <Field label="Company logo" htmlFor="ci-logo" hint="Shown in the sidebar — paste an image link (uploads come later)">
-              <Input id="ci-logo" value={form.logoUrl} onChange={set("logoUrl")} placeholder="https://…/logo.png" />
-            </Field>
-          </div>
-        </div>
+        <Field label="Company logo" className="sm:col-span-2">
+          <ImageUpload
+            endpoint="/api/org/logo"
+            hasImage={!!company.logoUrl}
+            preview={
+              company.logoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={company.logoUrl}
+                  alt="Company logo"
+                  className="size-14 shrink-0 rounded-xl object-cover ring-1 ring-inset ring-line"
+                />
+              ) : (
+                <span className="gradient-brand flex size-14 shrink-0 items-center justify-center rounded-xl text-xl font-bold text-white">
+                  {(form.name || "?").slice(0, 1).toUpperCase()}
+                </span>
+              )
+            }
+            hint="Shown in the sidebar — PNG, JPG or WEBP, up to 5 MB"
+          />
+        </Field>
         <Field label="Company name" htmlFor="ci-name" required className="sm:col-span-2">
           <Input id="ci-name" value={form.name} onChange={set("name")} placeholder="Acme Inc." />
         </Field>

@@ -214,7 +214,10 @@ export function CalendarView({
             ) : (
               <ul className="space-y-3">
                 {data.announcements.map((a) => {
-                  const canEdit = isSuperAdmin || a.authorId === currentUserId;
+                  // Author can manage their own; legacy ownerless rows (null author)
+                  // are manageable by any admin; Super Admins can manage any.
+                  const canEdit =
+                    canManage && (isSuperAdmin || a.authorId === currentUserId || a.authorId === null);
                   return (
                     <li key={a.id}>
                       <div className="flex items-center gap-2">

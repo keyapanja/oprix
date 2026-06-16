@@ -103,7 +103,9 @@ export async function updateAnnouncement(id: string, formData: FormData): Promis
     select: { authorId: true },
   });
   if (!ann) return { error: "Announcement not found" };
-  if (ann.authorId !== session.userId && session.role !== "SUPER_ADMIN") {
+  // Author-scoped, but legacy rows (null author, pre-authorId) are ownerless —
+  // any org:manage user (already required above) may manage those.
+  if (ann.authorId && ann.authorId !== session.userId && session.role !== "SUPER_ADMIN") {
     return { error: "Only the author can edit this announcement." };
   }
   const parsed = AnnouncementSchema.safeParse({
@@ -129,7 +131,9 @@ export async function deleteAnnouncement(id: string): Promise<CalendarState> {
     select: { authorId: true },
   });
   if (!ann) return { error: "Announcement not found" };
-  if (ann.authorId !== session.userId && session.role !== "SUPER_ADMIN") {
+  // Author-scoped, but legacy rows (null author, pre-authorId) are ownerless —
+  // any org:manage user (already required above) may manage those.
+  if (ann.authorId && ann.authorId !== session.userId && session.role !== "SUPER_ADMIN") {
     return { error: "Only the author can delete this announcement." };
   }
   await prisma.announcement.delete({ where: { id } });

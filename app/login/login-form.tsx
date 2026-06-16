@@ -1,9 +1,11 @@
 "use client";
 
 import { useActionState } from "react";
+import Link from "next/link";
 import { loginAction, type LoginState } from "@/lib/auth/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Field } from "@/components/ui/field";
 
 const initial: LoginState = {};
@@ -32,10 +34,9 @@ export function LoginForm({ next }: { next?: string }) {
       </Field>
 
       <Field label="Password" htmlFor="password" required>
-        <Input
+        <PasswordInput
           id="password"
           name="password"
-          type="password"
           autoComplete="current-password"
           placeholder="••••••••"
           required
@@ -45,6 +46,12 @@ export function LoginForm({ next }: { next?: string }) {
       <Button type="submit" className="w-full" disabled={pending}>
         {pending ? "Signing in…" : "Sign in"}
       </Button>
+
+      <p className="text-center text-sm text-muted">
+        <Link href="/forgot-password" className="font-medium text-accent-strong hover:underline">
+          Forgot your password?
+        </Link>
+      </p>
     </form>
   );
 }

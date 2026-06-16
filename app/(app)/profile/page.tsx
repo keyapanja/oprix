@@ -35,6 +35,7 @@ export default async function ProfilePage() {
   if (!user) return null;
 
   const displayName = user.nickname || user.employee?.fullName || user.email;
+  const fullName = user.employee?.fullName ?? displayName; // for avatar initials (first + last)
   const status = user.employee ? await employeeLiveStatus(user.employee.id, session.companyId) : null;
   const subtitle = user.employee
     ? [user.employee.designation?.name, user.employee.department?.name].filter(Boolean).join(" · ")
@@ -46,7 +47,7 @@ export default async function ProfilePage() {
       <Card className="p-6">
         <div className="mb-6 flex items-start justify-between gap-4 border-b border-line pb-5">
           <div className="flex items-center gap-4">
-            <Avatar name={displayName} src={user.avatarUrl} size="lg" status={status} />
+            <Avatar name={fullName} src={user.avatarUrl} size="lg" status={status} />
             <div className="min-w-0">
               <h2 className="text-lg font-semibold text-content">{displayName}</h2>
               <p className="text-sm text-muted">
@@ -60,7 +61,7 @@ export default async function ProfilePage() {
 
         <ProfileEditForm
           initial={{ nickname: user.nickname ?? "", avatarUrl: user.avatarUrl ?? "", bio: user.bio ?? "" }}
-          displayName={displayName}
+          fullName={fullName}
         />
       </Card>
     </div>

@@ -8,7 +8,7 @@ import { jwtVerify } from "jose";
 // first line — see lib/auth/guard.ts requirePortal + per-action clientId checks.)
 
 const COOKIE_NAME = "operix_session";
-const PUBLIC_PATHS = ["/login", "/set-password"];
+const PUBLIC_PATHS = ["/login", "/set-password", "/forgot-password"];
 
 function secret(): Uint8Array {
   return new TextEncoder().encode(process.env.AUTH_SECRET ?? "");
@@ -38,7 +38,7 @@ export async function proxy(req: NextRequest) {
   // The extension API authenticates with bearer tokens (no session cookie) and
   // sets its own CORS — let it through untouched, including OPTIONS preflight.
   // Without this, no-cookie API calls would be 302'd to /login.
-  if (pathname.startsWith("/api/ext/")) {
+  if (pathname.startsWith("/api/ext/") || pathname.startsWith("/api/cron")) {
     return NextResponse.next();
   }
 

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import type { TaskStatus } from "@prisma/client";
 import { requirePage } from "@/lib/auth/guard";
+import { hasPermission } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/db";
 import { nowInZone, dateAtUTC, shiftISO } from "@/lib/dates";
 import { humanizeEnum, formatINR } from "@/lib/format";
@@ -36,6 +37,8 @@ const LINKS = [
 export default async function ReportsOverviewPage() {
   const session = await requirePage("report:view");
   const companyId = session.companyId;
+  // Salary figures are payroll-sensitive — only show them to payroll managers.
+  const canPayroll = await hasPermission(companyId, session.role, "payroll:manage");
 
   const company = await prisma.company.findUnique({ where: { id: companyId }, select: { timezone: true } });
   const today = nowInZone(company?.timezone ?? "Asia/Kolkata").dateISO;
@@ -85,7 +88,9 @@ export default async function ReportsOverviewPage() {
     { label: "Open tasks", value: String(openTasks), icon: "check", color: "#8b5cf6" },
     { label: "Hours · this month", value: fmtH(monthHours), icon: "clock", color: "#06b6d4" },
     { label: "Completed · this month", value: String(completedThisMonth), icon: "check", color: "#22c55e" },
-    { label: "Monthly payroll", value: formatINR((salaryAgg._sum.basic ?? 0) + (salaryAgg._sum.hra ?? 0) + (salaryAgg._sum.specialAllowance ?? 0)), icon: "chart", color: "#ec4899" },
+    ...(canPayroll
+      ? [{ label: "Monthly payroll", value: formatINR((salaryAgg._sum.basic ?? 0) + (salaryAgg._sum.hra ?? 0) + (salaryAgg._sum.specialAllowance ?? 0)), icon: "chart", color: "#ec4899" }]
+      : []),
   ];
 
   const hoursItems = hoursByProject
@@ -123,7 +128,7 @@ export default async function ReportsOverviewPage() {
         </Section>
         <Section title="Detailed reports">
           <div className="grid gap-2">
-            {LINKS.map((l) => (
+            {LINKS.filter((l) => canPayroll || l.href !== "/reports/payroll").map((l) => (
               <Link key={l.href} href={l.href} className="flex items-center gap-3 rounded-xl px-3 py-2.5 ring-1 ring-inset ring-line transition-colors hover:bg-canvas">
                 <span className="flex size-9 items-center justify-center rounded-lg bg-accent-soft text-accent-strong">
                   <Icon name={l.icon} className="size-5" />

@@ -40,7 +40,7 @@ export default async function PersonProfilePage({ params }: { params: Promise<{ 
       </div>
       <Card className="p-6">
         <div className="flex items-start gap-5">
-          <Avatar name={displayName} src={employee.user?.avatarUrl} size="xl" status={status} />
+          <Avatar name={employee.fullName} src={employee.user?.avatarUrl} size="xl" status={status} />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-3">
               <h1 className="text-2xl font-bold tracking-tight text-content">{displayName}</h1>

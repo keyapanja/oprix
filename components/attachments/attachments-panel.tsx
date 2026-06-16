@@ -63,14 +63,14 @@ export function AttachmentsPanel({
     }
   }
 
-  function onDelete(att: Att) {
+  async function onDelete(att: Att) {
+    const ok = await confirmDialog({
+      message: `Delete "${att.fileName}"? This can't be undone.`,
+      tone: "danger",
+      confirmLabel: "Delete",
+    });
+    if (!ok) return;
     start(async () => {
-      const ok = await confirmDialog({
-        message: `Delete "${att.fileName}"? This can't be undone.`,
-        tone: "danger",
-        confirmLabel: "Delete",
-      });
-      if (!ok) return;
       const res = await deleteAttachment(att.id);
       if (res.error) {
         toast.error(res.error);

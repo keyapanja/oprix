@@ -4,6 +4,7 @@ import type { SessionUser } from "@/lib/auth/session";
 import { hasPermission } from "@/lib/auth/permissions";
 import { logTaskActivity, actorLabel } from "@/lib/activity";
 import { finalizeTaskTimer } from "@/lib/timer/finalize";
+import { normalizeHttpUrl } from "@/lib/url";
 
 // Session-agnostic "submit for review" — shared by the web Server Action
 // (lib/tasks/workflow.ts) and the extension API. The worker submits a final
@@ -39,9 +40,11 @@ export async function submitForReviewFor(
   }
   const link = finalLink.trim();
   if (!link) return { error: "Add the final output / preview link before submitting." };
+  const safeLink = normalizeHttpUrl(link);
+  if (!safeLink) return { error: "Enter a valid link (http:// or https://)." };
 
   await finalizeTaskTimer(session.companyId, session.userId, taskId);
-  await prisma.task.update({ where: { id: taskId }, data: { status: "REVIEW", finalLink: link } });
+  await prisma.task.update({ where: { id: taskId }, data: { status: "REVIEW", finalLink: safeLink } });
 
   const actor = await actorLabel(session.userId);
   if (task.createdById && task.createdById !== session.userId) {

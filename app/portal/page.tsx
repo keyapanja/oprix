@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requirePortal } from "@/lib/auth/guard";
+import { safeHref } from "@/lib/url";
 import {
   getPortalSummary,
   listClientProjects,
@@ -78,7 +79,7 @@ export default async function PortalHomePage() {
                 </div>
                 {t.finalLink && (
                   <a
-                    href={t.finalLink}
+                    href={safeHref(t.finalLink)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1.5 text-sm font-medium text-accent-strong hover:underline"

@@ -41,19 +41,23 @@ export function AnnouncementActions({ announcement }: { announcement: Ann }) {
     });
   }
 
-  function onDelete() {
+  async function onDelete() {
+    const ok = await confirmDialog({
+      message: `Delete "${announcement.title}"? This can't be undone.`,
+      tone: "danger",
+      confirmLabel: "Delete",
+    });
+    if (!ok) return;
     start(async () => {
-      const ok = await confirmDialog({
-        message: `Delete "${announcement.title}"? This can't be undone.`,
-        tone: "danger",
-        confirmLabel: "Delete",
-      });
-      if (!ok) return;
-      const res = await deleteAnnouncement(announcement.id);
-      if (res.error) toast.error(res.error);
-      else {
-        toast.success("Announcement deleted");
-        router.refresh();
+      try {
+        const res = await deleteAnnouncement(announcement.id);
+        if (res?.error) toast.error(res.error);
+        else {
+          toast.success("Announcement deleted");
+          router.refresh();
+        }
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Couldn't delete the announcement.");
       }
     });
   }

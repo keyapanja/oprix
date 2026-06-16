@@ -4,6 +4,7 @@ import { toast } from "@/components/ui/toast";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { TaskStatus } from "@prisma/client";
+import { safeHref } from "@/lib/url";
 import {
   submitForReview,
   requestChanges,
@@ -49,7 +50,7 @@ export function TaskWorkflow({
         <div>
           <p className="mb-1 text-xs font-medium uppercase tracking-wide text-faint">Submitted link</p>
           <a
-            href={finalLink}
+            href={safeHref(finalLink)}
             target="_blank"
             rel="noreferrer"
             className="flex items-center gap-2 rounded-lg bg-canvas px-3 py-2 text-sm font-medium text-accent-strong ring-1 ring-inset ring-line hover:bg-surface"

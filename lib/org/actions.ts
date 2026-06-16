@@ -205,7 +205,6 @@ export async function setMultiLocation(value: boolean): Promise<ActionState> {
 const CompanyInfoSchema = z.object({
   name: z.string().trim().min(1, "Company name is required").max(120),
   tagline: z.string().trim().max(120).optional().or(z.literal("")),
-  logoUrl: z.string().trim().url("Enter a valid logo image URL").max(500).optional().or(z.literal("")),
   businessType: z.string().trim().max(80).optional().or(z.literal("")),
   website: z.string().trim().url("Enter a valid website URL").max(200).optional().or(z.literal("")),
   email: z.string().trim().email("Enter a valid email").max(200).optional().or(z.literal("")),
@@ -213,10 +212,10 @@ const CompanyInfoSchema = z.object({
   address: z.string().trim().max(300).optional().or(z.literal("")),
 });
 
+// logoUrl is managed by the upload route (POST/DELETE /api/org/logo), not here.
 export type CompanyInfoInput = {
   name: string;
   tagline?: string;
-  logoUrl?: string;
   businessType?: string;
   website?: string;
   email?: string;
@@ -234,7 +233,6 @@ export async function updateCompanyInfo(input: CompanyInfoInput): Promise<Action
     data: {
       name: d.name,
       tagline: d.tagline || null,
-      logoUrl: d.logoUrl || null,
       businessType: d.businessType || null,
       website: d.website || null,
       email: d.email || null,

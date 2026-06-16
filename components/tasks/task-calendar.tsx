@@ -10,14 +10,14 @@ import { cn } from "@/lib/cn";
 
 const WD = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-// Colored bars by status (white text), Google-Calendar style.
-const STATUS_BAR: Record<string, string> = {
-  TODO: "bg-slate-500 hover:bg-slate-600",
-  IN_PROGRESS: "bg-blue-500 hover:bg-blue-600",
-  REVIEW: "bg-amber-500 hover:bg-amber-600",
-  REDO: "bg-rose-500 hover:bg-rose-600",
-  CLIENT_REVIEW: "bg-violet-500 hover:bg-violet-600",
-  COMPLETED: "bg-emerald-500 hover:bg-emerald-600",
+// Small status dot inside each (green, outlined) task strip.
+const STATUS_DOT: Record<string, string> = {
+  TODO: "bg-slate-400",
+  IN_PROGRESS: "bg-blue-500",
+  REVIEW: "bg-amber-500",
+  REDO: "bg-rose-500",
+  CLIENT_REVIEW: "bg-violet-500",
+  COMPLETED: "bg-emerald-500",
 };
 
 const HEADER_PX = 24; // room for the day number
@@ -171,8 +171,8 @@ export function TaskCalendar({ tasks, today }: { tasks: TaskRow[]; today: string
                     onClick={() => router.push(`/tasks/${t.id}`)}
                     title={t.name}
                     className={cn(
-                      "pointer-events-auto absolute flex items-center gap-1 overflow-hidden px-1.5 text-left text-[11px] font-medium text-white shadow-sm",
-                      STATUS_BAR[t.status] ?? "bg-slate-500 hover:bg-slate-600",
+                      "pointer-events-auto absolute flex items-center gap-1.5 overflow-hidden px-1.5 text-left text-[11px] font-medium",
+                      "bg-brand-500/10 text-brand-700 ring-1 ring-inset ring-brand-500/45 transition-colors hover:bg-brand-500/20 dark:text-brand-200",
                       s.isStart ? "rounded-l-md" : "rounded-l-none",
                       s.isEnd ? "rounded-r-md" : "rounded-r-none",
                     )}
@@ -183,9 +183,9 @@ export function TaskCalendar({ tasks, today }: { tasks: TaskRow[]; today: string
                       height: LANE_PX - 4,
                     }}
                   >
-                    {s.isStart && <span className="size-1.5 shrink-0 rounded-full bg-white/90" />}
+                    <span className={cn("size-1.5 shrink-0 rounded-full", STATUS_DOT[t.status] ?? "bg-slate-400")} />
                     <span className="truncate">{t.name}</span>
-                    {s.isEnd && <span className="ml-auto shrink-0 text-[9px] font-semibold uppercase tracking-wide opacity-80">Due</span>}
+                    {s.isEnd && <span className="ml-auto shrink-0 text-[9px] font-semibold uppercase tracking-wide text-brand-700/70 dark:text-brand-200/70">Due</span>}
                   </button>
                 );
               })}

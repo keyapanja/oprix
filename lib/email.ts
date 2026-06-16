@@ -74,6 +74,33 @@ export async function sendInviteEmail(opts: {
   });
 }
 
+export async function sendPasswordResetEmail(opts: {
+  to: string;
+  name: string;
+  companyName: string;
+  link: string;
+}): Promise<{ delivered: boolean }> {
+  const html = `
+  <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto">
+    <h2 style="color:#059669;margin:0 0 8px">Reset your password</h2>
+    <p style="color:#334155;font-size:14px;line-height:1.6">
+      Hi ${escapeHtml(opts.name)}, we got a request to reset your Operix password for
+      <strong>${escapeHtml(opts.companyName)}</strong>. Choose a new one below.
+    </p>
+    <p style="margin:24px 0">
+      <a href="${opts.link}" style="background:#059669;color:#fff;text-decoration:none;padding:12px 20px;border-radius:10px;font-size:14px;font-weight:600;display:inline-block">
+        Reset password
+      </a>
+    </p>
+    <p style="color:#94a3b8;font-size:12px;line-height:1.6">
+      This link expires in 1 hour. If you didn't request this, ignore this email — your password won't change.<br>
+      If the button doesn't work, copy this URL:<br>
+      <span style="color:#475569">${opts.link}</span>
+    </p>
+  </div>`;
+  return sendMail({ to: opts.to, subject: "Reset your Operix password", html });
+}
+
 function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!,
