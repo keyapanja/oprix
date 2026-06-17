@@ -7,8 +7,13 @@ import { NewTaskForm } from "@/components/tasks/new-task-form";
 
 export const metadata: Metadata = { title: "New task · Oprix" };
 
-export default async function NewTaskPage() {
+export default async function NewTaskPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ project?: string }>;
+}) {
   const session = await requirePage("task:manage");
+  const sp = await searchParams;
 
   const [projects, employees] = await Promise.all([
     prisma.project.findMany({
@@ -47,6 +52,9 @@ export default async function NewTaskPage() {
     }),
   ]);
 
+  // Pre-select the project when arriving from a project page (?project=…).
+  const initialProjectId = projects.some((p) => p.id === sp.project) ? sp.project! : "";
+
   return (
     <div className="mx-auto max-w-3xl">
       <div className="mb-4">
@@ -54,6 +62,7 @@ export default async function NewTaskPage() {
       </div>
       <PageHeader title="New task" description="Create a task under a project." />
       <NewTaskForm
+        initialProjectId={initialProjectId}
         projects={projects.map((p) => ({
           id: p.id,
           name: p.name,

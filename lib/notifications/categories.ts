@@ -61,12 +61,12 @@ export function noteHref(type: string, meta: unknown): string | null {
   if (cat === "Tasks" || cat === "Mentions") {
     return typeof m.taskId === "string" ? `/tasks/${m.taskId}` : "/tasks";
   }
-  if (cat === "Attendance") return "/attendance";
+  if (cat === "Attendance") return "/dashboard";
   if (cat === "Leave") return "/leave";
   if (cat === "Announcements") {
     return typeof m.announcementId === "string" ? `/announcements/${m.announcementId}` : "/calendar";
   }
-  if (cat === "Payroll") return typeof m.payslipId === "string" ? `/payslips/${m.payslipId}` : "/payslips";
+  if (cat === "Payroll") return typeof m.payslipId === "string" ? `/payslips/${m.payslipId}` : "/dashboard";
   // Client portal events (deliverable decisions, feedback) point at the project.
   if (cat === "Clients") return typeof m.projectId === "string" ? `/projects/${m.projectId}` : null;
   return null;

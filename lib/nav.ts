@@ -83,7 +83,6 @@ export const NAV: NavItem[] = [
       { label: "Settings", href: "/payroll/settings", action: "payroll:manage" },
     ],
   },
-  { label: "Payslips", href: "/payslips", icon: "download", action: "self:service" },
   { label: "Notifications", href: "/notifications", icon: "bell" },
   { label: "Calendar", href: "/calendar", icon: "calendarDays", action: "self:service" },
   {

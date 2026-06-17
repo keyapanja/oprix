@@ -180,13 +180,7 @@ export default async function ProjectDetailPage({
         {project.client && <DeliverablesPanel projectId={project.id} items={project.deliverables} />}
       </div>
 
-      <KanbanBoard
-        projectId={project.id}
-        services={project.services.flatMap((ps) =>
-          ps.service.children.map((sub) => ({ id: sub.id, name: `${ps.service.name} › ${sub.name}` })),
-        )}
-        initialTasks={initialTasks}
-      />
+      <KanbanBoard projectId={project.id} initialTasks={initialTasks} />
     </div>
   );
 }

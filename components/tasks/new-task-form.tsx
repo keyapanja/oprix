@@ -35,12 +35,14 @@ function fmtBytes(n: number): string {
 export function NewTaskForm({
   projects,
   employees,
+  initialProjectId = "",
 }: {
   projects: Proj[];
   employees: Emp[];
+  initialProjectId?: string;
 }) {
   const router = useRouter();
-  const [projectId, setProjectId] = useState("");
+  const [projectId, setProjectId] = useState(initialProjectId);
   const [serviceId, setServiceId] = useState(""); // a sub-category = "task type"
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");

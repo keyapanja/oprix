@@ -36,7 +36,7 @@ export default async function PayslipPage({ params }: { params: Promise<{ id: st
       <style dangerouslySetInnerHTML={{ __html: PRINT_CSS }} />
 
       <div className="mb-3 flex items-center justify-between no-print">
-        <BackLink href={canManage && slip.runStatus !== "PAID" ? "/payroll" : "/payslips"}>Back</BackLink>
+        <BackLink href={canManage ? "/payroll" : "/dashboard"}>Back</BackLink>
         <PrintButton />
       </div>
 
