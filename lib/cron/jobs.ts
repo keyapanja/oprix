@@ -1,8 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/db";
 import { sendEventReminders } from "@/lib/calendar/reminders";
-import { lateLoginNames } from "@/lib/attendance/status";
-import { notifyLateLogins } from "@/lib/notifications/late";
 
 export type CronSummary = {
   companies: number;
@@ -24,8 +22,11 @@ export async function runDailyJobs(): Promise<CronSummary> {
   });
 
   let remindersRun = 0;
-  let lateNotifiedCompanies = 0;
-  let lateNamesTotal = 0;
+  // PUNCH MODULE paused: late-login notices are disabled (with punch removed,
+  // no one clocks in, so they'd flag everyone daily). Kept at 0; see
+  // docs/PUNCH-MODULE.md to restore.
+  const lateNotifiedCompanies = 0;
+  const lateNamesTotal = 0;
 
   for (const c of companies) {
     const tz = c.timezone ?? "Asia/Kolkata";
@@ -37,17 +38,6 @@ export async function runDailyJobs(): Promise<CronSummary> {
       } catch (e) {
         console.error(`[cron] reminders failed for ${c.id}:`, e);
       }
-    }
-
-    try {
-      const { dateISO, names } = await lateLoginNames(c.id, tz);
-      if (names.length) {
-        await notifyLateLogins(c.id, dateISO, names);
-        lateNotifiedCompanies++;
-        lateNamesTotal += names.length;
-      }
-    } catch (e) {
-      console.error(`[cron] late-check failed for ${c.id}:`, e);
     }
   }
 

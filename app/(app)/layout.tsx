@@ -1,15 +1,12 @@
 import { redirect } from "next/navigation";
-import { headers } from "next/headers";
 import { getSession } from "@/lib/auth/session";
 import { listPermissions } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/db";
 import { getActiveTimers } from "@/lib/timer/data";
-import { hasPunchedInToday } from "@/lib/attendance/gate";
 import { sendEventReminders } from "@/lib/calendar/reminders";
 import { Sidebar } from "@/components/shell/sidebar";
 import { Topbar } from "@/components/shell/topbar";
 import { TimerBar } from "@/components/timer/timer-bar";
-import { PunchInBanner } from "@/components/attendance/punch-banner";
 import { noteHref, formatNoteTime, type ClientNote } from "@/lib/notifications/categories";
 import { Toaster } from "@/components/ui/toast";
 import { ConfirmHost } from "@/components/ui/confirm";
@@ -25,13 +22,8 @@ export default async function AppLayout({
   // first; this is a defense-in-depth backstop if the matcher ever changes).
   if (session.role === "CLIENT") redirect("/portal");
 
-  const isGatedEmployee = session.role === "EMPLOYEE" && !!session.employeeId;
-
   // One parallel batch for the whole shell instead of several sequential queries.
-  const [needsPunchIn, allowed, notifications, unread, activeTimers, company, me] = await Promise.all([
-    isGatedEmployee
-      ? hasPunchedInToday(session.employeeId!, session.companyId).then((p) => !p)
-      : Promise.resolve(false),
+  const [allowed, notifications, unread, activeTimers, company, me] = await Promise.all([
     listPermissions(session.companyId, session.role),
     prisma.notification.findMany({
       where: { userId: session.userId },
@@ -74,12 +66,6 @@ export default async function AppLayout({
     }
   }
 
-  // Base employees must clock in before reaching anything but the dashboard.
-  if (needsPunchIn) {
-    const pathname = (await headers()).get("x-pathname") ?? "";
-    if (pathname && pathname !== "/dashboard") redirect("/dashboard");
-  }
-
   const notes: ClientNote[] = notifications.map((n) => ({
     id: n.id,
     title: n.title,
@@ -109,7 +95,6 @@ export default async function AppLayout({
           notifications={notes}
           unread={unread}
         />
-        {needsPunchIn && <PunchInBanner />}
         <main className="flex-1 overflow-y-auto px-6 py-8">
           <div className="animate-rise mx-auto max-w-[1600px]">{children}</div>
         </main>

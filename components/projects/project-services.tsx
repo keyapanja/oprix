@@ -5,7 +5,7 @@ import { confirmDialog } from "@/components/ui/confirm";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { addProjectService, removeProjectService } from "@/lib/projects/actions";
+import { addProjectService, removeProjectService, setServicePrimary } from "@/lib/projects/actions";
 import { Card } from "@/components/ui/card";
 import { Combobox } from "@/components/ui/combobox";
 import { Icon } from "@/components/ui/icons";
@@ -16,16 +16,19 @@ type PS = {
   id: string;
   categoryName: string;
   subcategories: SubCat[];
+  primaryAssigneeId: string | null;
 };
 
 export function ProjectServices({
   projectId,
   items,
   available,
+  employees,
 }: {
   projectId: string;
   items: PS[];
   available: Opt[];
+  employees: Opt[];
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -54,6 +57,17 @@ export function ProjectServices({
       const res = await removeProjectService(ps.id);
       if (res.error) toast.error(res.error);
       else router.refresh();
+    });
+  }
+
+  function setPrimary(psId: string, employeeId: string) {
+    start(async () => {
+      const res = await setServicePrimary(psId, employeeId || null);
+      if (res.error) toast.error(res.error);
+      else {
+        toast.success("Primary assignee updated");
+        router.refresh();
+      }
     });
   }
 
@@ -89,6 +103,18 @@ export function ProjectServices({
                   >
                     <Icon name="trash" className="size-4" />
                   </button>
+                </div>
+                <div className="mt-2 flex items-center gap-2 pl-7">
+                  <span className="shrink-0 text-xs text-faint">Primary assignee</span>
+                  <div className="w-52">
+                    <Combobox
+                      value={ps.primaryAssigneeId ?? ""}
+                      onChange={(v) => setPrimary(ps.id, v)}
+                      options={employees.map((e) => ({ value: e.id, label: e.name }))}
+                      emptyLabel="— None —"
+                      placeholder="— None —"
+                    />
+                  </div>
                 </div>
                 {ps.subcategories.length > 0 ? (
                   <div className="mt-2 flex flex-wrap gap-1.5 pl-7">

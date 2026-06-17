@@ -26,7 +26,7 @@ export default async function ProjectDetailPage({
   const { id } = await params;
   const session = await requirePage("project:manage");
 
-  const [project, allCategories] = await Promise.all([
+  const [project, allCategories, employees] = await Promise.all([
     prisma.project.findFirst({
       where: { id, companyId: session.companyId, deletedAt: null },
       include: {
@@ -36,6 +36,7 @@ export default async function ProjectDetailPage({
           select: {
             id: true,
             serviceId: true,
+            primaryAssigneeId: true,
             service: {
               select: {
                 name: true,
@@ -70,6 +71,11 @@ export default async function ProjectDetailPage({
       where: { companyId: session.companyId, parentId: null },
       orderBy: { name: "asc" },
       select: { id: true, name: true },
+    }),
+    prisma.employee.findMany({
+      where: { companyId: session.companyId, deletedAt: null },
+      orderBy: { fullName: "asc" },
+      select: { id: true, fullName: true },
     }),
   ]);
 
@@ -146,8 +152,10 @@ export default async function ProjectDetailPage({
             id: ps.id,
             categoryName: ps.service.name,
             subcategories: ps.service.children,
+            primaryAssigneeId: ps.primaryAssigneeId,
           }))}
           available={available}
+          employees={employees.map((e) => ({ id: e.id, name: e.fullName }))}
         />
 
         <Card className="mb-6">

@@ -169,6 +169,32 @@ export async function removeProjectService(projectServiceId: string): Promise<Pr
   return { ok: true };
 }
 
+/** Set (or clear, with null) the primary assignee for a project's service category. */
+export async function setServicePrimary(
+  projectServiceId: string,
+  employeeId: string | null,
+): Promise<ProjectState> {
+  const session = await requireCapability("project:manage");
+  const ps = await prisma.projectService.findFirst({
+    where: { id: projectServiceId, project: { companyId: session.companyId } },
+    select: { id: true, projectId: true },
+  });
+  if (!ps) return { error: "Service not found" };
+  if (employeeId) {
+    const emp = await prisma.employee.findFirst({
+      where: { id: employeeId, companyId: session.companyId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!emp) return { error: "Invalid employee" };
+  }
+  await prisma.projectService.update({
+    where: { id: ps.id },
+    data: { primaryAssigneeId: employeeId },
+  });
+  revalidatePath(`/projects/${ps.projectId}`);
+  return { ok: true };
+}
+
 // ---- Project-service checklist (per-project; seeds that project's tasks) ----
 async function ownsProjectService(companyId: string, projectServiceId: string): Promise<boolean> {
   return (

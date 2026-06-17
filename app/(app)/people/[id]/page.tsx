@@ -3,10 +3,8 @@ import { notFound } from "next/navigation";
 import { requirePage } from "@/lib/auth/guard";
 import { prisma } from "@/lib/db";
 import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { BackLink } from "@/components/ui/back-link";
 import { Avatar } from "@/components/ui/avatar";
-import { employeeLiveStatus } from "@/lib/profile/status";
 
 export const metadata: Metadata = { title: "Profile · Oprix" };
 
@@ -29,7 +27,6 @@ export default async function PersonProfilePage({ params }: { params: Promise<{ 
   });
   if (!employee) notFound();
 
-  const status = await employeeLiveStatus(employee.id, session.companyId);
   const displayName = employee.user?.nickname || employee.fullName;
   const role = [employee.designation?.name, employee.department?.name].filter(Boolean).join(" · ");
 
@@ -40,11 +37,10 @@ export default async function PersonProfilePage({ params }: { params: Promise<{ 
       </div>
       <Card className="p-6">
         <div className="flex items-start gap-5">
-          <Avatar name={employee.fullName} src={employee.user?.avatarUrl} size="xl" status={status} />
+          <Avatar name={employee.fullName} src={employee.user?.avatarUrl} size="xl" />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-3">
               <h1 className="text-2xl font-bold tracking-tight text-content">{displayName}</h1>
-              <Badge tone={status === "active" ? "green" : "gray"}>{status === "active" ? "Active" : "Away"}</Badge>
             </div>
             {employee.user?.nickname && <p className="text-sm text-muted">{employee.fullName}</p>}
             <p className="mt-1 text-sm text-muted">{role || "—"}</p>

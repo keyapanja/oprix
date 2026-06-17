@@ -1,10 +1,9 @@
 import type { Metadata } from "next";
 import { requirePage } from "@/lib/auth/guard";
 import { prisma } from "@/lib/db";
-import { nowInZone, dateAtUTC, timeHHMM } from "@/lib/dates";
+import { nowInZone, dateAtUTC } from "@/lib/dates";
 import { effectiveStatus } from "@/lib/attendance/resolve";
 import { approvedLeaveEmployeeIds, holidayName } from "@/lib/attendance/status";
-import { notifyLateLogins } from "@/lib/notifications/late";
 import { PageHeader } from "@/components/ui/page-header";
 import { DateNav } from "@/components/attendance/date-nav";
 import { AttendanceGrid, type AttendanceRow } from "@/components/attendance/attendance-grid";
@@ -22,11 +21,6 @@ const SUMMARY = [
   { key: "HOLIDAY", label: "Holiday", dot: "bg-slate-400" },
 ] as const;
 
-const toMin = (hhmm: string) => {
-  const [h, m] = hhmm.split(":").map(Number);
-  return h * 60 + m;
-};
-
 export default async function AttendancePage({
   searchParams,
 }: {
@@ -42,7 +36,6 @@ export default async function AttendancePage({
   const nowZ = nowInZone(tz);
   const today = nowZ.dateISO;
   const date = sp.date && /^\d{4}-\d{2}-\d{2}$/.test(sp.date) ? sp.date : today;
-  const isToday = date === today;
 
   const [employees, records, leaveIds, holiday] = await Promise.all([
     prisma.employee.findMany({
@@ -53,12 +46,11 @@ export default async function AttendancePage({
         fullName: true,
         employeeCode: true,
         department: { select: { name: true } },
-        workShift: { select: { startTime: true, graceMinutes: true } },
       },
     }),
     prisma.attendance.findMany({
       where: { companyId: session.companyId, date: dateAtUTC(date) },
-      select: { employeeId: true, type: true, markedManually: true, clockIn: true, clockOut: true },
+      select: { employeeId: true, type: true, markedManually: true },
     }),
     approvedLeaveEmployeeIds(session.companyId, date),
     holidayName(session.companyId, date),
@@ -66,21 +58,14 @@ export default async function AttendancePage({
 
   const isHoliday = holiday !== null;
   const byEmp = new Map(records.map((r) => [r.employeeId, r]));
-  const nowMin = toMin(nowZ.time);
 
   const rows: AttendanceRow[] = [];
   const counts: Record<string, number> = {};
   let unmarked = 0;
-  const lateNames: string[] = [];
 
   for (const e of employees) {
     const rec = byEmp.get(e.id);
     const onLeave = leaveIds.has(e.id);
-    const clockIn = timeHHMM(rec?.clockIn);
-
-    const cutoff = e.workShift ? toMin(e.workShift.startTime) + e.workShift.graceMinutes : null;
-    const isLate =
-      isToday && !onLeave && !isHoliday && !rec?.clockIn && cutoff !== null && nowMin > cutoff;
 
     rows.push({
       employeeId: e.id,
@@ -90,9 +75,6 @@ export default async function AttendancePage({
       recordType: rec?.type ?? null,
       markedManually: rec?.markedManually ?? false,
       onLeave,
-      isLate,
-      clockIn,
-      clockOut: timeHHMM(rec?.clockOut),
     });
 
     const eff = effectiveStatus({
@@ -103,16 +85,6 @@ export default async function AttendancePage({
     });
     if (eff) counts[eff] = (counts[eff] ?? 0) + 1;
     else unmarked++;
-    if (isLate) lateNames.push(e.fullName);
-  }
-
-  // Lazy trigger: notify attendance managers about who hasn't logged in today.
-  if (isToday && lateNames.length > 0) {
-    try {
-      await notifyLateLogins(session.companyId, date, lateNames);
-    } catch {
-      /* never break the page on notification failure */
-    }
   }
 
   return (

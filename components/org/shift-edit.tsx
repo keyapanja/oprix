@@ -27,15 +27,12 @@ function ShiftForm({ shift, onDone, onCancel }: { shift: ShiftRow; onDone: () =>
       <Field label="Shift name" htmlFor="es-name" required>
         <Input id="es-name" name="name" defaultValue={shift.name} required />
       </Field>
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Start" htmlFor="es-start" required>
           <Input id="es-start" name="startTime" type="time" defaultValue={shift.startTime} required />
         </Field>
         <Field label="End" htmlFor="es-end" required>
           <Input id="es-end" name="endTime" type="time" defaultValue={shift.endTime} required />
-        </Field>
-        <Field label="Grace (min)" htmlFor="es-grace">
-          <Input id="es-grace" name="graceMinutes" type="number" min={0} max={180} defaultValue={shift.graceMinutes} />
         </Field>
       </div>
       <div className="flex justify-end gap-2">

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { requireSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/auth/permissions";
-import { nowInZone, dateAtUTC, timeHHMM } from "@/lib/dates";
+import { nowInZone, dateAtUTC } from "@/lib/dates";
 import { getCompanyTimezone } from "@/lib/cache";
 import { humanizeEnum } from "@/lib/format";
 import { PRIORITY_TONE, TASK_STATUS_TONE, TASK_STATUS_LABEL } from "@/lib/status";
@@ -10,7 +10,6 @@ import { categorize, CATEGORY_STYLES, noteHref, formatNoteTime } from "@/lib/not
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Icon } from "@/components/ui/icons";
-import { PunchCard } from "@/components/attendance/punch-card";
 import { cn } from "@/lib/cn";
 
 function greeting(hour: number): string {
@@ -33,30 +32,6 @@ export default async function DashboardPage() {
   const nowZ = nowInZone(tz);
   const todayUTC = dateAtUTC(nowZ.dateISO);
   const hour = Number(nowZ.time.slice(0, 2));
-
-  // Self-service punch state for users with an employee profile.
-  let punch:
-    | { in: string | null; out: string | null; tz: string; shiftStart: string | null; grace: number }
-    | null = null;
-  if (session.employeeId) {
-    const [employee, att] = await Promise.all([
-      prisma.employee.findUnique({
-        where: { id: session.employeeId },
-        select: { workShift: { select: { startTime: true, graceMinutes: true } } },
-      }),
-      prisma.attendance.findUnique({
-        where: { employeeId_date: { employeeId: session.employeeId, date: todayUTC } },
-        select: { clockIn: true, clockOut: true },
-      }),
-    ]);
-    punch = {
-      in: att?.clockIn ? timeHHMM(att.clockIn) : null,
-      out: att?.clockOut ? timeHHMM(att.clockOut) : null,
-      tz,
-      shiftStart: employee?.workShift?.startTime ?? null,
-      grace: employee?.workShift?.graceMinutes ?? 0,
-    };
-  }
 
   // My tasks due today (assignees only) + my latest notifications.
   const [tasksDue, notesRaw] = await Promise.all([
@@ -91,16 +66,9 @@ export default async function DashboardPage() {
     style: CATEGORY_STYLES[categorize(n.type)],
   }));
 
-  // Subtitle adapts to where the user is in their day (no "punch in" once done).
   const subtitle = canViewReports
     ? "Here's what's happening across your organization today."
-    : !punch
-      ? "Here's your day at a glance."
-      : punch.in && punch.out
-        ? "You're all wrapped up for today — nicely done."
-        : punch.in
-          ? "Your session is running — here's your day at a glance."
-          : "Here's your day at a glance — punch in to start your session.";
+    : "Here's your day at a glance.";
 
   // Company-wide stats are only for management roles.
   let stats: { label: string; value: number; icon: string; href: string; grad: string }[] = [];
@@ -155,17 +123,6 @@ export default async function DashboardPage() {
           <p className="mt-2 max-w-lg text-sm text-white/75">{subtitle}</p>
         </div>
       </div>
-
-      {/* Self-service attendance */}
-      {punch && (
-        <PunchCard
-          initialIn={punch.in}
-          initialOut={punch.out}
-          timeZone={punch.tz}
-          shiftStart={punch.shiftStart}
-          graceMinutes={punch.grace}
-        />
-      )}
 
       {/* Stats (management) */}
       {stats.length > 0 && (
