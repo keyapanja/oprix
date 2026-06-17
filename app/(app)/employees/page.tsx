@@ -9,8 +9,20 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icons";
 import { humanizeEnum } from "@/lib/format";
+import { ROLE_LABELS } from "@/lib/auth/can";
+import type { Role } from "@prisma/client";
 
 export const metadata: Metadata = { title: "Employees · Oprix" };
+
+// Access-role badge colors for the directory.
+const ROLE_TONE: Partial<Record<Role, "gray" | "green" | "amber" | "blue" | "red">> = {
+  SUPER_ADMIN: "red",
+  HR_MANAGER: "blue",
+  PROJECT_MANAGER: "green",
+  TEAM_LEAD: "amber",
+  EMPLOYEE: "gray",
+  CLIENT: "gray",
+};
 
 export default async function EmployeesPage() {
   const session = await requirePage("employee:read");
@@ -27,6 +39,7 @@ export default async function EmployeesPage() {
       probationStatus: true,
       department: { select: { name: true } },
       designation: { select: { name: true } },
+      user: { select: { role: true } },
     },
   });
 
@@ -65,6 +78,7 @@ export default async function EmployeesPage() {
                 <th className="px-5 py-3">Code</th>
                 <th className="px-5 py-3">Department</th>
                 <th className="px-5 py-3">Designation</th>
+                <th className="px-5 py-3">Role</th>
                 <th className="px-5 py-3">Status</th>
               </tr>
             </thead>
@@ -80,6 +94,15 @@ export default async function EmployeesPage() {
                   <td className="px-5 py-3 text-muted">{e.employeeCode}</td>
                   <td className="px-5 py-3 text-muted">{e.department?.name ?? "—"}</td>
                   <td className="px-5 py-3 text-muted">{e.designation?.name ?? "—"}</td>
+                  <td className="px-5 py-3">
+                    {e.user ? (
+                      <Badge tone={ROLE_TONE[e.user.role] ?? "gray"}>
+                        {ROLE_LABELS[e.user.role] ?? humanizeEnum(e.user.role)}
+                      </Badge>
+                    ) : (
+                      <span className="text-xs text-faint">No account</span>
+                    )}
+                  </td>
                   <td className="px-5 py-3">
                     <Badge tone={e.probationStatus === "CONFIRMED" ? "green" : "amber"}>
                       {humanizeEnum(e.probationStatus)}
