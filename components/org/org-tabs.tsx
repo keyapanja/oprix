@@ -14,6 +14,7 @@ import { ServiceList } from "@/components/org/service-list";
 import { PermissionsMatrix } from "@/components/org/permissions-matrix";
 import { TaskScopeMatrix } from "@/components/org/task-scope-matrix";
 import { CompanyInfoForm, type CompanyInfo } from "@/components/org/company-info-form";
+import { DepartmentHead } from "@/components/org/department-head";
 import {
   createDepartment,
   createService,
@@ -26,7 +27,7 @@ import {
 import { setEventReminder } from "@/lib/calendar/actions";
 import { cn } from "@/lib/cn";
 
-type Dept = { id: string; name: string };
+type Dept = { id: string; name: string; headId: string | null };
 type Svc = {
   id: string;
   name: string;
@@ -44,6 +45,7 @@ const BASE_TABS = ["Company", "Departments", "Services", "Designations"];
 export function OrgTabs({
   company,
   departments,
+  employees,
   services,
   designations,
   shifts,
@@ -56,6 +58,7 @@ export function OrgTabs({
 }: {
   company: CompanyInfo;
   departments: Dept[];
+  employees: { value: string; label: string }[];
   services: Svc[];
   designations: Desig[];
   shifts: Shift[];
@@ -177,7 +180,7 @@ export function OrgTabs({
         <Section
           title="Departments"
           empty="No departments yet."
-          headers={["Name", ""]}
+          headers={["Name", "Head", ""]}
           form={
             <AddForm action={createDepartment}>
               <Field label="Department name" htmlFor="dept-name" className="min-w-64">
@@ -187,7 +190,10 @@ export function OrgTabs({
           }
           rows={departments.map((d) => ({
             id: d.id,
-            cells: [d.name],
+            cells: [
+              d.name,
+              <DepartmentHead departmentId={d.id} headId={d.headId} employees={employees} />,
+            ],
             delete: <DeleteButton entity="department" id={d.id} label={d.name} />,
           }))}
         />
@@ -427,7 +433,7 @@ function Section({
 }: {
   title: string;
   form: React.ReactNode;
-  rows: { id: string; cells: string[]; delete: React.ReactNode }[];
+  rows: { id: string; cells: React.ReactNode[]; delete: React.ReactNode }[];
   headers: string[];
   empty: string;
 }) {

@@ -31,6 +31,32 @@ export async function createDepartment(
   return { ok: true };
 }
 
+/** Set (or clear, with null) the employee who heads a department. */
+export async function setDepartmentHead(
+  departmentId: string,
+  employeeId: string | null,
+): Promise<ActionState> {
+  const session = await requireCapability("org:manage");
+  const dept = await prisma.department.findFirst({
+    where: { id: departmentId, companyId: session.companyId },
+    select: { id: true },
+  });
+  if (!dept) return { error: "Department not found" };
+  if (employeeId) {
+    const emp = await prisma.employee.findFirst({
+      where: { id: employeeId, companyId: session.companyId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!emp) return { error: "Invalid employee" };
+  }
+  await prisma.department.update({
+    where: { id: departmentId },
+    data: { headId: employeeId },
+  });
+  revalidatePath(ORG);
+  return { ok: true };
+}
+
 const DesignationSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(80),
   departmentId: z.string().trim().min(1, "Department is required"),

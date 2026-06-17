@@ -46,6 +46,7 @@ export function EmployeeForm({
   locations,
   probationPeriods,
   multiLocation,
+  deptHeads = {},
   employee,
 }: {
   nextCode: string;
@@ -56,6 +57,8 @@ export function EmployeeForm({
   locations: Opt[];
   probationPeriods: number[];
   multiLocation: boolean;
+  /** Department id → its head's employee id; used to pre-fill the reporting manager for new hires. */
+  deptHeads?: Record<string, string>;
   employee?: EmployeeInitial;
 }) {
   const isEdit = !!employee;
@@ -65,6 +68,7 @@ export function EmployeeForm({
   // Designations are department-wise, so the list cascades from the chosen department.
   const [departmentId, setDepartmentId] = useState(employee?.departmentId ?? "");
   const [designationId, setDesignationId] = useState(employee?.designationId ?? "");
+  const [managerId, setManagerId] = useState(employee?.managerId ?? "");
   const deptDesignations = useMemo<ComboOpt[]>(
     () =>
       designations
@@ -155,6 +159,8 @@ export function EmployeeForm({
               onChange={(v) => {
                 setDepartmentId(v);
                 setDesignationId("");
+                // New hires default to their department's head as reporting manager (still editable).
+                if (!isEdit && deptHeads[v]) setManagerId(deptHeads[v]);
               }}
               emptyLabel="— None —"
               placeholder="— None —"
@@ -173,7 +179,7 @@ export function EmployeeForm({
             />
           </Field>
           <Field label="Reporting manager">
-            <Combobox name="managerId" defaultValue={employee?.managerId ?? ""} emptyLabel="— None —" placeholder="— None —" options={toOpts(managers)} />
+            <Combobox name="managerId" value={managerId} onChange={setManagerId} emptyLabel="— None —" placeholder="— None —" options={toOpts(managers)} />
           </Field>
           <Field label="Work shift">
             <Combobox name="workShiftId" defaultValue={employee?.workShiftId ?? ""} emptyLabel="— None —" placeholder="— None —" options={toOpts(shifts)} />

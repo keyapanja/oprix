@@ -18,7 +18,7 @@ export default async function NewEmployeePage() {
         where: { id: session.companyId },
         select: { employeeCodePrefix: true, multiLocation: true },
       }),
-      prisma.department.findMany({ where, orderBy: { name: "asc" }, select: { id: true, name: true } }),
+      prisma.department.findMany({ where, orderBy: { name: "asc" }, select: { id: true, name: true, headId: true } }),
       prisma.designation.findMany({ where, orderBy: { name: "asc" }, select: { id: true, name: true, departmentId: true } }),
       prisma.employee.findMany({
         where: { ...where, deletedAt: null },
@@ -31,6 +31,10 @@ export default async function NewEmployeePage() {
     ]);
 
   const nextCode = await nextEmployeeCode(session.companyId, company?.employeeCodePrefix ?? "EMP");
+
+  // Department → its head, used to pre-fill the reporting manager for new hires.
+  const deptHeads: Record<string, string> = {};
+  for (const d of departments) if (d.headId) deptHeads[d.id] = d.headId;
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -47,6 +51,7 @@ export default async function NewEmployeePage() {
         locations={locations}
         probationPeriods={probationPeriods.map((p) => p.months)}
         multiLocation={company?.multiLocation ?? false}
+        deptHeads={deptHeads}
       />
     </div>
   );
