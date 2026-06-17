@@ -179,6 +179,36 @@ export async function addSubcategories(
   return { ok: true, created: result.count, skipped: names.length - result.count };
 }
 
+/**
+ * Bulk-delete sub-categories. Each is removed in a transaction (its checklist
+ * template first, then the row); any still referenced by a task / KB article /
+ * employee are skipped and counted (so the rest still go through).
+ */
+export async function deleteSubcategories(
+  ids: string[],
+): Promise<ActionState & { deleted?: number; skipped?: number }> {
+  const session = await requireCapability("org:manage");
+  const subs = await prisma.service.findMany({
+    where: { id: { in: ids }, companyId: session.companyId, parentId: { not: null } },
+    select: { id: true },
+  });
+  let deleted = 0;
+  let skipped = 0;
+  for (const s of subs) {
+    try {
+      await prisma.$transaction([
+        prisma.serviceChecklistItem.deleteMany({ where: { serviceId: s.id } }),
+        prisma.service.delete({ where: { id: s.id } }),
+      ]);
+      deleted++;
+    } catch {
+      skipped++; // still referenced by a task / KB article / employee
+    }
+  }
+  revalidatePath(ORG);
+  return { ok: true, deleted, skipped };
+}
+
 // ---- Work shifts ----------------------------------------------------------
 const ShiftSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(80),
@@ -360,6 +390,43 @@ export async function deleteOrgEntity(entity: OrgEntity, id: string): Promise<Ac
   }
   revalidatePath(ORG);
   return { ok: true };
+}
+
+/**
+ * Bulk-delete org rows of one entity type. Each is attempted independently;
+ * rows still referenced (FK) — or, for a category, still holding sub-categories
+ * — are skipped and counted so the rest still go through.
+ */
+export async function deleteOrgEntities(
+  entity: OrgEntity,
+  ids: string[],
+): Promise<ActionState & { deleted?: number; skipped?: number }> {
+  const session = await requireCapability("org:manage");
+  const companyId = session.companyId;
+  let deleted = 0;
+  let skipped = 0;
+  for (const id of ids) {
+    const scope = { id, companyId };
+    try {
+      if (entity === "department") await prisma.department.deleteMany({ where: scope });
+      else if (entity === "service") {
+        const childCount = await prisma.service.count({ where: { parentId: id, companyId } });
+        if (childCount > 0) {
+          skipped++;
+          continue;
+        }
+        await prisma.service.deleteMany({ where: scope });
+      } else if (entity === "designation") await prisma.designation.deleteMany({ where: scope });
+      else if (entity === "shift") await prisma.workShift.deleteMany({ where: scope });
+      else if (entity === "location") await prisma.location.deleteMany({ where: scope });
+      else if (entity === "probationPeriod") await prisma.probationPeriod.deleteMany({ where: scope });
+      deleted++;
+    } catch {
+      skipped++; // still referenced by an employee, etc.
+    }
+  }
+  revalidatePath(ORG);
+  return { ok: true, deleted, skipped };
 }
 
 // ---- Service checklist templates ------------------------------------------

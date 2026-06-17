@@ -1,6 +1,8 @@
 "use client";
 
 import { toast } from "@/components/ui/toast";
+import { confirmDialog } from "@/components/ui/confirm";
+import { Icon } from "@/components/ui/icons";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
@@ -24,6 +26,7 @@ import {
   createLocation,
   createProbationPeriod,
   setMultiLocation,
+  deleteOrgEntities,
 } from "@/lib/org/actions";
 import { setEventReminder } from "@/lib/calendar/actions";
 import { cn } from "@/lib/cn";
@@ -108,6 +111,8 @@ export function OrgTabs({
             <h3 className="mb-4 text-xs font-semibold uppercase tracking-wider text-faint">Work shifts</h3>
             <Section
               title="Work shifts"
+              bulkEntity="shift"
+              bulkNoun="shift"
               headers={["Name", "Timing", ""]}
               empty="No shifts yet."
               form={
@@ -148,6 +153,8 @@ export function OrgTabs({
             <h3 className="mb-4 text-xs font-semibold uppercase tracking-wider text-faint">Probation periods</h3>
             <Section
               title="Probation periods"
+              bulkEntity="probationPeriod"
+              bulkNoun="probation period"
               headers={["Duration", ""]}
               empty="No probation periods yet."
               form={
@@ -239,6 +246,8 @@ export function OrgTabs({
       {tab === "Designations" && (
         <Section
           title="Designations"
+          bulkEntity="designation"
+          bulkNoun="designation"
           headers={["Name", "Department", ""]}
           empty={
             departments.length === 0
@@ -296,6 +305,8 @@ function Toggle({ on, onClick, disabled }: { on: boolean; onClick: () => void; d
 function LocationsSettings({ enabled, locations }: { enabled: boolean; locations: Loc[] }) {
   const [on, setOn] = useState(enabled);
   const [pending, start] = useTransition();
+  const bulk = useBulkDelete("location", "location");
+  const allSel = locations.length > 0 && locations.every((l) => bulk.selected.has(l.id));
   // With a single location already set and multi-location off, there's nothing to add.
   const showAdd = on || locations.length === 0;
 
@@ -338,24 +349,45 @@ function LocationsSettings({ enabled, locations }: { enabled: boolean; locations
       {locations.length === 0 ? (
         <p className="px-5 py-8 text-center text-sm text-muted">No locations yet.</p>
       ) : (
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wider text-faint">
-              <th className="px-5 py-3">Name</th>
-              <th className="px-5 py-3" />
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-line">
-            {locations.map((l) => (
-              <tr key={l.id} className="hover:bg-canvas">
-                <td className="px-5 py-3 font-medium text-content">{l.name}</td>
-                <td className="px-5 py-3 text-right">
-                  <DeleteButton entity="location" id={l.id} label={l.name} />
-                </td>
+        <>
+          <BulkBar count={bulk.selected.size} noun="location" pending={bulk.pending} onClear={bulk.clear} onDelete={bulk.run} />
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wider text-faint">
+                <th className="w-10 px-5 py-3">
+                  <input
+                    type="checkbox"
+                    checked={allSel}
+                    onChange={() => bulk.toggleAll(locations.map((l) => l.id))}
+                    className="size-4 rounded border-line-strong text-brand-600 focus:ring-brand-500"
+                    aria-label="Select all"
+                  />
+                </th>
+                <th className="px-5 py-3">Name</th>
+                <th className="px-5 py-3" />
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-line">
+              {locations.map((l) => (
+                <tr key={l.id} className={cn("hover:bg-canvas", bulk.selected.has(l.id) && "bg-accent-soft hover:bg-accent-soft")}>
+                  <td className="px-5 py-3">
+                    <input
+                      type="checkbox"
+                      checked={bulk.selected.has(l.id)}
+                      onChange={() => bulk.toggle(l.id)}
+                      className="size-4 rounded border-line-strong text-brand-600 focus:ring-brand-500"
+                      aria-label={`Select ${l.name}`}
+                    />
+                  </td>
+                  <td className="px-5 py-3 font-medium text-content">{l.name}</td>
+                  <td className="px-5 py-3 text-right">
+                    <DeleteButton entity="location" id={l.id} label={l.name} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
       )}
     </Card>
   );
@@ -414,19 +446,117 @@ function EventReminderSettings({ enabled, time }: { enabled: boolean; time: stri
   );
 }
 
+type OrgBulkEntity = "designation" | "shift" | "location" | "probationPeriod";
+
+/** Shared multi-select + bulk-delete state for an org list. */
+function useBulkDelete(entity: OrgBulkEntity, noun: string) {
+  const router = useRouter();
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [pending, start] = useTransition();
+  function toggle(id: string) {
+    setSelected((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  }
+  function toggleAll(ids: string[]) {
+    const all = ids.length > 0 && ids.every((i) => selected.has(i));
+    setSelected((s) => {
+      const n = new Set(s);
+      ids.forEach((i) => (all ? n.delete(i) : n.add(i)));
+      return n;
+    });
+  }
+  function clear() {
+    setSelected(new Set());
+  }
+  function run() {
+    const ids = [...selected];
+    if (!ids.length) return;
+    void (async () => {
+      const ok = await confirmDialog({
+        message: `Delete ${ids.length} ${noun}${ids.length === 1 ? "" : "s"}? This can't be undone.`,
+        tone: "danger",
+        confirmLabel: "Delete",
+      });
+      if (!ok) return;
+      start(async () => {
+        const res = await deleteOrgEntities(entity, ids);
+        if (res?.error) {
+          toast.error(res.error);
+          return;
+        }
+        const del = res.deleted ?? 0;
+        toast.success(
+          `Deleted ${del} ${noun}${del === 1 ? "" : "s"}${res.skipped ? ` · ${res.skipped} in use, skipped` : ""}`,
+        );
+        clear();
+        router.refresh();
+      });
+    })();
+  }
+  return { selected, toggle, toggleAll, clear, pending, run };
+}
+
+function BulkBar({
+  count,
+  noun,
+  pending,
+  onClear,
+  onDelete,
+}: {
+  count: number;
+  noun: string;
+  pending: boolean;
+  onClear: () => void;
+  onDelete: () => void;
+}) {
+  if (count === 0) return null;
+  return (
+    <div className="flex items-center justify-between gap-3 border-b border-line bg-elevated px-5 py-2.5">
+      <span className="text-sm font-medium text-content">
+        {count} {noun}
+        {count === 1 ? "" : "s"} selected
+      </span>
+      <div className="flex items-center gap-2">
+        <button onClick={onClear} className="rounded-lg px-3 py-1.5 text-sm font-medium text-muted hover:bg-canvas hover:text-content">
+          Clear
+        </button>
+        <button
+          onClick={onDelete}
+          disabled={pending}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+        >
+          <Icon name="trash" className="size-4" />
+          {pending ? "Deleting…" : "Delete selected"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function Section({
   title,
   form,
   rows,
   headers,
   empty,
+  bulkEntity,
+  bulkNoun,
 }: {
   title: string;
   form: React.ReactNode;
   rows: { id: string; cells: React.ReactNode[]; delete: React.ReactNode }[];
   headers: string[];
   empty: string;
+  bulkEntity?: OrgBulkEntity;
+  bulkNoun?: string;
 }) {
+  const bulk = useBulkDelete(bulkEntity ?? "designation", bulkNoun ?? "item");
+  const selectable = !!bulkEntity;
+  const allSel = rows.length > 0 && rows.every((r) => bulk.selected.has(r.id));
   return (
     <Card className="overflow-hidden">
       <div className="border-b border-line p-5">
@@ -434,12 +564,27 @@ function Section({
         {form}
       </div>
 
+      {selectable && (
+        <BulkBar count={bulk.selected.size} noun={bulkNoun ?? "item"} pending={bulk.pending} onClear={bulk.clear} onDelete={bulk.run} />
+      )}
+
       {rows.length === 0 ? (
         <p className="px-5 py-8 text-center text-sm text-muted">{empty}</p>
       ) : (
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wider text-faint">
+              {selectable && (
+                <th className="w-10 px-5 py-3">
+                  <input
+                    type="checkbox"
+                    checked={allSel}
+                    onChange={() => bulk.toggleAll(rows.map((r) => r.id))}
+                    className="size-4 rounded border-line-strong text-brand-600 focus:ring-brand-500"
+                    aria-label="Select all"
+                  />
+                </th>
+              )}
               {headers.map((h, i) => (
                 <th key={i} className="px-5 py-3">{h}</th>
               ))}
@@ -447,7 +592,18 @@ function Section({
           </thead>
           <tbody className="divide-y divide-line">
             {rows.map((r) => (
-              <tr key={r.id} className="hover:bg-canvas">
+              <tr key={r.id} className={cn("hover:bg-canvas", bulk.selected.has(r.id) && "bg-accent-soft hover:bg-accent-soft")}>
+                {selectable && (
+                  <td className="px-5 py-3">
+                    <input
+                      type="checkbox"
+                      checked={bulk.selected.has(r.id)}
+                      onChange={() => bulk.toggle(r.id)}
+                      className="size-4 rounded border-line-strong text-brand-600 focus:ring-brand-500"
+                      aria-label="Select row"
+                    />
+                  </td>
+                )}
                 {r.cells.map((c, i) => (
                   <td
                     key={i}

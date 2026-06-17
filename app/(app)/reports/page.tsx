@@ -28,8 +28,7 @@ const STATUS_COLOR: Record<TaskStatus, string> = {
 const LINKS = [
   { href: "/reports/time", label: "Time & Utilization", desc: "Hours by project, service, person", icon: "clock" },
   { href: "/reports/projects", label: "Projects", desc: "Progress, status, overdue tasks", icon: "briefcase" },
-  { href: "/reports/people", label: "People", desc: "Per-person hours, tasks, attendance", icon: "users" },
-  { href: "/reports/attendance", label: "Attendance", desc: "Presence, late, by department", icon: "calendar" },
+  { href: "/reports/people", label: "People", desc: "Per-person hours, tasks, leave", icon: "users" },
   { href: "/reports/leave", label: "Leave", desc: "Leave taken by type and person", icon: "calendarDays" },
   { href: "/reports/payroll", label: "Payroll", desc: "Salary summary and cost by department", icon: "chart" },
 ];
@@ -112,7 +111,7 @@ export default async function ReportsOverviewPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Reports" description="Company-wide analytics across projects, people, time, and attendance." />
+      <PageHeader title="Reports" description="Company-wide analytics across projects, people, and time." />
 
       <KpiGrid items={kpis} />
 

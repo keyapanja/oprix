@@ -5,7 +5,7 @@ import { confirmDialog } from "@/components/ui/confirm";
 import { useEffect, useMemo, useState, useTransition, type MouseEvent } from "react";
 import { useRouter } from "next/navigation";
 import type { TaskStatus, Priority } from "@prisma/client";
-import { deleteTask } from "@/lib/projects/actions";
+import { deleteTask, deleteTasks } from "@/lib/projects/actions";
 import { TASK_STATUS_TONE, PRIORITY_TONE } from "@/lib/status";
 import { Badge } from "@/components/ui/badge";
 import { Icon } from "@/components/ui/icons";
@@ -113,6 +113,43 @@ export function TasksTable({
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [, startDelete] = useTransition();
 
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkPending, startBulk] = useTransition();
+  const pageAllSelected = pageRows.length > 0 && pageRows.every((r) => selected.has(r.id));
+
+  function toggleSelect(id: string) {
+    setSelected((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  }
+  function togglePage() {
+    const ids = pageRows.map((r) => r.id);
+    setSelected((s) => {
+      const n = new Set(s);
+      ids.forEach((id) => (pageAllSelected ? n.delete(id) : n.add(id)));
+      return n;
+    });
+  }
+  async function bulkDelete() {
+    const ids = [...selected];
+    if (!ids.length) return;
+    if (!(await confirmDialog({ message: `Delete ${ids.length} task${ids.length === 1 ? "" : "s"}? This can't be undone.`, tone: "danger", confirmLabel: "Delete" }))) return;
+    startBulk(async () => {
+      const res = await deleteTasks(ids);
+      if (res.error) {
+        toast.error(res.error);
+        return;
+      }
+      const del = res.deleted ?? 0;
+      toast.success(`Deleted ${del} task${del === 1 ? "" : "s"}${res.skipped ? ` · ${res.skipped} skipped` : ""}`);
+      setSelected(new Set());
+      router.refresh();
+    });
+  }
+
   function onEdit(e: MouseEvent, id: string) {
     e.stopPropagation();
     router.push(`/tasks/${id}`);
@@ -131,6 +168,29 @@ export function TasksTable({
 
   return (
     <div className="overflow-hidden rounded-2xl border border-line bg-surface shadow-card">
+      {selected.size > 0 && (
+        <div className="flex items-center justify-between gap-3 border-b border-line bg-elevated px-4 py-2.5">
+          <span className="text-sm font-medium text-content">
+            {selected.size} task{selected.size === 1 ? "" : "s"} selected
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setSelected(new Set())}
+              className="rounded-lg px-3 py-1.5 text-sm font-medium text-muted hover:bg-canvas hover:text-content"
+            >
+              Clear
+            </button>
+            <button
+              onClick={bulkDelete}
+              disabled={bulkPending}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+            >
+              <Icon name="trash" className="size-4" />
+              {bulkPending ? "Deleting…" : "Delete selected"}
+            </button>
+          </div>
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-3">
         <div className="relative max-w-xs flex-1">
           <Icon name="search" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-faint" />
@@ -185,6 +245,15 @@ export function TasksTable({
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wider text-faint">
+            <th className="w-10 px-5 py-3">
+              <input
+                type="checkbox"
+                checked={pageAllSelected}
+                onChange={togglePage}
+                className="size-4 rounded border-line-strong text-brand-600 focus:ring-brand-500"
+                aria-label="Select all on page"
+              />
+            </th>
             <th className="px-5 py-3">Task</th>
             <th className="px-5 py-3">Project</th>
             <th className="px-5 py-3">Service</th>
@@ -198,7 +267,20 @@ export function TasksTable({
         </thead>
         <tbody className="divide-y divide-line">
           {pageRows.map((r) => (
-            <tr key={r.id} className="cursor-pointer hover:bg-canvas" onClick={() => router.push(`/tasks/${r.id}`)}>
+            <tr
+              key={r.id}
+              className={cn("cursor-pointer hover:bg-canvas", selected.has(r.id) && "bg-accent-soft hover:bg-accent-soft")}
+              onClick={() => router.push(`/tasks/${r.id}`)}
+            >
+              <td className="px-5 py-3" onClick={(e) => e.stopPropagation()}>
+                <input
+                  type="checkbox"
+                  checked={selected.has(r.id)}
+                  onChange={() => toggleSelect(r.id)}
+                  className="size-4 rounded border-line-strong text-brand-600 focus:ring-brand-500"
+                  aria-label={`Select ${r.name}`}
+                />
+              </td>
               <td className="px-5 py-3 font-medium text-content">{r.name}</td>
               <td className="px-5 py-3 text-muted">{r.projectName}</td>
               <td className="px-5 py-3 text-muted">{r.serviceName ?? "—"}</td>
@@ -246,7 +328,7 @@ export function TasksTable({
           ))}
           {pageRows.length === 0 && (
             <tr>
-              <td colSpan={canTrack ? 9 : 8} className="px-5 py-12 text-center text-sm text-muted">No tasks match your filters.</td>
+              <td colSpan={canTrack ? 10 : 9} className="px-5 py-12 text-center text-sm text-muted">No tasks match your filters.</td>
             </tr>
           )}
         </tbody>

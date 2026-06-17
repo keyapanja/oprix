@@ -49,7 +49,6 @@ export const NAV: NavItem[] = [
       { label: "Time & Utilization", href: "/reports/time", icon: "clock", action: "report:view" },
       { label: "Projects", href: "/reports/projects", icon: "briefcase", action: "report:view" },
       { label: "People", href: "/reports/people", icon: "users", action: "report:view" },
-      { label: "Attendance", href: "/reports/attendance", icon: "calendar", action: "report:view" },
       { label: "Leave", href: "/reports/leave", icon: "calendarDays", action: "report:view" },
       { label: "Payroll", href: "/reports/payroll", icon: "chart", action: "report:view" },
     ],
@@ -74,7 +73,6 @@ export const NAV: NavItem[] = [
     action: "employee:read",
     children: [{ label: "New employee", href: "/employees/new", action: "employee:manage" }],
   },
-  { label: "Attendance", href: "/attendance", icon: "clock", action: "attendance:manage" },
   {
     label: "Payroll",
     href: "/payroll",

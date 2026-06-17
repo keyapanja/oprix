@@ -3,10 +3,12 @@
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { markNotificationsRead } from "@/lib/notifications/actions";
+import { markNotificationsRead, deleteNotifications } from "@/lib/notifications/actions";
 import { Card } from "@/components/ui/card";
 import { Icon } from "@/components/ui/icons";
 import { Button } from "@/components/ui/button";
+import { toast } from "@/components/ui/toast";
+import { confirmDialog } from "@/components/ui/confirm";
 import {
   categorize,
   CATEGORY_STYLES,
@@ -19,6 +21,7 @@ import { cn } from "@/lib/cn";
 export function NotificationsList({ notes }: { notes: ClientNote[] }) {
   const router = useRouter();
   const [filter, setFilter] = useState<"ALL" | NoteCategory>("ALL");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [pending, start] = useTransition();
 
   const counts = useMemo(() => {
@@ -33,6 +36,24 @@ export function NotificationsList({ notes }: { notes: ClientNote[] }) {
   const hasUnread = notes.some((n) => !n.isRead);
 
   const filtered = filter === "ALL" ? notes : notes.filter((n) => categorize(n.type) === filter);
+  const filteredIds = filtered.map((n) => n.id);
+  const allFilteredSelected = filteredIds.length > 0 && filteredIds.every((id) => selected.has(id));
+
+  function toggleSelect(id: string) {
+    setSelected((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  }
+  function selectAllFiltered() {
+    setSelected((s) => {
+      const n = new Set(s);
+      filteredIds.forEach((id) => (allFilteredSelected ? n.delete(id) : n.add(id)));
+      return n;
+    });
+  }
 
   function markAll() {
     start(async () => {
@@ -40,9 +61,70 @@ export function NotificationsList({ notes }: { notes: ClientNote[] }) {
       router.refresh();
     });
   }
+  function markReadSelected() {
+    const ids = [...selected];
+    if (!ids.length) return;
+    start(async () => {
+      await markNotificationsRead(ids);
+      setSelected(new Set());
+      router.refresh();
+    });
+  }
+  async function deleteSelected() {
+    const ids = [...selected];
+    if (!ids.length) return;
+    const ok = await confirmDialog({
+      message: `Delete ${ids.length} notification${ids.length === 1 ? "" : "s"}? This can't be undone.`,
+      tone: "danger",
+      confirmLabel: "Delete",
+    });
+    if (!ok) return;
+    start(async () => {
+      const res = await deleteNotifications(ids);
+      if (!res.ok) toast.error("Couldn't delete the notifications.");
+      setSelected(new Set());
+      router.refresh();
+    });
+  }
 
   return (
     <div className="space-y-4">
+      {selected.size > 0 && (
+        <div className="sticky top-2 z-10 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-elevated px-4 py-2.5 shadow-card-hover">
+          <span className="text-sm font-medium text-content">{selected.size} selected</span>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={selectAllFiltered}
+              className="rounded-lg px-3 py-1.5 text-sm font-medium text-muted hover:bg-canvas hover:text-content"
+            >
+              {allFilteredSelected ? "Unselect all" : "Select all"}
+            </button>
+            <button
+              onClick={markReadSelected}
+              disabled={pending}
+              className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-content ring-1 ring-inset ring-line-strong hover:bg-canvas disabled:opacity-50"
+            >
+              <Icon name="check" className="size-4" />
+              Mark read
+            </button>
+            <button
+              onClick={deleteSelected}
+              disabled={pending}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+            >
+              <Icon name="trash" className="size-4" />
+              Delete
+            </button>
+            <button
+              onClick={() => setSelected(new Set())}
+              className="rounded-lg px-3 py-1.5 text-sm font-medium text-muted hover:bg-canvas hover:text-content"
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center gap-2">
         <Chip active={filter === "ALL"} onClick={() => setFilter("ALL")} label="All" count={notes.length} />
         {presentCats.map((c) => {
@@ -76,7 +158,7 @@ export function NotificationsList({ notes }: { notes: ClientNote[] }) {
               const cat = categorize(n.type);
               const st = CATEGORY_STYLES[cat];
               const inner = (
-                <div className="flex gap-3.5 px-5 py-4">
+                <div className="flex gap-3.5 py-4 pr-5">
                   <span className={cn("flex size-9 shrink-0 items-center justify-center rounded-xl", st.soft, st.text)}>
                     <Icon name={st.icon} className="size-4" />
                   </span>
@@ -97,8 +179,26 @@ export function NotificationsList({ notes }: { notes: ClientNote[] }) {
                 </div>
               );
               return (
-                <li key={n.id} className="transition-colors hover:bg-canvas">
-                  {n.href ? <Link href={n.href}>{inner}</Link> : inner}
+                <li
+                  key={n.id}
+                  className={cn("flex items-stretch transition-colors", selected.has(n.id) ? "bg-accent-soft" : "hover:bg-canvas")}
+                >
+                  <label className="flex cursor-pointer items-center pl-5 pr-1.5">
+                    <input
+                      type="checkbox"
+                      checked={selected.has(n.id)}
+                      onChange={() => toggleSelect(n.id)}
+                      className="size-4 rounded border-line-strong text-brand-600 focus:ring-brand-500"
+                      aria-label={`Select notification: ${n.title}`}
+                    />
+                  </label>
+                  {n.href ? (
+                    <Link href={n.href} className="min-w-0 flex-1">
+                      {inner}
+                    </Link>
+                  ) : (
+                    <div className="min-w-0 flex-1">{inner}</div>
+                  )}
                 </li>
               );
             })}

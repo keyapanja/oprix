@@ -1,12 +1,21 @@
-# Punch in / out module — hidden from the frontend (2026-06-17)
+# Attendance & punch in/out — hidden from the frontend (2026-06-17)
 
-The self-service **punch in / out** (attendance clock) was removed from the UI on
-2026-06-17. **All backend code, server actions, and database fields were kept
-intact** — this is a UI-only removal, so the feature can be restored by re-wiring
-the frontend. This file is the record of what existed, what it connected to, and
-how to bring it back.
+The attendance feature was retired from the UI in two phases on 2026-06-17:
+**(1)** the self-service **punch in / out** clock, then **(2)** the whole
+**attendance module** (admin grid, monthly register, attendance report, and the
+"present days" metric). **All backend code, server actions, and database fields
+were kept intact** — these are UI-only removals, so the feature can be restored by
+re-wiring / recreating the frontend. Salary is unaffected: loss-of-pay was already
+derived purely from approved **unpaid leave** (`lib/payroll/lop.ts`), never from
+attendance records.
 
-## What it did
+This file records what existed, what it connected to, and how to bring it back.
+
+---
+
+## Phase 1 — Punch in / out (UI removal)
+
+### What it did
 Employees clocked in/out from a dashboard card; clocking in marked them Present
 for the day, with a shift "grace" window deciding on-time vs late. Base employees
 were gated to the dashboard until they punched in. Clock data fed the attendance
@@ -79,3 +88,50 @@ Kept so restoring is just re-adding the imports/usages.
    `lib/cron/jobs.ts` (`runDailyJobs`).
 
 Git history before this commit has the exact prior code for every item above.
+
+---
+
+## Phase 2 — Attendance module (removed from the UI, 2026-06-17)
+
+With punch gone, the rest of the attendance UI was retired too. Salary depends
+only on paid/unpaid **leave**, so attendance tracking is no longer surfaced.
+
+### Routes DELETED (page files removed, not just unlinked)
+- `app/(app)/attendance/page.tsx` — the admin daily marking grid.
+- `app/(app)/attendance/monthly/page.tsx` — the monthly register.
+- `app/(app)/reports/attendance/page.tsx` — the attendance report.
+
+### Nav / links removed
+- `lib/nav.ts` — the top-level **Attendance** item (`/attendance`) and the
+  **Reports → Attendance** child (`/reports/attendance`).
+- `app/(app)/reports/page.tsx` — the "Attendance" card in the detailed-reports
+  list, plus "attendance" wording in the People card desc + the page header.
+
+### People report trimmed
+- `app/(app)/reports/people/page.tsx` — removed the **Present days** KPI, the
+  **Present** table column, the `attendance.groupBy` query, and the export column.
+  Replaced the KPI with **Leave days** (still meaningful). Hours / Tasks / Leave
+  remain.
+
+### Copy
+- `app/login/page.tsx` — feature bullet "Employees, attendance & payroll…" →
+  "Employees, leave & payroll…".
+
+### Dormant — kept, not reachable from the UI
+- **Components:** `components/attendance/attendance-grid.tsx`,
+  `components/attendance/date-nav.tsx` (no longer imported).
+- **Backend:** all of `lib/attendance/*` (`actions.ts`, `monthly.ts`, `resolve.ts`,
+  `status.ts`, `gate.ts`, `self.ts`), the `Attendance` model, the
+  `attendance:manage` capability, and the notification-category → `/attendance`
+  mapping in `lib/notifications/categories.ts`. No schema migration was run.
+
+> Note: `attendance:manage` still appears as a toggle in Organization → Roles
+> (harmless — it gates nothing visible now). Left in place for a clean restore.
+
+### How to restore phase 2
+1. Recreate the three route page files (git history has the exact prior code).
+2. Re-add the nav items in `lib/nav.ts` and the report card + wording in
+   `app/(app)/reports/page.tsx`.
+3. Re-add the Present KPI/column + the `attendance.groupBy` query (and the export
+   column) in `app/(app)/reports/people/page.tsx`.
+4. Revert the login feature bullet.

@@ -465,15 +465,9 @@ export async function removeTaskAssignee(taskId: string, employeeId: string): Pr
   return { ok: true };
 }
 
-export async function deleteTask(taskId: string): Promise<ProjectState> {
-  const session = await requireCapability("task:manage");
-  const task = await prisma.task.findFirst({
-    where: { id: taskId, project: { companyId: session.companyId } },
-    select: { id: true },
-  });
-  if (!task) return { error: "Task not found" };
-
-  // Remove every child row first (FKs), then the task itself.
+// Remove a task and all of its dependent rows. Caller MUST have already
+// verified the task belongs to the acting company.
+async function purgeTask(taskId: string): Promise<void> {
   await prisma.task.updateMany({ where: { parentTaskId: taskId }, data: { parentTaskId: null } });
   await prisma.taskTimer.deleteMany({ where: { taskId } });
   await prisma.timeEntry.deleteMany({ where: { taskId } });
@@ -484,9 +478,42 @@ export async function deleteTask(taskId: string): Promise<ProjectState> {
   await prisma.taskAssignee.deleteMany({ where: { taskId } });
   await prisma.comment.deleteMany({ where: { taskId } });
   await prisma.task.delete({ where: { id: taskId } });
+}
 
+export async function deleteTask(taskId: string): Promise<ProjectState> {
+  const session = await requireCapability("task:manage");
+  const task = await prisma.task.findFirst({
+    where: { id: taskId, project: { companyId: session.companyId } },
+    select: { id: true },
+  });
+  if (!task) return { error: "Task not found" };
+  await purgeTask(taskId);
   revalidatePath("/tasks");
   return { ok: true };
+}
+
+/** Bulk-delete tasks. Each is removed independently; failures are counted. */
+export async function deleteTasks(
+  ids: string[],
+): Promise<ProjectState & { deleted?: number; skipped?: number }> {
+  const session = await requireCapability("task:manage");
+  if (ids.length === 0) return { ok: true, deleted: 0, skipped: 0 };
+  const tasks = await prisma.task.findMany({
+    where: { id: { in: ids }, project: { companyId: session.companyId } },
+    select: { id: true },
+  });
+  let deleted = 0;
+  let skipped = 0;
+  for (const t of tasks) {
+    try {
+      await purgeTask(t.id);
+      deleted++;
+    } catch {
+      skipped++;
+    }
+  }
+  revalidatePath("/tasks");
+  return { ok: true, deleted, skipped };
 }
 
 // ---- Comments (task access OR admin) --------------------------------------

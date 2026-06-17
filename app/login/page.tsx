@@ -5,7 +5,7 @@ import { Icon } from "@/components/ui/icons";
 export const metadata: Metadata = { title: "Sign in · Oprix" };
 
 const FEATURES = [
-  "Employees, attendance & payroll in one place",
+  "Employees, leave & payroll in one place",
   "Projects, tasks & client portals",
   "Real-time reporting & analytics",
 ];
