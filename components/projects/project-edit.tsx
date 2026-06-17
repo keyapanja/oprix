@@ -15,13 +15,17 @@ import { Icon } from "@/components/ui/icons";
 import { humanizeEnum } from "@/lib/format";
 
 const PRIORITIES = ["LOW", "MEDIUM", "HIGH", "URGENT"];
+const TYPES = [
+  { value: "ONE_TIME", label: "One time" },
+  { value: "RECURRING", label: "Recurring" },
+];
 
 export function ProjectEdit({
   projectId,
   initial,
 }: {
   projectId: string;
-  initial: { name: string; description: string; priority: string; startDate: string; dueDate: string };
+  initial: { name: string; description: string; priority: string; type: string; startDate: string; dueDate: string };
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -31,6 +35,7 @@ export function ProjectEdit({
   const [name, setName] = useState(initial.name);
   const [desc, setDesc] = useState(initial.description);
   const [priority, setPriority] = useState(initial.priority);
+  const [type, setType] = useState(initial.type);
   const [startDate, setStartDate] = useState(initial.startDate);
   const [dueDate, setDueDate] = useState(initial.dueDate);
 
@@ -40,6 +45,7 @@ export function ProjectEdit({
     fd.set("name", name);
     fd.set("description", desc);
     fd.set("priority", priority);
+    fd.set("type", type);
     fd.set("startDate", startDate);
     fd.set("dueDate", dueDate);
     start(async () => {
@@ -90,6 +96,9 @@ export function ProjectEdit({
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Priority">
                 <Combobox value={priority} onChange={setPriority} options={PRIORITIES.map((p) => ({ value: p, label: humanizeEnum(p) }))} />
+              </Field>
+              <Field label="Type">
+                <Combobox value={type} onChange={setType} options={TYPES} />
               </Field>
               <Field label="Start date">
                 <DatePicker value={startDate} onChange={setStartDate} />

@@ -59,17 +59,26 @@ export async function punchOut(): Promise<PunchState> {
   if (!ctx) return { error: "No employee profile is linked to your account." };
 
   const { dateISO, time } = nowInZone(ctx.tz);
-  const date = dateAtUTC(dateISO);
 
-  const existing = await prisma.attendance.findUnique({
-    where: { employeeId_date: { employeeId: ctx.employeeId, date } },
-    select: { clockIn: true, clockOut: true },
+  // Find the OPEN session (punched in, not out). Usually today's row, but for an
+  // overnight shift the open row was opened on the previous day — so search by
+  // the open state, not just today's date, or punch-out would be unreachable.
+  const open = await prisma.attendance.findFirst({
+    where: { employeeId: ctx.employeeId, clockIn: { not: null }, clockOut: null },
+    orderBy: { date: "desc" },
+    select: { id: true },
   });
-  if (!existing?.clockIn) return { error: "Punch in first." };
-  if (existing.clockOut) return { error: "You've already punched out today." };
+  if (!open) {
+    const todayRow = await prisma.attendance.findUnique({
+      where: { employeeId_date: { employeeId: ctx.employeeId, date: dateAtUTC(dateISO) } },
+      select: { clockIn: true, clockOut: true },
+    });
+    if (todayRow?.clockIn && todayRow.clockOut) return { error: "You've already punched out." };
+    return { error: "Punch in first." };
+  }
 
   await prisma.attendance.update({
-    where: { employeeId_date: { employeeId: ctx.employeeId, date } },
+    where: { id: open.id },
     data: { clockOut: combineDateTimeUTC(dateISO, time) },
   });
 

@@ -128,6 +128,20 @@ const ApplySchema = z.object({
   reason: z.string().trim().max(300).optional().or(z.literal("")),
 });
 
+/** True if the employee already has a non-rejected request overlapping [start, end]. */
+async function hasOverlappingLeave(companyId: string, employeeId: string, start: Date, end: Date): Promise<boolean> {
+  const n = await prisma.leaveRequest.count({
+    where: {
+      companyId,
+      employeeId,
+      status: { not: "REJECTED" },
+      startDate: { lte: end },
+      endDate: { gte: start },
+    },
+  });
+  return n > 0;
+}
+
 export async function applyLeave(
   _prev: LeaveState,
   formData: FormData,
@@ -143,6 +157,10 @@ export async function applyLeave(
   const start = dateAtUTC(d.startDate);
   const end = dateAtUTC(d.endDate);
   if (end < start) return { error: "End date can't be before the start date" };
+
+  if (await hasOverlappingLeave(session.companyId, session.employeeId, start, end)) {
+    return { error: "You already have a leave/WFH request covering these dates." };
+  }
 
   const singleDay = d.startDate === d.endDate;
   const isHalfDay = singleDay && d.isHalfDay === "on";
@@ -244,6 +262,15 @@ export async function createLeaveRequest(
   const end = dateAtUTC(d.endDate);
   if (end < start) return { error: "End date can't be before the start date" };
   const days = Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1;
+
+  // Enforce the same balance + overlap guards as self-service apply.
+  const remaining = await remainingForType(session.companyId, d.employeeId, d.leaveTypeId);
+  if (remaining !== null && days > remaining) {
+    return { error: `Only ${remaining} day(s) left for this leave type.` };
+  }
+  if (await hasOverlappingLeave(session.companyId, d.employeeId, start, end)) {
+    return { error: "This employee already has a request covering these dates." };
+  }
 
   await prisma.leaveRequest.create({
     data: {

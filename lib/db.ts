@@ -19,7 +19,7 @@ export const prisma =
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 
 // ---------------------------------------------------------------------------
-// TENANCY GUARDRAIL (see docs/architecture.md §2)
+// TENANCY GUARDRAIL (see docs/REFERENCE.md § 2.2 Multi-tenancy)
 // Every tenant-owned query MUST be scoped by companyId. Do not query tenant
 // tables with the bare `prisma` client from feature code — go through a
 // service in lib/<domain> that takes the caller's companyId and applies it.

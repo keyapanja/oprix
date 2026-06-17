@@ -119,6 +119,7 @@ export default async function ProjectDetailPage({
                 name: project.name,
                 description: project.description ?? "",
                 priority: project.priority,
+                type: project.type,
                 startDate: project.startDate ? project.startDate.toISOString().slice(0, 10) : "",
                 dueDate: project.dueDate ? project.dueDate.toISOString().slice(0, 10) : "",
               }}
@@ -138,36 +139,38 @@ export default async function ProjectDetailPage({
         </div>
       </Card>
 
-      <ProjectServices
-        projectId={project.id}
-        items={project.services.map((ps) => ({
-          id: ps.id,
-          categoryName: ps.service.name,
-          subcategories: ps.service.children,
-        }))}
-        available={available}
-      />
+      <div className="grid grid-cols-1 items-start gap-x-5 lg:grid-cols-2">
+        <ProjectServices
+          projectId={project.id}
+          items={project.services.map((ps) => ({
+            id: ps.id,
+            categoryName: ps.service.name,
+            subcategories: ps.service.children,
+          }))}
+          available={available}
+        />
 
-      <Card className="mb-6">
-        <div className="border-b border-line px-5 py-3.5">
-          <h3 className="text-sm font-semibold text-content">Attachments</h3>
-        </div>
-        <div className="p-5">
-          <AttachmentsPanel
-            uploadUrl={`/api/projects/${project.id}/attachments`}
-            canEdit
-            initial={project.attachments.map((a) => ({
-              id: a.id,
-              fileName: a.fileName,
-              mimeType: a.mimeType,
-              sizeBytes: a.sizeBytes,
-              createdAt: a.createdAt.toISOString(),
-            }))}
-          />
-        </div>
-      </Card>
+        <Card className="mb-6">
+          <div className="border-b border-line px-5 py-3.5">
+            <h3 className="text-sm font-semibold text-content">Attachments</h3>
+          </div>
+          <div className="p-5">
+            <AttachmentsPanel
+              uploadUrl={`/api/projects/${project.id}/attachments`}
+              canEdit
+              initial={project.attachments.map((a) => ({
+                id: a.id,
+                fileName: a.fileName,
+                mimeType: a.mimeType,
+                sizeBytes: a.sizeBytes,
+                createdAt: a.createdAt.toISOString(),
+              }))}
+            />
+          </div>
+        </Card>
 
-      {project.client && <DeliverablesPanel projectId={project.id} items={project.deliverables} />}
+        {project.client && <DeliverablesPanel projectId={project.id} items={project.deliverables} />}
+      </div>
 
       <KanbanBoard
         projectId={project.id}

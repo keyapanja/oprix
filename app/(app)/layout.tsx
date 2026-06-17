@@ -20,7 +20,7 @@ export default async function AppLayout({
   children: React.ReactNode;
 }) {
   const session = await getSession();
-  if (!session) redirect("/login");
+  if (!session) redirect("/logout");
   // Hard isolation: clients never see the internal app (the proxy redirects
   // first; this is a defense-in-depth backstop if the matcher ever changes).
   if (session.role === "CLIENT") redirect("/portal");

@@ -57,13 +57,15 @@ export default async function PortalProjectDetailPage({ params }: { params: Prom
           </div>
         </div>
 
-        <div className="mt-5 space-y-1.5">
-          <div className="flex items-center justify-between text-xs text-muted">
-            <span>{progress.completed} of {progress.total} tasks completed</span>
-            <span className="font-medium text-content">{progress.pct}%</span>
+        {project.type !== "RECURRING" && (
+          <div className="mt-5 space-y-1.5">
+            <div className="flex items-center justify-between text-xs text-muted">
+              <span>{progress.completed} of {progress.total} tasks completed</span>
+              <span className="font-medium text-content">{progress.pct}%</span>
+            </div>
+            <ProgressBar pct={progress.pct} />
           </div>
-          <ProgressBar pct={progress.pct} />
-        </div>
+        )}
 
         <div className="mt-4 flex flex-wrap gap-x-8 gap-y-2 border-t border-line pt-4 text-sm">
           <div>

@@ -19,7 +19,10 @@ function allowlist(): string[] {
 export function corsOrigin(reqOrigin: string | null): string | null {
   const allow = allowlist();
   if (allow.length === 0) {
-    // Dev convenience: no allowlist → accept any extension origin.
+    // Dev convenience ONLY: reflect any extension origin so "load unpacked" works
+    // without pinning an id. In production, require an explicit EXTENSION_ORIGINS
+    // allowlist — fail CLOSED rather than reflect arbitrary chrome extensions.
+    if (process.env.NODE_ENV === "production") return null;
     return reqOrigin && reqOrigin.startsWith("chrome-extension://") ? reqOrigin : null;
   }
   return reqOrigin && allow.includes(reqOrigin) ? reqOrigin : null;

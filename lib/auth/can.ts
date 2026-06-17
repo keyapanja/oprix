@@ -1,7 +1,7 @@
 import type { Role } from "@prisma/client";
 
 // ---------------------------------------------------------------------------
-// Capability catalog (see docs/architecture.md §3).
+// Capability catalog (see docs/REFERENCE.md § 2.3 Authorization).
 // Permissions are now DB-backed per company (see lib/auth/permissions.ts).
 // The map below is the DEFAULT seed used until an admin customizes access, and
 // `can()` is the synchronous default check used as a fallback.

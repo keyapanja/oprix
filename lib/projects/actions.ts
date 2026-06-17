@@ -2,19 +2,18 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
-import { ProjectStatus, TaskStatus, Priority } from "@prisma/client";
+import { ProjectStatus, TaskStatus, Priority, ProjectType } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { requireCapability } from "@/lib/auth/guard";
 import { getSession } from "@/lib/auth/session";
 import { hasPermission } from "@/lib/auth/permissions";
 import { dateAtUTC } from "@/lib/dates";
-import { humanizeEnum } from "@/lib/format";
 import { logActivity, actorLabel, logTaskActivity } from "@/lib/activity";
+import { finalizeTaskTimer } from "@/lib/timer/finalize";
 import { canEditTask, toggleChecklistItemFor } from "@/lib/projects/task-access";
 import { deleteUpload } from "@/lib/uploads";
 
-export type ProjectState = { error?: string; ok?: boolean };
+export type ProjectState = { error?: string; ok?: boolean; id?: string };
 
 // ---- Projects -------------------------------------------------------------
 const ProjectSchema = z.object({
@@ -25,6 +24,7 @@ const ProjectSchema = z.object({
   dueDate: z.string().optional().or(z.literal("")),
   priority: z.nativeEnum(Priority),
   status: z.nativeEnum(ProjectStatus),
+  type: z.nativeEnum(ProjectType).default(ProjectType.ONE_TIME),
 });
 
 export async function createProject(
@@ -63,6 +63,7 @@ export async function createProject(
       dueDate: d.dueDate ? dateAtUTC(d.dueDate) : null,
       priority: d.priority,
       status: d.status,
+      type: d.type,
       services: { create: validServices.map((s) => ({ serviceId: s.id })) },
     },
     select: { id: true, services: { select: { id: true, serviceId: true } } },
@@ -72,7 +73,8 @@ export async function createProject(
     await seedProjectServiceChecklist(ps.id, ps.serviceId);
   }
   revalidatePath("/projects");
-  redirect(`/projects/${project.id}`);
+  // Returns the id so the client form can upload attachments, then redirect.
+  return { ok: true, id: project.id };
 }
 
 export async function updateProjectStatus(id: string, status: ProjectStatus): Promise<ProjectState> {
@@ -94,11 +96,12 @@ const ProjectMetaSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(140),
   description: z.string().trim().max(2000).optional().or(z.literal("")),
   priority: z.nativeEnum(Priority),
+  type: z.nativeEnum(ProjectType).default(ProjectType.ONE_TIME),
   startDate: z.string().optional().or(z.literal("")),
   dueDate: z.string().optional().or(z.literal("")),
 });
 
-/** Edit a project's core fields (name, description, priority, dates). */
+/** Edit a project's core fields (name, description, priority, type, dates). */
 export async function updateProject(id: string, formData: FormData): Promise<ProjectState> {
   const session = await requireCapability("project:manage");
   if (!(await ownsProject(session.companyId, id))) return { error: "Project not found" };
@@ -111,6 +114,7 @@ export async function updateProject(id: string, formData: FormData): Promise<Pro
       name: d.name,
       description: d.description || null,
       priority: d.priority,
+      type: d.type,
       startDate: d.startDate ? dateAtUTC(d.startDate) : null,
       dueDate: d.dueDate ? dateAtUTC(d.dueDate) : null,
     },
@@ -162,25 +166,6 @@ export async function removeProjectService(projectServiceId: string): Promise<Pr
     where: { id: projectServiceId, project: { companyId: session.companyId } },
   });
   revalidatePath("/projects");
-  return { ok: true };
-}
-
-export async function setServicePrimary(
-  projectServiceId: string,
-  employeeId: string | null,
-): Promise<ProjectState> {
-  const session = await requireCapability("project:manage");
-  if (employeeId) {
-    const emp = await prisma.employee.findFirst({
-      where: { id: employeeId, companyId: session.companyId, deletedAt: null },
-      select: { id: true },
-    });
-    if (!emp) return { error: "Invalid employee" };
-  }
-  await prisma.projectService.updateMany({
-    where: { id: projectServiceId, project: { companyId: session.companyId } },
-    data: { primaryAssigneeId: employeeId },
-  });
   return { ok: true };
 }
 
@@ -369,32 +354,6 @@ export async function deleteAttachment(attachmentId: string): Promise<ProjectSta
   return { ok: true };
 }
 
-export async function updateTaskStatus(taskId: string, status: TaskStatus): Promise<ProjectState> {
-  const session = await requireCapability("task:manage");
-  const task = await prisma.task.findFirst({
-    where: { id: taskId, project: { companyId: session.companyId } },
-    select: { status: true, startedAt: true, projectId: true },
-  });
-  if (!task) return { error: "Task not found" };
-
-  const data: { status: TaskStatus; startedAt?: Date; completedAt?: Date | null } = { status };
-  if (status === "IN_PROGRESS" && !task.startedAt) data.startedAt = new Date();
-  if (status === "COMPLETED") data.completedAt = new Date();
-
-  await prisma.task.update({ where: { id: taskId }, data });
-  await logActivity({
-    companyId: session.companyId,
-    actorId: session.userId,
-    actorLabel: await actorLabel(session.userId),
-    entityType: "TASK",
-    entityId: taskId,
-    message: `moved the task to ${humanizeEnum(status)}`,
-  });
-  revalidatePath(`/projects/${task.projectId}`);
-  revalidatePath(`/tasks/${taskId}`);
-  return { ok: true };
-}
-
 const TaskMetaSchema = z.object({
   name: z.string().trim().min(1).max(200),
   description: z.string().trim().max(4000).optional().or(z.literal("")),
@@ -468,11 +427,13 @@ export async function removeTaskAssignee(taskId: string, employeeId: string): Pr
   const session = await requireCapability("task:manage");
   const emp = await prisma.employee.findFirst({
     where: { id: employeeId, companyId: session.companyId },
-    select: { fullName: true },
+    select: { fullName: true, user: { select: { id: true } } },
   });
   await prisma.taskAssignee.deleteMany({
     where: { taskId, employeeId, task: { project: { companyId: session.companyId } } },
   });
+  // They can no longer work this task — stop & bank any running timer of theirs.
+  if (emp?.user?.id) await finalizeTaskTimer(session.companyId, emp.user.id, taskId);
   await logTaskActivity(session, taskId, `unassigned ${emp?.fullName ?? "someone"}`);
   revalidatePath(`/tasks/${taskId}`);
   return { ok: true };

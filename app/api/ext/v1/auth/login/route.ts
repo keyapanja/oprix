@@ -9,6 +9,22 @@ import type { ExtUser } from "@/shared/ext-contract";
 
 export const dynamic = "force-dynamic";
 
+// Basic in-memory per-IP rate limit (single host; resets on restart) to blunt
+// online password guessing against this unauthenticated, internet-exposed route.
+const ATTEMPTS = new Map<string, { count: number; resetAt: number }>();
+const MAX_ATTEMPTS = 10;
+const WINDOW_MS = 60_000;
+function rateLimited(key: string): boolean {
+  const now = Date.now();
+  const rec = ATTEMPTS.get(key);
+  if (!rec || now > rec.resetAt) {
+    ATTEMPTS.set(key, { count: 1, resetAt: now + WINDOW_MS });
+    return false;
+  }
+  rec.count += 1;
+  return rec.count > MAX_ATTEMPTS;
+}
+
 export function OPTIONS(req: Request) {
   return preflight(req);
 }
@@ -31,8 +47,13 @@ export async function POST(req: Request) {
     return corsJson(req, { error: "Email and password are required" }, 400);
   }
 
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip") || "unknown";
+  if (rateLimited(ip)) {
+    return corsJson(req, { error: "Too many attempts — try again in a minute." }, 429);
+  }
+
   const user = await prisma.user.findFirst({
-    where: { email, isActive: true },
+    where: { email: { equals: email, mode: "insensitive" }, isActive: true },
     select: { id: true, companyId: true, role: true, email: true, passwordHash: true },
   });
   // Uniform failure to avoid leaking which emails exist.

@@ -23,9 +23,13 @@ export default async function DashboardPage() {
   const session = await requireSession();
   const canViewReports = await hasPermission(session.companyId, session.role, "report:view");
   const now = new Date();
-  const name = session.email.split("@")[0];
 
-  const tz = await getCompanyTimezone(session.companyId);
+  const [tz, me] = await Promise.all([
+    getCompanyTimezone(session.companyId),
+    prisma.user.findUnique({ where: { id: session.userId }, select: { nickname: true } }),
+  ]);
+  // Greeting prefers the profile nickname; otherwise the email local-part.
+  const name = me?.nickname?.trim() || session.email.split("@")[0];
   const nowZ = nowInZone(tz);
   const todayUTC = dateAtUTC(nowZ.dateISO);
   const hour = Number(nowZ.time.slice(0, 2));

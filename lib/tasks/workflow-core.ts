@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db";
 import type { SessionUser } from "@/lib/auth/session";
 import { hasPermission } from "@/lib/auth/permissions";
 import { logTaskActivity, actorLabel } from "@/lib/activity";
-import { finalizeTaskTimer } from "@/lib/timer/finalize";
+import { finalizeAllTaskTimers } from "@/lib/timer/finalize";
 import { normalizeHttpUrl } from "@/lib/url";
 
 // Session-agnostic "submit for review" — shared by the web Server Action
@@ -43,7 +43,7 @@ export async function submitForReviewFor(
   const safeLink = normalizeHttpUrl(link);
   if (!safeLink) return { error: "Enter a valid link (http:// or https://)." };
 
-  await finalizeTaskTimer(session.companyId, session.userId, taskId);
+  await finalizeAllTaskTimers(session.companyId, taskId);
   await prisma.task.update({ where: { id: taskId }, data: { status: "REVIEW", finalLink: safeLink } });
 
   const actor = await actorLabel(session.userId);

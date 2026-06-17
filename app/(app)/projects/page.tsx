@@ -23,6 +23,7 @@ export default async function ProjectsPage() {
       name: true,
       status: true,
       priority: true,
+      type: true,
       dueDate: true,
       client: { select: { name: true } },
       tasks: { select: { status: true } },
@@ -66,15 +67,22 @@ export default async function ProjectsPage() {
                   </div>
                   <p className="mt-1 text-sm text-muted">{p.client?.name ?? "No client"}</p>
 
-                  <div className="mt-4">
-                    <div className="mb-1 flex items-center justify-between text-xs text-muted">
-                      <span>{done} of {total} tasks</span>
-                      <span>{pct}%</span>
+                  {p.type === "RECURRING" ? (
+                    <div className="mt-4 flex items-center gap-1.5 text-xs text-muted">
+                      <Icon name="calendarDays" className="size-3.5 text-faint" />
+                      <span>Recurring · {total} task{total === 1 ? "" : "s"}</span>
                     </div>
-                    <div className="h-2 overflow-hidden rounded-full bg-canvas">
-                      <div className="gradient-brand h-full rounded-full" style={{ width: `${pct}%` }} />
+                  ) : (
+                    <div className="mt-4">
+                      <div className="mb-1 flex items-center justify-between text-xs text-muted">
+                        <span>{done} of {total} tasks</span>
+                        <span>{pct}%</span>
+                      </div>
+                      <div className="h-2 overflow-hidden rounded-full bg-canvas">
+                        <div className="gradient-brand h-full rounded-full" style={{ width: `${pct}%` }} />
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   <div className="mt-4 flex items-center justify-between border-t border-line pt-3">
                     <Badge tone={PRIORITY_TONE[p.priority]}>{humanizeEnum(p.priority)}</Badge>

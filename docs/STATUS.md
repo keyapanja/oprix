@@ -1,12 +1,9 @@
 # Operix — Build Status Snapshot
 
-Compact current-state reference. See `docs/architecture.md` for rationale,
-`docs/roadmap.md` for the original plan, **`docs/SESSION-2026-06-16-categories-uploads.md`**
-for the latest session (service categories/sub-categories, task description + file
-uploads, department-based assignees), `docs/SESSION-2026-06-16-extension.md` for the
-Companion browser extension + first JSON API, and `docs/SESSION-2026-06-15-payroll-ops.md`
-for Payroll/ops modules. `docs/EXTENSION-PLAN.md` holds the extension's full design.
-_Last updated: 2026-06-16 (pm) — **Services are now categories → sub-categories** (`Service.parentId`): projects link categories, tasks pick a sub-category (which seeds the checklist), and **task assignees are scoped to the sub-category's department** (per-service "primary assignee" removed). Task creation gained a **description** + **file attachments stored on disk** (`uploads/`, served via `/api/files/[id]`, never in the DB). Data migrated (existing services → sub-categories under per-dept "General"; project links repointed to categories). `tsc` green. Earlier same day: Companion extension + `/api/ext/v1`; Resource Allocation frontend removed._
+Compact current-state reference. See **`docs/REFERENCE.md`** for local setup,
+architecture & design rationale, the build roadmap, and the companion-extension
+design. Day-to-day extension load/use is in `extension/README.md`.
+_Last updated: 2026-06-17 — **Pre-launch hardening pass**: multi-assignee timer finalization, leave overlap/balance guards, overnight punch-out fix, extension CORS fail-closed + login rate-limit, deactivated-user redirect-loop fix (`/logout` route), email case-insensitivity + `User.email` sync, JWT alg pin, dead-code removal. Plus project changes: `Project.type` (one-time/recurring, recurring hides progress), create-time asset upload, 2-column detail, **Kanban board removed**, deleted-announcement page. Code-only — `tsc` green, no `db:push`. Earlier (2026-06-16 pm): **Services are now categories → sub-categories** (`Service.parentId`): projects link categories, tasks pick a sub-category (which seeds the checklist), and **task assignees are scoped to the sub-category's department** (per-service "primary assignee" removed). Task creation gained a **description** + **file attachments stored on disk** (`uploads/`, served via `/api/files/[id]`, never in the DB). Data migrated (existing services → sub-categories under per-dept "General"; project links repointed to categories). `tsc` green. Earlier same day: Companion extension + `/api/ext/v1`; Resource Allocation frontend removed._
 
 ## Stack (as built)
 - **Next.js 16** (App Router, Turbopack) · **TypeScript** strict · **Tailwind v4**
@@ -24,10 +21,10 @@ _Last updated: 2026-06-16 (pm) — **Services are now categories → sub-categor
 - **Employees** — directory, create/edit, profile, emergency contacts, email invite + resend.
 - **User profiles** — `/profile` (self) + `/people/[id]` (Active/Away badge). **Names across the app now link to `/people/[id]`** (monthly attendance, People report, task assignees, comment authors).
 - **Attendance** — admin daily grid (status modal, self-log confirm) **plus a monthly register (`/attendance/monthly`)**: employees × days, status-coded (P/A/½/L/H), month nav. Self-service punch, leave sync, holiday banner, late detection → notifications.
-- **Leave** — types (allowance per month/year, **now editable**); self-service apply (live balance + over-balance block, half-day, WFH, Employee→Manager→HR); notifications on apply/approve/reject.
+- **Leave** — types (allowance per month/year, **now editable**); self-service apply (live balance + over-balance block, half-day, WFH, Employee→Manager→HR); **overlap guard** (no double-booking dates) + balance check on both self-apply and manager-create; segregation of duties on approval; notifications on apply/approve/reject.
 - **Calendar** — holidays, who's away, announcements; click/drag to act; announcement fan-out; optional day-before reminders. Announcements are **author-scoped** (`Announcement.authorId`): the poster (or a Super Admin) can edit/delete them from the panel.
 - **Tasks → Calendar view** — multi-day tasks render as **continuous spanning bars** (Google-Calendar style): per-week lane packing, flat edges at week boundaries, colored by status, "Due" tag on the deadline day, "+N more" overflow.
-- **Projects** — list with progress, create (**pick service categories**), detail with Kanban + list, **edit modal** (name/description/priority/dates + soft-delete), **Service-categories panel** (shows each linked category's sub-categories), **Attachments** (on-disk, same as tasks), Deliverables panel.
+- **Projects** — list with progress (**recurring projects hide done/total**), create (**pick service categories** + upload assets at creation), **simple task list** (the per-project Kanban/drag board was removed — it conflicted with the timer/auto-status flow), **edit modal** (name/description/priority/**type: one-time vs recurring**/dates + soft-delete), **Service-categories panel**, **Attachments** (on-disk), Deliverables panel. Detail page is a **2-column layout** below the header.
 - **Tasks** — review workflow; **List / Calendar** view switcher (`tasks-workspace`); per-row edit/delete; **description + file attachments** (list/download/delete on the detail page); created under a **sub-category** with **department-scoped assignees**; inline assignees + checklist; comments (@-mentions); per-user timers; role-based visibility. `deleteTask` cleans up all child rows **and their on-disk files**.
 - **Time tracking** — per-task/user stopwatch, non-destructive pause, global bottom bar.
 - **Clients** — list, contacts, project mapping, **edit**, portal-access invite.

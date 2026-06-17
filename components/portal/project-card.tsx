@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { ProjectStatus } from "@prisma/client";
+import type { ProjectStatus, ProjectType } from "@prisma/client";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { humanizeEnum, formatDate } from "@/lib/format";
@@ -11,6 +11,7 @@ export type PortalProjectCard = {
   name: string;
   description: string | null;
   status: ProjectStatus;
+  type: ProjectType;
   dueDate: Date | null;
   progress: { pct: number; total: number; completed: number; awaitingReview: number };
 };
@@ -25,15 +26,19 @@ export function ProjectCard({ p }: { p: PortalProjectCard }) {
         </div>
         {p.description && <p className="mt-1 line-clamp-2 text-sm text-muted">{p.description}</p>}
 
-        <div className="mt-4 space-y-1.5">
-          <div className="flex items-center justify-between text-xs text-muted">
-            <span>
-              {p.progress.completed} of {p.progress.total} tasks done
-            </span>
-            <span className="font-medium text-content">{p.progress.pct}%</span>
+        {p.type === "RECURRING" ? (
+          <p className="mt-4 text-xs text-muted">Recurring project</p>
+        ) : (
+          <div className="mt-4 space-y-1.5">
+            <div className="flex items-center justify-between text-xs text-muted">
+              <span>
+                {p.progress.completed} of {p.progress.total} tasks done
+              </span>
+              <span className="font-medium text-content">{p.progress.pct}%</span>
+            </div>
+            <ProgressBar pct={p.progress.pct} />
           </div>
-          <ProgressBar pct={p.progress.pct} />
-        </div>
+        )}
 
         <div className="mt-3 flex items-center justify-between text-xs">
           <span className="text-faint">Due {formatDate(p.dueDate)}</span>

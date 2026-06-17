@@ -5,7 +5,7 @@ import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
 import { hasPermission } from "@/lib/auth/permissions";
 import { logTaskActivity, actorLabel } from "@/lib/activity";
-import { finalizeTaskTimer } from "@/lib/timer/finalize";
+import { finalizeTaskTimer, finalizeAllTaskTimers } from "@/lib/timer/finalize";
 import { submitForReviewFor } from "@/lib/tasks/workflow-core";
 
 export type WorkflowState = { ok?: boolean; error?: string };
@@ -103,7 +103,7 @@ export async function sendToClientReview(taskId: string): Promise<WorkflowState>
   if (!isReviewer && !isElevated) return { error: "Only the reviewer can do this." };
   if (task.status !== "REVIEW") return { error: "Only a task waiting for review can move to client review." };
 
-  await finalizeTaskTimer(session.companyId, session.userId, taskId);
+  await finalizeAllTaskTimers(session.companyId, taskId);
   await prisma.task.update({ where: { id: taskId }, data: { status: "CLIENT_REVIEW" } });
 
   const actor = await actorLabel(session.userId);
@@ -127,7 +127,7 @@ export async function approveComplete(taskId: string): Promise<WorkflowState> {
     return { error: "Only a task in review can be completed." };
   }
 
-  await finalizeTaskTimer(session.companyId, session.userId, taskId);
+  await finalizeAllTaskTimers(session.companyId, taskId);
   await prisma.task.update({ where: { id: taskId }, data: { status: "COMPLETED", completedAt: new Date() } });
 
   const actor = await actorLabel(session.userId);

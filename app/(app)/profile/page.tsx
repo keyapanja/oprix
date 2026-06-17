@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
 import { ProfileEditForm } from "@/components/profile/profile-edit-form";
+import { ChangePasswordForm } from "@/components/profile/change-password-form";
 import { employeeLiveStatus } from "@/lib/profile/status";
 
 export const metadata: Metadata = { title: "My profile · Operix" };
@@ -63,6 +64,12 @@ export default async function ProfilePage() {
           initial={{ nickname: user.nickname ?? "", avatarUrl: user.avatarUrl ?? "", bio: user.bio ?? "" }}
           fullName={fullName}
         />
+      </Card>
+
+      <Card className="mt-6 p-6">
+        <h2 className="text-lg font-semibold text-content">Password</h2>
+        <p className="mb-5 mt-1 text-sm text-muted">Change the password you use to sign in.</p>
+        <ChangePasswordForm />
       </Card>
     </div>
   );

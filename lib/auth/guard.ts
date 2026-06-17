@@ -7,7 +7,7 @@ import type { Action } from "@/lib/auth/can";
 /** For pages: redirects to /login (no session) or /dashboard (no capability). */
 export async function requirePage(action?: Action): Promise<SessionUser> {
   const session = await getSession();
-  if (!session) redirect("/login");
+  if (!session) redirect("/logout");
   if (action && !(await hasPermission(session.companyId, session.role, action))) {
     redirect("/dashboard");
   }
@@ -34,7 +34,7 @@ export type PortalSession = SessionUser & { clientId: string };
  */
 export async function requirePortal(): Promise<PortalSession> {
   const session = await getSession();
-  if (!session) redirect("/login");
+  if (!session) redirect("/logout");
   if (session.role !== "CLIENT" || !session.clientId) redirect("/dashboard");
   return session as PortalSession;
 }

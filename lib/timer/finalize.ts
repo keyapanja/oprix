@@ -70,6 +70,23 @@ export async function finalizeTaskTimer(
 }
 
 /**
+ * Stop EVERY user's timer on a task (bank each live run, then remove the rows).
+ * Used when a task leaves a work state via the review workflow, so a multi-assignee
+ * task doesn't leave a co-worker's timer banking time after submit/approve.
+ */
+export async function finalizeAllTaskTimers(companyId: string, taskId: string): Promise<void> {
+  const timers = await prisma.taskTimer.findMany({
+    where: { taskId },
+    select: { userId: true, runStartedAt: true, task: { select: { projectId: true } } },
+  });
+  if (timers.length === 0) return;
+  for (const t of timers) {
+    await bankRun(companyId, t.userId, taskId, t.task.projectId, t.runStartedAt);
+  }
+  await prisma.taskTimer.deleteMany({ where: { taskId } });
+}
+
+/**
  * Pause a user's timer: bank the current run into the timesheet but KEEP the
  * timer row (status PAUSED) so it stays in the global bar and can be resumed
  * from anywhere. Returns seconds banked (null if there was no timer).

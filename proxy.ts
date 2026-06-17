@@ -20,7 +20,7 @@ async function readSession(req: NextRequest): Promise<Claims | null> {
   const token = req.cookies.get(COOKIE_NAME)?.value;
   if (!token) return null;
   try {
-    const { payload } = await jwtVerify(token, secret());
+    const { payload } = await jwtVerify(token, secret(), { algorithms: ["HS256"] });
     return {
       role: (payload.role as string) ?? "",
       clientId: (payload.clientId as string | null) ?? null,
@@ -41,6 +41,11 @@ export async function proxy(req: NextRequest) {
   if (pathname.startsWith("/api/ext/") || pathname.startsWith("/api/cron")) {
     return NextResponse.next();
   }
+
+  // /logout always passes through — it clears the cookie then redirects to
+  // /login. It must stay reachable even with a stale-but-valid JWT, or the
+  // role/portal redirects below would bounce a deactivated user in a loop.
+  if (pathname === "/logout") return NextResponse.next();
 
   const isPublic = PUBLIC_PATHS.some((p) => pathname.startsWith(p));
   const session = await readSession(req);

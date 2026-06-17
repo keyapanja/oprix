@@ -3,14 +3,12 @@
 import { toast } from "@/components/ui/toast";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import type { TaskStatus } from "@prisma/client";
-import { createTask, updateTaskStatus, type KanbanTask } from "@/lib/projects/actions";
-import { TASK_COLUMNS, PRIORITY_TONE, TASK_STATUS_TONE } from "@/lib/status";
+import { createTask, type KanbanTask } from "@/lib/projects/actions";
+import { PRIORITY_TONE, TASK_STATUS_TONE } from "@/lib/status";
 import { Badge } from "@/components/ui/badge";
 import { Icon } from "@/components/ui/icons";
 import { Combobox } from "@/components/ui/combobox";
 import { humanizeEnum } from "@/lib/format";
-import { cn } from "@/lib/cn";
 
 type Service = { id: string; name: string };
 
@@ -36,6 +34,11 @@ function Avatars({ names }: { names: string[] }) {
   );
 }
 
+/**
+ * Project task list. Status is driven by the per-task timer + the review
+ * workflow (submit → review → approve), so there's no drag-to-change board —
+ * just a simple list with a quick "add task" (new tasks start in To Do).
+ */
 export function KanbanBoard({
   projectId,
   services,
@@ -47,114 +50,34 @@ export function KanbanBoard({
 }) {
   const router = useRouter();
   const [tasks, setTasks] = useState<KanbanTask[]>(initialTasks);
-  const [view, setView] = useState<"board" | "list">("board");
-  const [dragId, setDragId] = useState<string | null>(null);
-  const [overCol, setOverCol] = useState<TaskStatus | null>(null);
-  const [, startTransition] = useTransition();
-
-  function moveTask(id: string, status: TaskStatus) {
-    const task = tasks.find((t) => t.id === id);
-    if (!task || task.status === status) return;
-    const prev = task.status;
-    setTasks((ts) => ts.map((t) => (t.id === id ? { ...t, status } : t)));
-    startTransition(async () => {
-      const res = await updateTaskStatus(id, status);
-      if (res.error) {
-        setTasks((ts) => ts.map((t) => (t.id === id ? { ...t, status: prev } : t)));
-        toast.error(res.error);
-      }
-    });
-  }
+  const [adding, setAdding] = useState(false);
 
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
-        <p className="text-sm text-muted">{tasks.length} tasks</p>
-        <div className="inline-flex rounded-lg border border-line bg-surface p-0.5">
-          {(["board", "list"] as const).map((v) => (
-            <button
-              key={v}
-              onClick={() => setView(v)}
-              className={cn(
-                "rounded-md px-3 py-1 text-sm font-medium capitalize",
-                view === v ? "bg-accent-soft text-accent-strong" : "text-muted hover:text-content",
-              )}
-            >
-              {v}
-            </button>
-          ))}
-        </div>
+        <p className="text-sm text-muted">{tasks.length} task{tasks.length === 1 ? "" : "s"}</p>
+        <button
+          onClick={() => setAdding((a) => !a)}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-canvas px-3 py-1.5 text-sm font-medium text-content ring-1 ring-inset ring-line transition-colors hover:bg-surface"
+        >
+          <Icon name="plus" className="size-4" />
+          Add task
+        </button>
       </div>
 
-      {view === "board" ? (
-        <div className="flex gap-4 overflow-x-auto pb-2">
-          {TASK_COLUMNS.map((col) => {
-            const colTasks = tasks.filter((t) => t.status === col.status);
-            return (
-              <div
-                key={col.status}
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  setOverCol(col.status);
-                }}
-                onDragLeave={() => setOverCol((c) => (c === col.status ? null : c))}
-                onDrop={() => {
-                  if (dragId) moveTask(dragId, col.status);
-                  setDragId(null);
-                  setOverCol(null);
-                }}
-                className={cn(
-                  "flex w-72 shrink-0 flex-col rounded-2xl border p-3 transition-colors",
-                  overCol === col.status ? "border-brand-400 bg-accent-soft" : "border-line bg-canvas/50",
-                )}
-              >
-                <div className="mb-3 flex items-center justify-between px-1">
-                  <span className="text-sm font-semibold text-content">{col.label}</span>
-                  <span className="rounded-full bg-surface px-2 py-0.5 text-xs font-medium text-muted ring-1 ring-inset ring-line">
-                    {colTasks.length}
-                  </span>
-                </div>
-
-                <div className="flex flex-1 flex-col gap-2">
-                  {colTasks.map((t) => (
-                    <div
-                      key={t.id}
-                      draggable
-                      onDragStart={() => setDragId(t.id)}
-                      onDragEnd={() => setDragId(null)}
-                      onClick={() => router.push(`/tasks/${t.id}`)}
-                      className={cn(
-                        "cursor-pointer rounded-xl border border-line bg-surface p-3 shadow-card hover:border-brand-400",
-                        dragId === t.id && "opacity-50",
-                      )}
-                    >
-                      <p className="text-sm font-medium text-content">{t.name}</p>
-                      {t.serviceName && (
-                        <span className="mt-1.5 inline-block rounded bg-accent-soft px-1.5 py-0.5 text-[10px] font-medium text-accent-strong">
-                          {t.serviceName}
-                        </span>
-                      )}
-                      <div className="mt-2.5 flex items-center justify-between">
-                        <Badge tone={PRIORITY_TONE[t.priority]}>{humanizeEnum(t.priority)}</Badge>
-                        <Avatars names={t.assigneeNames} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                <ColumnAdd
-                  projectId={projectId}
-                  status={col.status}
-                  services={services}
-                  onAdded={(task) => setTasks((ts) => [...ts, task])}
-                />
-              </div>
-            );
-          })}
-        </div>
-      ) : (
-        <TaskList tasks={tasks} onOpen={(id) => router.push(`/tasks/${id}`)} />
+      {adding && (
+        <AddTaskForm
+          projectId={projectId}
+          services={services}
+          onAdded={(task) => {
+            setTasks((ts) => [...ts, task]);
+            setAdding(false);
+          }}
+          onCancel={() => setAdding(false)}
+        />
       )}
+
+      <TaskList tasks={tasks} onOpen={(id) => router.push(`/tasks/${id}`)} />
     </div>
   );
 }
@@ -163,7 +86,7 @@ function TaskList({ tasks, onOpen }: { tasks: KanbanTask[]; onOpen: (id: string)
   if (tasks.length === 0) {
     return (
       <div className="rounded-2xl border border-line bg-surface px-5 py-12 text-center text-sm text-muted">
-        No tasks yet. Switch to Board view to add some.
+        No tasks yet — add one above.
       </div>
     );
   }
@@ -195,18 +118,17 @@ function TaskList({ tasks, onOpen }: { tasks: KanbanTask[]; onOpen: (id: string)
   );
 }
 
-function ColumnAdd({
+function AddTaskForm({
   projectId,
-  status,
   services,
   onAdded,
+  onCancel,
 }: {
   projectId: string;
-  status: TaskStatus;
   services: Service[];
   onAdded: (task: KanbanTask) => void;
+  onCancel: () => void;
 }) {
-  const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [serviceId, setServiceId] = useState("");
   const [pending, start] = useTransition();
@@ -215,60 +137,49 @@ function ColumnAdd({
     const trimmed = name.trim();
     if (!trimmed) return;
     start(async () => {
-      const res = await createTask({ projectId, name: trimmed, serviceId: serviceId || null, status });
+      const res = await createTask({ projectId, name: trimmed, serviceId: serviceId || null, status: "TODO" });
       if (res.error) {
         toast.error(res.error);
         return;
       }
       if (res.task) onAdded(res.task);
-      setName("");
-      setServiceId("");
-      setOpen(false);
     });
   }
 
-  if (!open) {
-    return (
-      <button
-        onClick={() => setOpen(true)}
-        className="mt-2 flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm font-medium text-muted hover:bg-surface hover:text-content"
-      >
-        <Icon name="plus" className="size-4" />
-        Add task
-      </button>
-    );
-  }
-
   return (
-    <div className="mt-2 space-y-2 rounded-xl border border-line bg-surface p-2.5">
+    <div className="mb-3 flex flex-wrap items-center gap-2 rounded-2xl border border-line bg-surface p-3">
       <input
         autoFocus
         value={name}
         onChange={(e) => setName(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === "Enter") submit();
-          if (e.key === "Escape") setOpen(false);
+          if (e.key === "Escape") onCancel();
         }}
         placeholder="Task name…"
-        className="w-full rounded-lg bg-canvas px-2.5 py-1.5 text-sm text-content placeholder:text-faint focus:outline-none focus:ring-2 focus:ring-brand-500"
+        className="h-9 min-w-48 flex-1 rounded-lg bg-canvas px-3 text-sm text-content placeholder:text-faint focus:outline-none focus:ring-2 focus:ring-brand-500"
       />
       {services.length > 0 && (
-        <Combobox
-          value={serviceId}
-          onChange={setServiceId}
-          emptyLabel="No service"
-          placeholder="No service"
-          options={services.map((s) => ({ value: s.id, label: s.name }))}
-        />
+        <div className="w-56">
+          <Combobox
+            value={serviceId}
+            onChange={setServiceId}
+            emptyLabel="No sub-category"
+            placeholder="No sub-category"
+            options={services.map((s) => ({ value: s.id, label: s.name }))}
+          />
+        </div>
       )}
-      <div className="flex gap-2">
-        <button onClick={submit} disabled={pending} className="gradient-brand-strong flex-1 rounded-lg px-3 py-1.5 text-sm font-medium text-white disabled:opacity-60">
-          {pending ? "Adding…" : "Add"}
-        </button>
-        <button onClick={() => setOpen(false)} className="rounded-lg px-3 py-1.5 text-sm font-medium text-muted hover:bg-canvas">
-          Cancel
-        </button>
-      </div>
+      <button
+        onClick={submit}
+        disabled={pending}
+        className="gradient-brand-strong rounded-lg px-3 py-1.5 text-sm font-medium text-white disabled:opacity-60"
+      >
+        {pending ? "Adding…" : "Add task"}
+      </button>
+      <button onClick={onCancel} className="rounded-lg px-3 py-1.5 text-sm font-medium text-muted hover:bg-canvas">
+        Cancel
+      </button>
     </div>
   );
 }

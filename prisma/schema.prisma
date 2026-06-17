@@ -1,7 +1,7 @@
 // Operix — Phase 1 data model
 // PostgreSQL + Prisma. Multi-tenant: every tenant-owned row carries companyId.
 // Money is stored in integer minor units (paise). Timestamps are UTC.
-// See docs/architecture.md for the reasoning behind these choices.
+// See docs/REFERENCE.md § 2 (Architecture) for the reasoning behind these choices.
 
 generator client {
   provider = "prisma-client-js"
@@ -52,6 +52,11 @@ enum ProjectStatus {
   ON_HOLD
   COMPLETED
   CANCELLED
+}
+
+enum ProjectType {
+  ONE_TIME
+  RECURRING
 }
 
 enum TaskStatus {
@@ -496,6 +501,7 @@ model Project {
   dueDate     DateTime?
   priority    Priority      @default(MEDIUM)
   status      ProjectStatus @default(PLANNING)
+  type        ProjectType   @default(ONE_TIME)
   deletedAt   DateTime?
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt

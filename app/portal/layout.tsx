@@ -13,7 +13,7 @@ export default async function PortalLayout({ children }: { children: React.React
     select: { name: true, companyName: true, company: { select: { name: true } } },
   });
   // Account points at a missing/removed client → treat as signed out.
-  if (!client) redirect("/login");
+  if (!client) redirect("/logout");
 
   const companyName = client.company?.name ?? "Operix";
   const clientName = client.companyName || client.name;

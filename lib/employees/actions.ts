@@ -150,7 +150,7 @@ export async function updateEmployee(
 
   const employee = await prisma.employee.findFirst({
     where: { id: employeeId, companyId: session.companyId, deletedAt: null },
-    select: { id: true },
+    select: { id: true, user: { select: { id: true, email: true } } },
   });
   if (!employee) return { error: "Employee not found" };
   if (d.managerId === employeeId) return { error: "An employee can't report to themselves" };
@@ -189,6 +189,22 @@ export async function updateEmployee(
       ...(company?.multiLocation ? { locationId: d.locationId || null } : {}),
     },
   });
+
+  // Keep the linked login's email in sync with the profile email so login and
+  // password reset use the current address. Skip if another user already owns it.
+  if (employee.user && employee.user.email.toLowerCase() !== d.email.toLowerCase()) {
+    const clash = await prisma.user.findFirst({
+      where: {
+        companyId: session.companyId,
+        email: { equals: d.email, mode: "insensitive" },
+        id: { not: employee.user.id },
+      },
+      select: { id: true },
+    });
+    if (!clash) {
+      await prisma.user.update({ where: { id: employee.user.id }, data: { email: d.email } });
+    }
+  }
 
   revalidatePath(`/employees/${employeeId}`);
   revalidatePath("/employees");

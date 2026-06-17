@@ -26,6 +26,7 @@ export async function listClientProjects(clientId: string, companyId: string) {
       status: true,
       priority: true,
       startDate: true,
+      type: true,
       dueDate: true,
       tasks: { select: { status: true } },
     },
@@ -44,6 +45,7 @@ export async function getClientProject(clientId: string, companyId: string, proj
       status: true,
       priority: true,
       startDate: true,
+      type: true,
       dueDate: true,
       tasks: {
         orderBy: { createdAt: "asc" },

@@ -5,7 +5,7 @@ import { randomBytes } from "crypto";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { verifyPassword, hashPassword } from "@/lib/auth/password";
-import { createSession, destroySession } from "@/lib/auth/session";
+import { createSession, destroySession, getSession } from "@/lib/auth/session";
 import { appUrl, sendPasswordResetEmail } from "@/lib/email";
 
 const LoginSchema = z.object({
@@ -32,7 +32,7 @@ export async function loginAction(
   // MVP is single-company-per-deployment, so email alone identifies the user.
   // The schema supports multi-company; add a company selector here later.
   const user = await prisma.user.findFirst({
-    where: { email, isActive: true },
+    where: { email: { equals: email, mode: "insensitive" }, isActive: true },
     select: {
       id: true,
       companyId: true,
@@ -146,7 +146,7 @@ export async function requestPasswordReset(
   const email = parsed.data.email.trim();
 
   const user = await prisma.user.findFirst({
-    where: { email, isActive: true },
+    where: { email: { equals: email, mode: "insensitive" }, isActive: true },
     select: {
       id: true,
       company: { select: { name: true } },
@@ -175,5 +175,56 @@ export async function requestPasswordReset(
   }
 
   // Same response whether or not the account exists (no enumeration).
+  return { ok: true };
+}
+
+// ---- Change password (signed-in self-service) -----------------------------
+const ChangePasswordSchema = z
+  .object({
+    current: z.string().min(1, "Enter your current password"),
+    password: z.string().min(8, "Use at least 8 characters"),
+    confirm: z.string().min(1, "Please confirm your new password"),
+  })
+  .refine((d) => d.password === d.confirm, {
+    message: "Passwords don't match",
+    path: ["confirm"],
+  });
+
+export type ChangePasswordState = { ok?: boolean; error?: string };
+
+/**
+ * Lets any signed-in user — including Super Admins — change their own password
+ * from their profile. The current password is required to authorize the change,
+ * so an unattended session can't be used to take over the account.
+ */
+export async function changePasswordAction(
+  _prev: ChangePasswordState,
+  formData: FormData,
+): Promise<ChangePasswordState> {
+  const session = await getSession();
+  if (!session) return { error: "Not authenticated" };
+
+  const parsed = ChangePasswordSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  const { current, password } = parsed.data;
+
+  const user = await prisma.user.findUnique({
+    where: { id: session.userId },
+    select: { passwordHash: true },
+  });
+  if (!user?.passwordHash) return { error: "Account not found." };
+
+  if (!(await verifyPassword(current, user.passwordHash))) {
+    return { error: "Your current password is incorrect." };
+  }
+  if (await verifyPassword(password, user.passwordHash)) {
+    return { error: "Choose a password different from your current one." };
+  }
+
+  await prisma.user.update({
+    where: { id: session.userId },
+    data: { passwordHash: await hashPassword(password) },
+  });
+
   return { ok: true };
 }

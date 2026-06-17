@@ -258,7 +258,7 @@
       pill.append(h("span", { class: "pill-badge" }, String(tasks.length)));
     } else {
       pill.append(
-        h("span", { class: "pill-label" }, tasks.length ? `${tasks.length} ${tasks.length > 1 ? "tasks" : "task"}` : "Open"),
+        h("span", { class: "pill-label" }, tasks.length ? `${tasks.length} ${tasks.length > 1 ? "tasks" : "task"}` : "Operix"),
       );
     }
     makeChipDraggable(pill);
@@ -801,10 +801,10 @@
   .pill { display:inline-flex; align-items:center; gap:8px; border:0;
     background:linear-gradient(135deg,#10b981 0%,#0d9488 100%); color:#fff; cursor:grab;
     border-radius:9999px; padding:9px 16px; font-weight:700; font-size:13px;
-    box-shadow:0 6px 16px rgba(0,0,0,.3), 0 2px 5px rgba(0,0,0,.2);
-    transition:box-shadow .15s ease, filter .15s ease; touch-action:none; user-select:none;
+    box-shadow:none;
+    transition:filter .15s ease; touch-action:none; user-select:none;
     white-space:nowrap; }
-  .pill:hover { box-shadow:0 9px 22px rgba(0,0,0,.36), 0 3px 8px rgba(0,0,0,.22); filter:brightness(1.06); }
+  .pill:hover { filter:brightness(1.06); }
   .pill.grabbing { cursor:grabbing; filter:brightness(.98); }
   .pill-ic { display:inline-flex; align-items:center; justify-content:center; color:#fff; flex:0 0 auto; }
   .pill-ic svg { width:18px; height:18px; }
