@@ -11,7 +11,7 @@ export type DayCell = { holiday?: string; away: AwayEntry[]; announcements: stri
 export type MonthData = {
   byDay: Record<string, DayCell>;
   announcements: { id: string; title: string; body: string | null; dateISO: string; authorId: string | null }[];
-  holidays: { dateISO: string; name: string }[];
+  holidays: { id: string; dateISO: string; name: string }[];
 };
 
 const iso = (d: Date) => d.toISOString().slice(0, 10);
@@ -31,7 +31,8 @@ export async function getMonthCalendar(
   const [holidays, announcements, away] = await Promise.all([
     prisma.holiday.findMany({
       where: { companyId, date: { gte: start, lt: end } },
-      select: { date: true, name: true },
+      orderBy: { date: "asc" },
+      select: { id: true, date: true, name: true },
     }),
     prisma.announcement.findMany({
       where: { companyId, date: { gte: start, lt: end } },
@@ -83,6 +84,6 @@ export async function getMonthCalendar(
       dateISO: iso(a.date),
       authorId: a.authorId,
     })),
-    holidays: holidays.map((h) => ({ dateISO: iso(h.date), name: h.name })),
+    holidays: holidays.map((h) => ({ id: h.id, dateISO: iso(h.date), name: h.name })),
   };
 }

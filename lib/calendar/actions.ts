@@ -49,6 +49,33 @@ export async function deleteHoliday(id: string): Promise<CalendarState> {
   return { ok: true };
 }
 
+export async function updateHoliday(id: string, formData: FormData): Promise<CalendarState> {
+  const session = await requireCapability("org:manage");
+  const parsed = HolidaySchema.safeParse({
+    date: formData.get("date"),
+    name: formData.get("name"),
+  });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message };
+
+  // Tenant-scope: the holiday must belong to this company.
+  const existing = await prisma.holiday.findFirst({
+    where: { id, companyId: session.companyId },
+    select: { id: true },
+  });
+  if (!existing) return { error: "Holiday not found" };
+
+  try {
+    await prisma.holiday.update({
+      where: { id },
+      data: { date: dateAtUTC(parsed.data.date), name: parsed.data.name },
+    });
+  } catch {
+    return { error: "A holiday already exists on that date" };
+  }
+  revalidatePath(CAL);
+  return { ok: true };
+}
+
 const AnnouncementSchema = z.object({
   title: z.string().trim().min(1, "Title is required").max(140),
   body: z.string().trim().max(1000).optional().or(z.literal("")),

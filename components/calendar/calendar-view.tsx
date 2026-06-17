@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Icon } from "@/components/ui/icons";
 import { DateActionModal } from "@/components/calendar/date-action-modal";
 import { AnnouncementActions } from "@/components/calendar/announcement-actions";
+import { HolidayActions } from "@/components/calendar/holiday-actions";
 import { cn } from "@/lib/cn";
 
 type Balance = {
@@ -193,10 +194,15 @@ export function CalendarView({
             ) : (
               <ul className="space-y-2">
                 {data.holidays.map((h) => (
-                  <li key={h.dateISO} className="flex items-center gap-3 text-sm">
+                  <li key={h.id} className="flex items-center gap-3 text-sm">
                     <span className="size-2 rounded-full bg-emerald-500" />
                     <span className="text-faint">{h.dateISO.slice(8)}</span>
                     <span className="font-medium text-content">{h.name}</span>
+                    {canManage && (
+                      <span className="ml-auto">
+                        <HolidayActions holiday={h} />
+                      </span>
+                    )}
                   </li>
                 ))}
               </ul>

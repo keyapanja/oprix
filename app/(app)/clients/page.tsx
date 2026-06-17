@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Card } from "@/components/ui/card";
 import { ClientAdd } from "@/components/clients/client-add";
 import { ClientEdit } from "@/components/clients/client-edit";
+import { ClientDelete } from "@/components/clients/client-delete";
 
 export const metadata: Metadata = { title: "Clients · Oprix" };
 
@@ -65,7 +66,10 @@ export default async function ClientsPage({
                   <td className="px-5 py-3 text-muted">{c.email ?? "—"}</td>
                   <td className="px-5 py-3 text-muted">{c._count.projects}</td>
                   <td className="px-5 py-3 text-right">
-                    <ClientEdit client={c} />
+                    <div className="flex items-center justify-end gap-0.5">
+                      <ClientEdit client={c} />
+                      <ClientDelete id={c.id} name={c.name} projectCount={c._count.projects} />
+                    </div>
                   </td>
                 </tr>
               ))}
