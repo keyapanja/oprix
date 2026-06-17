@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { Icon } from "@/components/ui/icons";
 import { cn } from "@/lib/cn";
 
@@ -10,7 +11,9 @@ export type ComboOption = { value: string; label: string };
  * Searchable, keyboard-navigable dropdown. Works in two modes:
  *  - Forms: pass `name` and it renders a hidden input carrying the value.
  *  - Controlled: pass `value` + `onChange`.
- * This is the default dropdown for the app — prefer it over a native <select>.
+ * The open panel is rendered in a portal (position: fixed against the trigger),
+ * so it's never clipped by an ancestor's `overflow-hidden` (cards, tables) and
+ * layers above modals. This is the default dropdown — prefer it over <select>.
  */
 export function Combobox({
   options,
@@ -40,7 +43,9 @@ export function Combobox({
   const [query, setQuery] = useState("");
   const [internal, setInternal] = useState(defaultValue ?? "");
   const [active, setActive] = useState(0);
-  const ref = useRef<HTMLDivElement>(null);
+  const [coords, setCoords] = useState<{ left: number; top: number; width: number; up: boolean } | null>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
 
   const current = value !== undefined ? value : internal;
   const selected = options.find((o) => o.value === current);
@@ -51,9 +56,33 @@ export function Combobox({
     return emptyLabel !== undefined ? [{ value: "", label: emptyLabel }, ...base] : base;
   }, [options, query, emptyLabel]);
 
+  // Position the portaled panel against the trigger; keep it pinned on scroll/resize.
+  useEffect(() => {
+    if (!open) return;
+    function place() {
+      const el = wrapRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const PANEL_MAX = 300; // search box + max list height, approx
+      const spaceBelow = window.innerHeight - r.bottom;
+      const up = spaceBelow < PANEL_MAX && r.top > spaceBelow;
+      setCoords({ left: r.left, top: up ? r.top : r.bottom, width: r.width, up });
+    }
+    place();
+    window.addEventListener("scroll", place, true);
+    window.addEventListener("resize", place);
+    return () => {
+      window.removeEventListener("scroll", place, true);
+      window.removeEventListener("resize", place);
+    };
+  }, [open]);
+
+  // Close on outside click — the panel lives in a portal, so check it separately.
   useEffect(() => {
     function onDoc(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (wrapRef.current?.contains(t) || panelRef.current?.contains(t)) return;
+      setOpen(false);
     }
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
@@ -81,8 +110,67 @@ export function Combobox({
     }
   }
 
+  const panel =
+    open && !disabled && coords
+      ? createPortal(
+          <div
+            ref={panelRef}
+            onMouseDown={(e) => e.stopPropagation()}
+            style={{
+              position: "fixed",
+              left: coords.left,
+              width: coords.width,
+              ...(coords.up
+                ? { bottom: window.innerHeight - coords.top + 6 }
+                : { top: coords.top + 6 }),
+            }}
+            className="z-[60] overflow-hidden rounded-xl border border-line bg-elevated shadow-card-hover"
+          >
+            <div className="border-b border-line p-2">
+              <input
+                autoFocus
+                value={query}
+                onChange={(e) => {
+                  setQuery(e.target.value);
+                  setActive(0);
+                }}
+                onKeyDown={onKeyDown}
+                placeholder={searchPlaceholder}
+                className="h-8 w-full rounded-lg bg-canvas px-2.5 text-sm text-content placeholder:text-faint focus:outline-none focus:ring-2 focus:ring-brand-500"
+              />
+            </div>
+            <ul className="max-h-56 overflow-y-auto p-1">
+              {rows.length === 0 ? (
+                <li className="px-3 py-2 text-sm text-muted">No matches</li>
+              ) : (
+                rows.map((o, i) => (
+                  <li key={o.value || "__empty"}>
+                    <button
+                      type="button"
+                      onMouseEnter={() => setActive(i)}
+                      onClick={() => choose(o.value)}
+                      className={cn(
+                        "flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-left text-sm",
+                        i === active ? "bg-canvas" : "",
+                        o.value === current ? "font-medium text-accent-strong" : "text-content",
+                      )}
+                    >
+                      <span className="truncate">{o.label}</span>
+                      {o.value === current && o.value !== "" && (
+                        <Icon name="check" className="size-4 text-accent" />
+                      )}
+                    </button>
+                  </li>
+                ))
+              )}
+            </ul>
+          </div>,
+          document.body,
+        )
+      : null;
+
   return (
-    <div ref={ref} className="relative">
+    <div ref={wrapRef} className="relative">
       {name && <input type="hidden" name={name} value={current} />}
       <button
         type="button"
@@ -96,49 +184,7 @@ export function Combobox({
         </span>
         <Icon name="chevronDown" className="size-4 shrink-0 text-faint" />
       </button>
-
-      {open && !disabled && (
-        <div className="absolute z-30 mt-1.5 w-full overflow-hidden rounded-xl border border-line bg-elevated shadow-card-hover">
-          <div className="border-b border-line p-2">
-            <input
-              autoFocus
-              value={query}
-              onChange={(e) => {
-                setQuery(e.target.value);
-                setActive(0);
-              }}
-              onKeyDown={onKeyDown}
-              placeholder={searchPlaceholder}
-              className="h-8 w-full rounded-lg bg-canvas px-2.5 text-sm text-content placeholder:text-faint focus:outline-none focus:ring-2 focus:ring-brand-500"
-            />
-          </div>
-          <ul className="max-h-56 overflow-y-auto p-1">
-            {rows.length === 0 ? (
-              <li className="px-3 py-2 text-sm text-muted">No matches</li>
-            ) : (
-              rows.map((o, i) => (
-                <li key={o.value || "__empty"}>
-                  <button
-                    type="button"
-                    onMouseEnter={() => setActive(i)}
-                    onClick={() => choose(o.value)}
-                    className={cn(
-                      "flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-left text-sm",
-                      i === active ? "bg-canvas" : "",
-                      o.value === current ? "font-medium text-accent-strong" : "text-content",
-                    )}
-                  >
-                    <span className="truncate">{o.label}</span>
-                    {o.value === current && o.value !== "" && (
-                      <Icon name="check" className="size-4 text-accent" />
-                    )}
-                  </button>
-                </li>
-              ))
-            )}
-          </ul>
-        </div>
-      )}
+      {panel}
     </div>
   );
 }

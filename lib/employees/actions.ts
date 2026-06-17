@@ -211,6 +211,36 @@ export async function updateEmployee(
   redirect(`/employees/${employeeId}`);
 }
 
+const ASSIGNABLE_ROLES: Role[] = ["EMPLOYEE", "TEAM_LEAD", "PROJECT_MANAGER", "HR_MANAGER", "SUPER_ADMIN"];
+
+/**
+ * Set an employee's access role (HR Manager, Project Manager, Team Lead, …).
+ * Gated by `roles:manage`. Guardrails: you can't change your own role, and only
+ * a Super Admin can grant or remove the Super Admin role.
+ */
+export async function setEmployeeRole(employeeId: string, role: Role): Promise<EmployeeFormState> {
+  const session = await requireCapability("roles:manage");
+  if (!ASSIGNABLE_ROLES.includes(role)) return { error: "Invalid role" };
+
+  const employee = await prisma.employee.findFirst({
+    where: { id: employeeId, companyId: session.companyId, deletedAt: null },
+    select: { user: { select: { id: true, role: true } } },
+  });
+  if (!employee) return { error: "Employee not found" };
+  if (!employee.user) return { error: "This employee has no login yet — invite them first." };
+  if (employee.user.id === session.userId) return { error: "You can't change your own role." };
+
+  // Only a Super Admin may grant or remove the Super Admin role.
+  if ((role === "SUPER_ADMIN" || employee.user.role === "SUPER_ADMIN") && session.role !== "SUPER_ADMIN") {
+    return { error: "Only a Super Admin can assign or change the Super Admin role." };
+  }
+
+  await prisma.user.update({ where: { id: employee.user.id }, data: { role } });
+  revalidatePath(`/employees/${employeeId}`);
+  revalidatePath("/employees");
+  return { ok: true };
+}
+
 /** Creates an EMPLOYEE-role login (no password yet) and emails a setup link. */
 async function inviteEmployeeUser(opts: {
   companyId: string;

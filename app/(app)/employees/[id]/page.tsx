@@ -13,6 +13,8 @@ import { humanizeEnum, formatDate } from "@/lib/format";
 import { EmergencyContactForm } from "@/components/employees/emergency-contact-form";
 import { DeleteEmployeeButton } from "@/components/employees/delete-employee-button";
 import { ResendInvite } from "@/components/employees/resend-invite";
+import { EmployeeRole } from "@/components/employees/employee-role";
+import { ROLE_LABELS } from "@/lib/auth/can";
 
 export const metadata: Metadata = { title: "Employee · Oprix" };
 
@@ -24,6 +26,7 @@ export default async function EmployeeDetailPage({
   const { id } = await params;
   const session = await requirePage("employee:read");
   const canManage = await hasPermission(session.companyId, session.role, "employee:manage");
+  const canManageRoles = await hasPermission(session.companyId, session.role, "roles:manage");
 
   const employee = await prisma.employee.findFirst({
     where: { id, companyId: session.companyId, deletedAt: null },
@@ -33,7 +36,7 @@ export default async function EmployeeDetailPage({
       manager: { select: { id: true, fullName: true } },
       workShift: { select: { name: true, startTime: true, endTime: true } },
       location: { select: { name: true } },
-      user: { select: { passwordHash: true } },
+      user: { select: { id: true, passwordHash: true, role: true } },
       emergencyContacts: true,
     },
   });
@@ -120,6 +123,20 @@ export default async function EmployeeDetailPage({
           <Badge tone={account === "active" ? "green" : account === "pending" ? "amber" : "gray"}>
             {account === "active" ? "Active" : account === "pending" ? "Invite pending" : "No login"}
           </Badge>
+          {employee.user && (
+            <>
+              <span className="ml-2 text-sm font-medium text-muted">Role</span>
+              {canManageRoles && employee.user.id !== session.userId ? (
+                <EmployeeRole
+                  employeeId={employee.id}
+                  role={employee.user.role}
+                  canGrantSuperAdmin={session.role === "SUPER_ADMIN"}
+                />
+              ) : (
+                <Badge tone="gray">{ROLE_LABELS[employee.user.role] ?? humanizeEnum(employee.user.role)}</Badge>
+              )}
+            </>
+          )}
           {canManage && account !== "active" && (
             <div className="ml-auto">
               <ResendInvite employeeId={employee.id} />
