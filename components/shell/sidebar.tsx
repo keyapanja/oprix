@@ -12,13 +12,17 @@ const EXPANDED_KEY = "oprix:sidebar:expanded";
 
 export function Sidebar({
   allowed,
+  isSuperAdmin,
   company,
 }: {
   allowed: string[];
+  isSuperAdmin: boolean;
   company: { name: string; tagline: string | null; logoUrl: string | null };
 }) {
   const pathname = usePathname();
-  const items = NAV.filter((i) => !i.action || allowed.includes(i.action));
+  const items = NAV.filter(
+    (i) => (!i.action || allowed.includes(i.action)) && (!i.superAdminOnly || isSuperAdmin),
+  );
 
   const [collapsed, setCollapsed] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});

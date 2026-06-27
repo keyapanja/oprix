@@ -185,6 +185,8 @@ model Holiday {
   date      DateTime @db.Date
   name      String
   reminderSentAt DateTime? // day-before reminder fan-out guard
+  deletedAt   DateTime?
+  deletedById String?   // userId who moved it to trash
   createdAt DateTime @default(now())
 
   company Company @relation(fields: [companyId], references: [id])
@@ -202,6 +204,8 @@ model Announcement {
   body      String?
   date      DateTime @db.Date
   reminderSentAt DateTime? // day-before reminder fan-out guard
+  deletedAt   DateTime?
+  deletedById String?   // userId who moved it to trash
   createdAt DateTime @default(now())
 
   company     Company      @relation(fields: [companyId], references: [id])
@@ -418,6 +422,7 @@ model Employee {
   probationMonths Int?
   workLocation    String?
   deletedAt       DateTime?
+  deletedById     String?   // userId who moved it to trash
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
 
@@ -505,6 +510,7 @@ model Project {
   status      ProjectStatus @default(PLANNING)
   type        ProjectType   @default(ONE_TIME)
   deletedAt   DateTime?
+  deletedById String?   // userId who moved it to trash
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
@@ -537,6 +543,8 @@ model Task {
   startedAt    DateTime? // first moved to In Progress
   completedAt  DateTime? // moved to Completed
   orderIndex   Int        @default(0)
+  deletedAt    DateTime?
+  deletedById  String?   // userId who moved it to trash
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
@@ -759,6 +767,8 @@ model LeaveRequest {
   // The live request is untouched until an approver applies it. Null = no pending edit.
   pendingEdit     Json?
   editRequestedAt DateTime?
+  deletedAt       DateTime?
+  deletedById     String?   // userId who moved it to trash
   createdAt       DateTime       @default(now())
 
   employee  Employee   @relation(fields: [employeeId], references: [id])
@@ -882,6 +892,7 @@ model Client {
   phone       String?
   address     String?
   deletedAt   DateTime?
+  deletedById String?   // userId who moved it to trash
   createdAt   DateTime @default(now())
 
   company  Company         @relation(fields: [companyId], references: [id])
@@ -952,6 +963,8 @@ model KbArticle {
   keywords     String?
   authorId     String // userId — original creator
   updatedById  String? // userId — last editor
+  deletedAt    DateTime?
+  deletedById  String?   // userId who moved it to trash
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

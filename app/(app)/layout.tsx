@@ -79,6 +79,7 @@ export default async function AppLayout({
     <div className="flex h-dvh overflow-hidden">
       <Sidebar
         allowed={allowed}
+        isSuperAdmin={session.role === "SUPER_ADMIN"}
         company={{
           name: company?.name ?? "Oprix",
           tagline: company?.tagline || company?.businessType || null,

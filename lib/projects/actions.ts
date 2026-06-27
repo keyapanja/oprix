@@ -88,7 +88,7 @@ export async function updateProjectStatus(id: string, status: ProjectStatus): Pr
 
 export async function softDeleteProject(id: string): Promise<ProjectState> {
   const session = await requireCapability("project:manage");
-  await prisma.project.updateMany({ where: { id, companyId: session.companyId }, data: { deletedAt: new Date() } });
+  await prisma.project.updateMany({ where: { id, companyId: session.companyId }, data: { deletedAt: new Date(), deletedById: session.userId } });
   revalidatePath("/projects");
   return { ok: true };
 }

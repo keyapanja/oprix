@@ -71,7 +71,7 @@ export async function softDeleteClient(id: string): Promise<ClientState> {
   const session = await requireCapability("client:manage");
   await prisma.client.updateMany({
     where: { id, companyId: session.companyId },
-    data: { deletedAt: new Date() },
+    data: { deletedAt: new Date(), deletedById: session.userId },
   });
   revalidatePath("/clients");
   return { ok: true };

@@ -16,6 +16,8 @@ export type NavItem = {
   icon: string;
   /** Capability required to see this item. Omit = visible to all signed-in users. */
   action?: Action;
+  /** When true, only Super Admins see this item (bypasses the capability check). */
+  superAdminOnly?: boolean;
   children?: NavChild[];
 };
 
@@ -93,6 +95,7 @@ export const NAV: NavItem[] = [
     children: [{ label: "Apply for leave", href: "/leave/apply", action: "self:service" }],
   },
   { label: "Organization", href: "/organization", icon: "building", action: "org:manage" },
+  { label: "Trash", href: "/trash", icon: "trash", superAdminOnly: true },
 ];
 
 // Planned modules shown as disabled hints so the roadmap is visible in the UI.

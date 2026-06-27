@@ -356,7 +356,7 @@ export async function softDeleteEmployee(id: string): Promise<EmployeeFormState>
   const session = await requireCapability("employee:manage");
   await prisma.employee.updateMany({
     where: { id, companyId: session.companyId },
-    data: { deletedAt: new Date() },
+    data: { deletedAt: new Date(), deletedById: session.userId },
   });
   revalidatePath("/employees");
   return {};
