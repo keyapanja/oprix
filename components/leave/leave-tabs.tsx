@@ -221,7 +221,7 @@ export function LeaveTabs({
         <LeaveDetailModal
           req={sel}
           canApprove={canApprove}
-          canEdit
+          canEdit={false}
           leaveTypes={leaveTypeOpts}
           onClose={() => setSel(null)}
         />

@@ -419,9 +419,9 @@ export async function requestLeaveEdit(_prev: LeaveState, formData: FormData): P
   });
   if (!req) return { error: "Request not found" };
 
-  const canManage = await hasPermission(session.companyId, session.role, "leave:manage");
+  // Only the person who applied may request an edit; managers approve/reject it.
   const isOwner = !!session.employeeId && session.employeeId === req.employeeId;
-  if (!isOwner && !canManage) return { error: "You can only request edits on your own leave." };
+  if (!isOwner) return { error: "Only the person who applied can request an edit." };
 
   const parsed = EditSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
