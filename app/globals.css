@@ -205,3 +205,15 @@ input[type="checkbox"]:disabled {
   cursor: not-allowed;
   opacity: 0.5;
 }
+
+/* ---------------------------------------------------------------------------
+   Pointer cursor on interactive controls. Browsers default <button> (so our
+   tabs and the Combobox / select triggers) to the arrow cursor — switch them to
+   a pointer so they read as clickable. `:not(:disabled)` leaves disabled
+   controls (and their own `disabled:cursor-*` utilities) untouched.
+--------------------------------------------------------------------------- */
+button:not(:disabled),
+select:not(:disabled),
+[role="tab"] {
+  cursor: pointer;
+}
