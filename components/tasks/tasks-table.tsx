@@ -68,6 +68,7 @@ export function TasksTable({
   const [view, setView] = useState<View>(initialView);
   const [dept, setDept] = useState("ALL");
   const [service, setService] = useState("ALL");
+  const [project, setProject] = useState("ALL");
   const [page, setPage] = useState(1);
   const pageSize = 15;
 
@@ -89,6 +90,12 @@ export function TasksTable({
     return [{ value: "ALL", label: "All services" }, ...[...set].sort().map((s) => ({ value: s, label: s }))];
   }, [rows]);
 
+  const projectOptions = useMemo(() => {
+    const set = new Set<string>();
+    rows.forEach((r) => r.projectName && set.add(r.projectName));
+    return [{ value: "ALL", label: "All projects" }, ...[...set].sort().map((p) => ({ value: p, label: p }))];
+  }, [rows]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return rows.filter((r) => {
@@ -97,6 +104,7 @@ export function TasksTable({
       if (view === "created" && !r.createdByMe) return false;
       if (dept !== "ALL" && r.departmentName !== dept) return false;
       if (service !== "ALL" && r.serviceName !== service) return false;
+      if (project !== "ALL" && r.projectName !== project) return false;
       if (!q) return true;
       return (
         r.name.toLowerCase().includes(q) ||
@@ -104,7 +112,7 @@ export function TasksTable({
         (r.serviceName?.toLowerCase().includes(q) ?? false)
       );
     });
-  }, [rows, search, status, view, dept, service]);
+  }, [rows, search, status, view, dept, service, project]);
 
   const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const current = Math.min(page, pages);
@@ -251,6 +259,9 @@ export function TasksTable({
               </div>
             </>
           )}
+          <div className="w-48">
+            <Combobox value={project} onChange={(v) => { setProject(v); setPage(1); }} options={projectOptions} />
+          </div>
           <div className="w-44">
             <Combobox value={status} onChange={(v) => { setStatus(v); setPage(1); }} options={STATUS_FILTER} />
           </div>
