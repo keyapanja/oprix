@@ -15,6 +15,7 @@ import { TaskAssignees } from "@/components/tasks/task-assignees";
 import { TaskChecklist } from "@/components/tasks/task-checklist";
 import { AttachmentsPanel } from "@/components/attachments/attachments-panel";
 import { TaskEdit } from "@/components/tasks/task-edit";
+import { TaskDuplicate } from "@/components/tasks/task-duplicate";
 import { TaskWorkflow } from "@/components/tasks/task-workflow";
 import { CommentForm } from "@/components/tasks/comment-form";
 import { TaskTimerControl } from "@/components/timer/task-timer-control";
@@ -175,6 +176,7 @@ export default async function TaskDetailPage({
           </div>
           <div className="flex items-center gap-2">
             <Badge tone={TASK_STATUS_TONE[task.status]}>{TASK_STATUS_LABEL[task.status]}</Badge>
+            {isManager && <TaskDuplicate taskId={task.id} />}
             {isManager && (
               <TaskEdit
                 taskId={task.id}

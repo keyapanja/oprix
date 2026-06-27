@@ -7,8 +7,6 @@ import { makeFileKey, saveUpload } from "@/lib/uploads";
 
 export const dynamic = "force-dynamic";
 
-const MAX_BYTES = 100 * 1024 * 1024; // 100 MB / file
-
 // Upload one or more files (multipart field "files") as attachments on a project.
 // Files are written to disk; only metadata goes in the DB (Attachment).
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -36,9 +34,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
   const created: { id: string; fileName: string; sizeBytes: number | null }[] = [];
   for (const file of files) {
-    if (file.size > MAX_BYTES) {
-      return NextResponse.json({ error: `"${file.name}" is larger than 100 MB` }, { status: 400 });
-    }
     const key = makeFileKey(file.name);
     await saveUpload(key, Buffer.from(await file.arrayBuffer()));
     const row = await prisma.attachment.create({

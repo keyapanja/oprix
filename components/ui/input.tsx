@@ -6,7 +6,7 @@ const base =
   "shadow-sm transition-shadow placeholder:text-faint focus:ring-2 focus:ring-inset focus:ring-brand-500 disabled:opacity-50";
 
 export function Input({ className, ...props }: InputHTMLAttributes<HTMLInputElement>) {
-  return <input className={cn(base, "h-10", className)} {...props} />;
+  return <input autoComplete="off" className={cn(base, "h-10", className)} {...props} />;
 }
 
 export function Textarea({
@@ -14,7 +14,7 @@ export function Textarea({
   ref,
   ...props
 }: TextareaHTMLAttributes<HTMLTextAreaElement> & { ref?: Ref<HTMLTextAreaElement> }) {
-  return <textarea ref={ref} className={cn(base, "min-h-20", className)} {...props} />;
+  return <textarea ref={ref} autoComplete="off" className={cn(base, "min-h-20", className)} {...props} />;
 }
 
 export function Select({ className, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {

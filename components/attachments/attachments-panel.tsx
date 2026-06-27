@@ -50,8 +50,14 @@ export function AttachmentsPanel({
       for (const f of files) fd.append("files", f);
       const res = await fetch(uploadUrl, { method: "POST", body: fd });
       if (!res.ok) {
-        const j = await res.json().catch(() => ({}));
-        toast.error(j.error || "Upload failed");
+        let msg = "Upload failed";
+        if (res.status === 413) {
+          msg = "File too large for the server/proxy to accept.";
+        } else {
+          const j = await res.json().catch(() => null);
+          msg = j?.error || `Upload failed (HTTP ${res.status})`;
+        }
+        toast.error(msg);
       } else {
         toast.success(files.length > 1 ? `${files.length} files uploaded` : "File uploaded");
         router.refresh();

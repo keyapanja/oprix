@@ -129,6 +129,7 @@ export function Combobox({
             <div className="border-b border-line p-2">
               <input
                 autoFocus
+                autoComplete="off"
                 value={query}
                 onChange={(e) => {
                   setQuery(e.target.value);

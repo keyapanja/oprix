@@ -5,7 +5,7 @@ import { confirmDialog } from "@/components/ui/confirm";
 import { useEffect, useMemo, useState, useTransition, type MouseEvent } from "react";
 import { useRouter } from "next/navigation";
 import type { TaskStatus, Priority } from "@prisma/client";
-import { deleteTask, deleteTasks } from "@/lib/projects/actions";
+import { deleteTask, deleteTasks, duplicateTask } from "@/lib/projects/actions";
 import { TASK_STATUS_TONE, PRIORITY_TONE } from "@/lib/status";
 import { Badge } from "@/components/ui/badge";
 import { Icon } from "@/components/ui/icons";
@@ -112,6 +112,7 @@ export function TasksTable({
   const pageRows = filtered.slice(startIdx, startIdx + pageSize);
 
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
   const [, startDelete] = useTransition();
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -164,6 +165,19 @@ export function TasksTable({
       setDeletingId(null);
       if (res.error) toast.error(res.error);
       else router.refresh();
+    });
+  }
+  async function onDuplicate(e: MouseEvent, id: string) {
+    e.stopPropagation();
+    setDuplicatingId(id);
+    startDelete(async () => {
+      const res = await duplicateTask(id);
+      setDuplicatingId(null);
+      if (res.error) toast.error(res.error);
+      else {
+        toast.success("Task duplicated");
+        router.refresh();
+      }
     });
   }
 
@@ -318,6 +332,16 @@ export function TasksTable({
                     className="flex size-8 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface hover:text-content"
                   >
                     <Icon name="pencil" className="size-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => onDuplicate(e, r.id)}
+                    disabled={duplicatingId === r.id}
+                    title="Duplicate task"
+                    aria-label="Duplicate task"
+                    className="flex size-8 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface hover:text-content disabled:opacity-40"
+                  >
+                    <Icon name="copy" className="size-4" />
                   </button>
                   <button
                     type="button"

@@ -27,6 +27,7 @@ export default async function NewTaskPage({
           where: { service: { parentId: null } },
           orderBy: { service: { name: "asc" } },
           select: {
+            primaryAssigneeId: true,
             service: {
               select: {
                 name: true,
@@ -71,6 +72,7 @@ export default async function NewTaskPage({
               id: sub.id,
               name: sub.name,
               categoryName: ps.service.name,
+              primaryAssigneeId: ps.primaryAssigneeId ?? null,
               checklist: sub.checklistTemplate.map((c) => c.text),
             })),
           ),

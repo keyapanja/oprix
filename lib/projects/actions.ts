@@ -516,6 +516,52 @@ export async function deleteTasks(
   return { ok: true, deleted, skipped };
 }
 
+/** Clone a task into a fresh To-Do copy (carries checklist + assignees; not files/comments). */
+export async function duplicateTask(
+  taskId: string,
+): Promise<ProjectState & { task?: { id: string } }> {
+  const session = await requireCapability("task:manage");
+  const src = await prisma.task.findFirst({
+    where: { id: taskId, project: { companyId: session.companyId } },
+    select: {
+      projectId: true,
+      name: true,
+      description: true,
+      serviceId: true,
+      priority: true,
+      dueDate: true,
+      checklist: { orderBy: { orderIndex: "asc" }, select: { text: true } },
+      assignees: { select: { employeeId: true } },
+    },
+  });
+  if (!src) return { error: "Task not found" };
+
+  const copy = await prisma.task.create({
+    data: {
+      projectId: src.projectId,
+      name: `${src.name} (copy)`,
+      description: src.description,
+      serviceId: src.serviceId,
+      createdById: session.userId,
+      status: "TODO",
+      priority: src.priority,
+      dueDate: src.dueDate,
+      assignees: src.assignees.length
+        ? { create: src.assignees.map((a) => ({ employeeId: a.employeeId })) }
+        : undefined,
+    },
+    select: { id: true },
+  });
+  if (src.checklist.length) {
+    await prisma.checklistItem.createMany({
+      data: src.checklist.map((c, i) => ({ taskId: copy.id, text: c.text, orderIndex: i })),
+    });
+  }
+  revalidatePath("/tasks");
+  revalidatePath(`/projects/${src.projectId}`);
+  return { ok: true, task: { id: copy.id } };
+}
+
 // ---- Comments (task access OR admin) --------------------------------------
 export async function addComment(taskId: string, body: string): Promise<ProjectState> {
   const session = await getSession();

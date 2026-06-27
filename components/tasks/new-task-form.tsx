@@ -18,13 +18,13 @@ type SubCat = {
   id: string;
   name: string;
   categoryName: string;
+  primaryAssigneeId: string | null;
   checklist: string[];
 };
 type Proj = { id: string; name: string; subcategories: SubCat[] };
 type CheckItem = { text: string; isDone: boolean };
 
 const PRIORITIES = ["LOW", "MEDIUM", "HIGH", "URGENT"];
-const STATUSES = ["TODO", "IN_PROGRESS", "REVIEW", "COMPLETED"];
 
 function fmtBytes(n: number): string {
   if (n < 1024) return `${n} B`;
@@ -47,7 +47,6 @@ export function NewTaskForm({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState("MEDIUM");
-  const [status, setStatus] = useState("TODO");
   const [dueDate, setDueDate] = useState("");
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [checklist, setChecklist] = useState<CheckItem[]>([]);
@@ -81,6 +80,11 @@ export function NewTaskForm({
     setServiceId(v);
     const sub = project?.subcategories.find((s) => s.id === v);
     setChecklist((sub?.checklist ?? []).map((text) => ({ text, isDone: false })));
+    // Auto-add the category's primary assignee (if set + still a valid employee).
+    const pid = sub?.primaryAssigneeId;
+    if (pid && employees.some((e) => e.id === pid)) {
+      setAssigneeIds((cur) => (cur.includes(pid) ? cur : [...cur, pid]));
+    }
   }
 
   function addAssignee(id: string) {
@@ -121,7 +125,7 @@ export function NewTaskForm({
         description: description.trim() || null,
         serviceId: serviceId || null,
         priority: priority as "LOW" | "MEDIUM" | "HIGH" | "URGENT",
-        status: status as "TODO" | "IN_PROGRESS" | "REVIEW" | "COMPLETED",
+        status: "TODO",
         dueDate: dueDate || null,
         assigneeIds,
         checklist,
@@ -135,8 +139,12 @@ export function NewTaskForm({
           for (const f of files) fd.append("files", f);
           const up = await fetch(`/api/tasks/${res.task.id}/attachments`, { method: "POST", body: fd });
           if (!up.ok) {
-            const j = await up.json().catch(() => ({}));
-            setError(`Task created, but uploading files failed: ${j.error || up.statusText}`);
+            const j = await up.json().catch(() => null);
+            const why =
+              up.status === 413
+                ? "the file is too large for the server/proxy"
+                : j?.error || up.statusText || `HTTP ${up.status}`;
+            setError(`Task created, but uploading files failed: ${why}`);
           }
         } catch {
           setError("Task created, but uploading files failed.");
@@ -191,9 +199,6 @@ export function NewTaskForm({
           </Field>
           <Field label="Priority">
             <Combobox value={priority} onChange={setPriority} options={PRIORITIES.map((p) => ({ value: p, label: humanizeEnum(p) }))} />
-          </Field>
-          <Field label="Status">
-            <Combobox value={status} onChange={setStatus} options={STATUSES.map((s) => ({ value: s, label: humanizeEnum(s) }))} />
           </Field>
           <Field label="Due date">
             <DatePicker value={dueDate} onChange={setDueDate} />
@@ -274,7 +279,7 @@ export function NewTaskForm({
           </Field>
 
           {/* Attachments — stored on the server, not the database */}
-          <Field label="Attachments" hint="Stored on the server · max 100 MB each" className="sm:col-span-2">
+          <Field label="Attachments" hint="Stored on the server" className="sm:col-span-2">
             <div>
               {files.length > 0 && (
                 <ul className="mb-2 space-y-1">
