@@ -44,4 +44,10 @@ COPY --from=build /app/tsconfig.json ./tsconfig.json
 # volume at /app/uploads so they survive every redeploy.
 RUN mkdir -p /app/uploads
 EXPOSE 3000
-CMD ["sh", "-c", "node_modules/.bin/next start -H 0.0.0.0 -p ${PORT:-3000}"]
+# On boot, sync the schema (additive `db push`) then serve. The DIRECT_URL
+# fallback makes the push work even when only DATABASE_URL is set (Coolify
+# Postgres has no separate pooler). A failed push is non-fatal — the app still
+# starts on the existing schema — and `db push` never drops data without
+# `--accept-data-loss`, which we deliberately omit. This means schema changes
+# apply automatically on each redeploy; no manual `prisma db push` needed.
+CMD ["sh", "-c", "export DIRECT_URL=\"${DIRECT_URL:-$DATABASE_URL}\"; echo 'Syncing DB schema (prisma db push)…'; node_modules/.bin/prisma db push --skip-generate || echo 'WARN: prisma db push failed — starting on existing schema'; node_modules/.bin/next start -H 0.0.0.0 -p ${PORT:-3000}"]
