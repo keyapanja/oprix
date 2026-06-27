@@ -1,17 +1,20 @@
 "use client";
 
-import { Fragment, useActionState, useEffect, useState } from "react";
+import { Fragment, useActionState, useEffect, useState, type ChangeEvent } from "react";
+import { useRouter } from "next/navigation";
 import {
   createHoliday,
   createAnnouncement,
   type CalendarState,
 } from "@/lib/calendar/actions";
 import { Card } from "@/components/ui/card";
-import { Input, Textarea } from "@/components/ui/input";
+import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Icon } from "@/components/ui/icons";
+import { RichTextEditor } from "@/components/kb/rich-text-editor";
+import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/cn";
 
 export function CalendarAdminControls() {
@@ -63,34 +66,116 @@ function HolidayForm() {
 }
 
 function AnnouncementForm() {
-  const [state, action, pending] = useActionState<CalendarState, FormData>(createAnnouncement, {});
-  const [key, setKey] = useState(0);
-  useEffect(() => {
-    if (state.ok) setKey((k) => k + 1);
-  }, [state]);
+  const router = useRouter();
+  const [date, setDate] = useState("");
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
+  const [files, setFiles] = useState<File[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [key, setKey] = useState(0); // remounts the editor on reset
+
+  function onFilesPicked(e: ChangeEvent<HTMLInputElement>) {
+    setFiles((f) => [...f, ...Array.from(e.target.files ?? [])]);
+    e.target.value = "";
+  }
+  function removeFile(i: number) {
+    setFiles((f) => f.filter((_, idx) => idx !== i));
+  }
+
+  async function submit() {
+    setError(null);
+    if (!date) return setError("Pick a date");
+    if (!title.trim()) return setError("Title is required");
+    setBusy(true);
+    try {
+      const fd = new FormData();
+      fd.append("date", date);
+      fd.append("title", title.trim());
+      fd.append("body", body);
+      const res = await createAnnouncement({}, fd);
+      if (res.error || !res.id) {
+        setError(res.error || "Couldn't post the announcement.");
+        return;
+      }
+      if (files.length) {
+        const up = new FormData();
+        for (const f of files) up.append("files", f);
+        const r = await fetch(`/api/announcements/${res.id}/attachments`, { method: "POST", body: up });
+        if (!r.ok) {
+          const j = await r.json().catch(() => null);
+          toast.error(`Announcement posted, but a file failed to upload: ${j?.error ?? r.statusText}`);
+        }
+      }
+      toast.success("Announcement posted");
+      setDate("");
+      setTitle("");
+      setBody("");
+      setFiles([]);
+      setKey((k) => k + 1);
+      router.refresh();
+    } catch {
+      setError("Couldn't post the announcement.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
-    <form action={action} className="space-y-3">
-      <Fragment key={key}>
-        <div className="flex flex-wrap items-end gap-3">
-          <Field label="Date" className="w-44">
-            <DatePicker name="date" />
-          </Field>
-          <Field label="Title" htmlFor="a-title" className="min-w-56 flex-1">
-            <Input id="a-title" name="title" placeholder="e.g. Office closed early Friday" required />
-          </Field>
-        </div>
-        <Field label="Details" htmlFor="a-body">
-          <Textarea id="a-body" name="body" placeholder="Optional details…" />
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-end gap-3">
+        <Field label="Date" className="w-44">
+          <DatePicker value={date} onChange={setDate} />
         </Field>
-      </Fragment>
-      <div className="flex items-center gap-3">
-        <Button type="submit" disabled={pending}>
-          <Icon name="bell" className="size-4" />
-          {pending ? "Posting…" : "Post announcement"}
-        </Button>
-        {state.error && <p className="text-xs text-red-600">{state.error}</p>}
+        <Field label="Title" htmlFor="a-title" className="min-w-56 flex-1">
+          <Input
+            id="a-title"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="e.g. Office closed early Friday"
+          />
+        </Field>
       </div>
-    </form>
+
+      <Field label="Details">
+        <RichTextEditor key={key} value={body} onChange={setBody} placeholder="Write the announcement — bold, headings, lists, links…" />
+      </Field>
+
+      <Field label="Attachments" hint="Images appear in the announcement; other files attach as downloads">
+        <div>
+          {files.length > 0 && (
+            <ul className="mb-2 space-y-1">
+              {files.map((f, i) => (
+                <li key={i} className="flex items-center gap-2 rounded-lg bg-canvas px-2.5 py-1.5 text-sm">
+                  <Icon name="folder" className="size-4 shrink-0 text-faint" />
+                  <span className="flex-1 truncate text-content">{f.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => removeFile(i)}
+                    className="shrink-0 text-faint hover:text-red-600"
+                    aria-label={`Remove ${f.name}`}
+                  >
+                    <Icon name="x" className="size-3.5" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-canvas px-3 py-2 text-sm font-medium text-content ring-1 ring-inset ring-line transition-colors hover:bg-surface">
+            <Icon name="plus" className="size-4" />
+            Add images or files
+            <input type="file" multiple className="hidden" onChange={onFilesPicked} />
+          </label>
+        </div>
+      </Field>
+
+      <div className="flex items-center gap-3">
+        <Button onClick={submit} disabled={busy}>
+          <Icon name="bell" className="size-4" />
+          {busy ? "Posting…" : "Post announcement"}
+        </Button>
+        {error && <p className="text-xs text-red-600">{error}</p>}
+      </div>
+    </div>
   );
 }

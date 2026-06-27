@@ -7,6 +7,7 @@ import { requireCapability } from "@/lib/auth/guard";
 import { dateAtUTC } from "@/lib/dates";
 import { formatDate } from "@/lib/format";
 import { notifyAllInternal } from "@/lib/calendar/reminders";
+import { deleteUpload } from "@/lib/uploads";
 
 export type CalendarState = { error?: string; ok?: boolean };
 const CAL = "/calendar";
@@ -78,14 +79,14 @@ export async function updateHoliday(id: string, formData: FormData): Promise<Cal
 
 const AnnouncementSchema = z.object({
   title: z.string().trim().min(1, "Title is required").max(140),
-  body: z.string().trim().max(1000).optional().or(z.literal("")),
+  body: z.string().trim().max(5000).optional().or(z.literal("")),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Pick a date"),
 });
 
 export async function createAnnouncement(
   _prev: CalendarState,
   formData: FormData,
-): Promise<CalendarState> {
+): Promise<CalendarState & { id?: string }> {
   const session = await requireCapability("org:manage");
   const parsed = AnnouncementSchema.safeParse({
     title: formData.get("title"),
@@ -119,7 +120,7 @@ export async function createAnnouncement(
   }
 
   revalidatePath(CAL);
-  return { ok: true };
+  return { ok: true, id: ann.id };
 }
 
 /** Edit an announcement — only its author (a Super Admin can edit any). */
@@ -155,13 +156,18 @@ export async function deleteAnnouncement(id: string): Promise<CalendarState> {
   const session = await requireCapability("org:manage");
   const ann = await prisma.announcement.findFirst({
     where: { id, companyId: session.companyId },
-    select: { authorId: true },
+    select: { authorId: true, attachments: { select: { fileKey: true } } },
   });
   if (!ann) return { error: "Announcement not found" };
   // Author-scoped, but legacy rows (null author, pre-authorId) are ownerless —
   // any org:manage user (already required above) may manage those.
   if (ann.authorId && ann.authorId !== session.userId && session.role !== "SUPER_ADMIN") {
     return { error: "Only the author can delete this announcement." };
+  }
+  // Remove its attachments (DB rows + on-disk files) first, then the row.
+  if (ann.attachments.length) {
+    await prisma.attachment.deleteMany({ where: { announcementId: id } });
+    for (const a of ann.attachments) await deleteUpload(a.fileKey);
   }
   await prisma.announcement.delete({ where: { id } });
   revalidatePath(CAL);

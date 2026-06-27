@@ -18,6 +18,7 @@ export type MonthData = {
     authorId: string | null;
     authorName: string | null;
     postedAt: string; // ISO datetime the announcement was posted
+    attachments: { id: string; fileName: string; mimeType: string | null }[];
   }[];
   holidays: { id: string; dateISO: string; name: string }[];
 };
@@ -45,7 +46,10 @@ export async function getMonthCalendar(
     prisma.announcement.findMany({
       where: { companyId, date: { gte: start, lt: end } },
       orderBy: { date: "asc" },
-      select: { id: true, title: true, body: true, date: true, authorId: true, createdAt: true },
+      select: {
+        id: true, title: true, body: true, date: true, authorId: true, createdAt: true,
+        attachments: { orderBy: { createdAt: "asc" }, select: { id: true, fileName: true, mimeType: true } },
+      },
     }),
     prisma.leaveRequest.findMany({
       where: {
@@ -107,6 +111,7 @@ export async function getMonthCalendar(
       authorId: a.authorId,
       authorName: authorName(a.authorId),
       postedAt: a.createdAt.toISOString(),
+      attachments: a.attachments,
     })),
     holidays: holidays.map((h) => ({ id: h.id, dateISO: iso(h.date), name: h.name })),
   };

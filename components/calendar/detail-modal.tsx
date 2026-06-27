@@ -1,7 +1,9 @@
 "use client";
 
 import { Modal } from "@/components/ui/modal";
+import { Icon } from "@/components/ui/icons";
 import { formatDate, formatDateTime } from "@/lib/format";
+import { renderMarkdown } from "@/lib/kb/markdown";
 
 export type CalendarDetail =
   | { kind: "holiday"; title: string; dateISO: string }
@@ -12,6 +14,7 @@ export type CalendarDetail =
       dateISO: string;
       authorName: string | null;
       postedAt: string;
+      attachments: { id: string; fileName: string; mimeType: string | null }[];
     };
 
 /** Read-only detail popup for a calendar holiday or announcement. */
@@ -40,12 +43,56 @@ export function CalendarDetailModal({ item, onClose }: { item: CalendarDetail; o
         </dl>
 
         {item.kind === "announcement" && (
-          <div className="border-t border-line pt-3">
-            <p className="mb-1 text-xs font-medium uppercase tracking-wide text-faint">Description</p>
-            {item.body ? (
-              <p className="whitespace-pre-wrap text-sm text-content">{item.body}</p>
-            ) : (
-              <p className="text-sm text-muted">No description.</p>
+          <div className="space-y-3 border-t border-line pt-3">
+            <div>
+              <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-faint">Details</p>
+              {item.body ? (
+                <div
+                  className="text-sm text-content [&_a]:text-accent-strong [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-brand-500 [&_blockquote]:pl-3 [&_blockquote]:text-muted [&_code]:rounded [&_code]:bg-canvas [&_code]:px-1 [&_h1]:mt-2 [&_h1]:text-lg [&_h1]:font-bold [&_h2]:mt-2 [&_h2]:font-semibold [&_h3]:mt-2 [&_h3]:font-semibold [&_li]:my-0.5 [&_ol]:my-1.5 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-1.5 [&_strong]:font-semibold [&_ul]:my-1.5 [&_ul]:list-disc [&_ul]:pl-5"
+                  dangerouslySetInnerHTML={{ __html: renderMarkdown(item.body) }}
+                />
+              ) : (
+                <p className="text-sm text-muted">No details.</p>
+              )}
+            </div>
+
+            {item.attachments.length > 0 && (
+              <div>
+                <p className="mb-2 text-xs font-medium uppercase tracking-wide text-faint">Attachments</p>
+                {item.attachments.some((a) => a.mimeType?.startsWith("image/")) && (
+                  <div className="mb-2 flex flex-wrap gap-2">
+                    {item.attachments
+                      .filter((a) => a.mimeType?.startsWith("image/"))
+                      .map((a) => (
+                        <a key={a.id} href={`/api/files/${a.id}`} target="_blank" rel="noopener noreferrer">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={`/api/files/${a.id}`}
+                            alt={a.fileName}
+                            className="h-28 w-28 rounded-lg object-cover ring-1 ring-inset ring-line transition-opacity hover:opacity-90"
+                          />
+                        </a>
+                      ))}
+                  </div>
+                )}
+                <ul className="space-y-1">
+                  {item.attachments
+                    .filter((a) => !a.mimeType?.startsWith("image/"))
+                    .map((a) => (
+                      <li key={a.id}>
+                        <a
+                          href={`/api/files/${a.id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-2 text-sm font-medium text-accent-strong hover:underline"
+                        >
+                          <Icon name="download" className="size-4 shrink-0" />
+                          {a.fileName}
+                        </a>
+                      </li>
+                    ))}
+                </ul>
+              </div>
             )}
           </div>
         )}

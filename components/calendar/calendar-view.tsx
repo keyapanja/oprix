@@ -242,6 +242,7 @@ export function CalendarView({
                           dateISO: a.dateISO,
                           authorName: a.authorName,
                           postedAt: a.postedAt,
+                          attachments: a.attachments,
                         })
                       }
                     >
