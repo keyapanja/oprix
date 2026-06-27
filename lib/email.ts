@@ -101,6 +101,39 @@ export async function sendPasswordResetEmail(opts: {
   return sendMail({ to: opts.to, subject: "Reset your Oprix password", html });
 }
 
+export async function sendTaskAssignedEmail(opts: {
+  to: string;
+  name: string;
+  taskName: string;
+  projectName: string;
+  assignerName: string;
+  dueDate: string | null;
+  link: string;
+}): Promise<{ delivered: boolean }> {
+  const html = `
+  <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto">
+    <h2 style="color:#059669;margin:0 0 8px">New task assigned</h2>
+    <p style="color:#334155;font-size:14px;line-height:1.6">
+      Hi ${escapeHtml(opts.name)}, <strong>${escapeHtml(opts.assignerName)}</strong> assigned you a task
+      in <strong>${escapeHtml(opts.projectName)}</strong>.
+    </p>
+    <div style="background:#f1f5f9;border-radius:10px;padding:14px 16px;margin:16px 0">
+      <p style="margin:0;color:#0f172a;font-size:15px;font-weight:600">${escapeHtml(opts.taskName)}</p>
+      ${opts.dueDate ? `<p style="margin:6px 0 0;color:#64748b;font-size:13px">Due ${escapeHtml(opts.dueDate)}</p>` : ""}
+    </div>
+    <p style="margin:24px 0">
+      <a href="${opts.link}" style="background:#059669;color:#fff;text-decoration:none;padding:12px 20px;border-radius:10px;font-size:14px;font-weight:600;display:inline-block">
+        View task
+      </a>
+    </p>
+    <p style="color:#94a3b8;font-size:12px;line-height:1.6">
+      If the button doesn't work, copy this URL:<br>
+      <span style="color:#475569">${opts.link}</span>
+    </p>
+  </div>`;
+  return sendMail({ to: opts.to, subject: `New task assigned: ${opts.taskName}`, html });
+}
+
 function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!,

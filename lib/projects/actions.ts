@@ -13,6 +13,7 @@ import { finalizeTaskTimer, finalizeAllTaskTimers } from "@/lib/timer/finalize";
 import { canEditTask, toggleChecklistItemFor } from "@/lib/projects/task-access";
 import { TASK_STATUS_LABEL } from "@/lib/status";
 import { deleteUpload } from "@/lib/uploads";
+import { notifyTaskAssigned } from "@/lib/tasks/assign-notify";
 
 export type ProjectState = { error?: string; ok?: boolean; id?: string };
 
@@ -344,6 +345,15 @@ export async function createTask(input: {
     message: "created the task",
   });
 
+  if (assigneeIds.length) {
+    await notifyTaskAssigned({
+      companyId: session.companyId,
+      taskId: task.id,
+      employeeIds: assigneeIds,
+      assignerUserId: session.userId,
+    });
+  }
+
   revalidatePath(`/projects/${input.projectId}`);
   return { ok: true, task: toKanban(task) };
 }
@@ -490,6 +500,12 @@ export async function addTaskAssignee(taskId: string, employeeId: string): Promi
     entityType: "TASK",
     entityId: taskId,
     message: `assigned ${emp.fullName}`,
+  });
+  await notifyTaskAssigned({
+    companyId: session.companyId,
+    taskId,
+    employeeIds: [employeeId],
+    assignerUserId: session.userId,
   });
   revalidatePath(`/tasks/${taskId}`);
   return { ok: true };
