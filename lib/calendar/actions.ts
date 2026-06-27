@@ -7,7 +7,6 @@ import { requireCapability } from "@/lib/auth/guard";
 import { dateAtUTC } from "@/lib/dates";
 import { formatDate } from "@/lib/format";
 import { notifyAllInternal } from "@/lib/calendar/reminders";
-import { deleteUpload } from "@/lib/uploads";
 
 export type CalendarState = { error?: string; ok?: boolean };
 const CAL = "/calendar";
@@ -28,16 +27,23 @@ export async function createHoliday(
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message };
 
-  try {
-    await prisma.holiday.create({
-      data: {
-        companyId: session.companyId,
-        date: dateAtUTC(parsed.data.date),
-        name: parsed.data.name,
-      },
+  const date = dateAtUTC(parsed.data.date);
+  // A soft-deleted holiday still occupies the (company, date) unique slot — revive
+  // it (with the new name) instead of failing the unique constraint.
+  const existing = await prisma.holiday.findFirst({
+    where: { companyId: session.companyId, date },
+    select: { id: true, deletedAt: true },
+  });
+  if (existing) {
+    if (!existing.deletedAt) return { error: "A holiday already exists on that date" };
+    await prisma.holiday.update({
+      where: { id: existing.id },
+      data: { name: parsed.data.name, deletedAt: null, deletedById: null },
     });
-  } catch {
-    return { error: "A holiday already exists on that date" };
+  } else {
+    await prisma.holiday.create({
+      data: { companyId: session.companyId, date, name: parsed.data.name },
+    });
   }
   revalidatePath(CAL);
   return { ok: true };
@@ -45,7 +51,10 @@ export async function createHoliday(
 
 export async function deleteHoliday(id: string): Promise<CalendarState> {
   const session = await requireCapability("org:manage");
-  await prisma.holiday.deleteMany({ where: { id, companyId: session.companyId } });
+  await prisma.holiday.updateMany({
+    where: { id, companyId: session.companyId, deletedAt: null },
+    data: { deletedAt: new Date(), deletedById: session.userId },
+  });
   revalidatePath(CAL);
   return { ok: true };
 }
@@ -60,7 +69,7 @@ export async function updateHoliday(id: string, formData: FormData): Promise<Cal
 
   // Tenant-scope: the holiday must belong to this company.
   const existing = await prisma.holiday.findFirst({
-    where: { id, companyId: session.companyId },
+    where: { id, companyId: session.companyId, deletedAt: null },
     select: { id: true },
   });
   if (!existing) return { error: "Holiday not found" };
@@ -127,7 +136,7 @@ export async function createAnnouncement(
 export async function updateAnnouncement(id: string, formData: FormData): Promise<CalendarState> {
   const session = await requireCapability("org:manage");
   const ann = await prisma.announcement.findFirst({
-    where: { id, companyId: session.companyId },
+    where: { id, companyId: session.companyId, deletedAt: null },
     select: { authorId: true },
   });
   if (!ann) return { error: "Announcement not found" };
@@ -151,12 +160,12 @@ export async function updateAnnouncement(id: string, formData: FormData): Promis
   return { ok: true };
 }
 
-/** Delete an announcement — only its author (a Super Admin can delete any). */
+/** Delete an announcement (to trash) — only its author (a Super Admin can delete any). */
 export async function deleteAnnouncement(id: string): Promise<CalendarState> {
   const session = await requireCapability("org:manage");
   const ann = await prisma.announcement.findFirst({
-    where: { id, companyId: session.companyId },
-    select: { authorId: true, attachments: { select: { fileKey: true } } },
+    where: { id, companyId: session.companyId, deletedAt: null },
+    select: { authorId: true },
   });
   if (!ann) return { error: "Announcement not found" };
   // Author-scoped, but legacy rows (null author, pre-authorId) are ownerless —
@@ -164,12 +173,11 @@ export async function deleteAnnouncement(id: string): Promise<CalendarState> {
   if (ann.authorId && ann.authorId !== session.userId && session.role !== "SUPER_ADMIN") {
     return { error: "Only the author can delete this announcement." };
   }
-  // Remove its attachments (DB rows + on-disk files) first, then the row.
-  if (ann.attachments.length) {
-    await prisma.attachment.deleteMany({ where: { announcementId: id } });
-    for (const a of ann.attachments) await deleteUpload(a.fileKey);
-  }
-  await prisma.announcement.delete({ where: { id } });
+  // Soft-delete: attachments stay so a Super-Admin restore brings it back whole.
+  await prisma.announcement.update({
+    where: { id },
+    data: { deletedAt: new Date(), deletedById: session.userId },
+  });
   revalidatePath(CAL);
   return { ok: true };
 }

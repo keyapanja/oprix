@@ -39,12 +39,12 @@ export async function getMonthCalendar(
 
   const [holidays, announcements, away] = await Promise.all([
     prisma.holiday.findMany({
-      where: { companyId, date: { gte: start, lt: end } },
+      where: { companyId, deletedAt: null, date: { gte: start, lt: end } },
       orderBy: { date: "asc" },
       select: { id: true, date: true, name: true },
     }),
     prisma.announcement.findMany({
-      where: { companyId, date: { gte: start, lt: end } },
+      where: { companyId, deletedAt: null, date: { gte: start, lt: end } },
       orderBy: { date: "asc" },
       select: {
         id: true, title: true, body: true, date: true, authorId: true, createdAt: true,

@@ -46,7 +46,7 @@ function detail(label: string, value: string | null | undefined): TrashDetail | 
  * (the page + actions enforce the role).
  */
 export async function getTrash(companyId: string): Promise<TrashItem[]> {
-  const [projects, clients, employees, tasks] = await Promise.all([
+  const [projects, clients, employees, tasks, announcements, holidays] = await Promise.all([
     prisma.project.findMany({
       where: { companyId, deletedAt: { not: null } },
       orderBy: { deletedAt: "desc" },
@@ -77,6 +77,16 @@ export async function getTrash(companyId: string): Promise<TrashItem[]> {
         project: { select: { name: true } },
         assignees: { select: { employee: { select: { fullName: true } } } },
       },
+    }),
+    prisma.announcement.findMany({
+      where: { companyId, deletedAt: { not: null } },
+      orderBy: { deletedAt: "desc" },
+      select: { id: true, title: true, body: true, date: true, deletedAt: true, deletedById: true },
+    }),
+    prisma.holiday.findMany({
+      where: { companyId, deletedAt: { not: null } },
+      orderBy: { deletedAt: "desc" },
+      select: { id: true, name: true, date: true, deletedAt: true, deletedById: true },
     }),
   ]);
 
@@ -143,6 +153,31 @@ export async function getTrash(companyId: string): Promise<TrashItem[]> {
       ].filter(Boolean) as TrashDetail[],
       deletedAt: t.deletedAt!.toISOString(),
       deletedById: t.deletedById,
+      deletedByName: null,
+    })),
+    ...announcements.map((a) => ({
+      type: "announcement" as const,
+      typeLabel: "Announcement",
+      id: a.id,
+      label: a.title,
+      sublabel: formatDate(a.date),
+      details: [
+        detail("Date", formatDate(a.date)),
+        detail("Body", a.body ? (a.body.length > 200 ? `${a.body.slice(0, 200)}…` : a.body) : null),
+      ].filter(Boolean) as TrashDetail[],
+      deletedAt: a.deletedAt!.toISOString(),
+      deletedById: a.deletedById,
+      deletedByName: null,
+    })),
+    ...holidays.map((h) => ({
+      type: "holiday" as const,
+      typeLabel: "Holiday",
+      id: h.id,
+      label: h.name,
+      sublabel: formatDate(h.date),
+      details: [detail("Date", formatDate(h.date))].filter(Boolean) as TrashDetail[],
+      deletedAt: h.deletedAt!.toISOString(),
+      deletedById: h.deletedById,
       deletedByName: null,
     })),
   ];

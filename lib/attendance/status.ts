@@ -31,7 +31,7 @@ export async function holidayName(
   dateISO: string,
 ): Promise<string | null> {
   const h = await prisma.holiday.findFirst({
-    where: { companyId, date: dateAtUTC(dateISO) },
+    where: { companyId, date: dateAtUTC(dateISO), deletedAt: null },
     select: { name: true },
   });
   return h?.name ?? null;

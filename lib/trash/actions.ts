@@ -47,6 +47,20 @@ export async function restoreItem(type: TrashType, id: string): Promise<TrashSta
       });
       revalidatePath("/tasks");
       break;
+    case "announcement":
+      await prisma.announcement.updateMany({ where, data });
+      revalidatePath("/calendar");
+      break;
+    case "holiday":
+      // A live holiday may now occupy this (company, date) slot — restore can fail
+      // the unique constraint; surface that instead of crashing.
+      try {
+        await prisma.holiday.updateMany({ where, data });
+      } catch {
+        return { error: "A holiday already exists on that date — can't restore." };
+      }
+      revalidatePath("/calendar");
+      break;
     default:
       return { error: "This item type can't be restored yet." };
   }

@@ -52,7 +52,7 @@ export async function getAllocation(companyId: string, startISO: string, endISO:
         capacity: { select: { dailyHours: true, weeklyHours: true, monthlyHours: true } },
       },
     }),
-    prisma.holiday.findMany({ where: { companyId, date: dateWin }, select: { date: true } }),
+    prisma.holiday.findMany({ where: { companyId, date: dateWin, deletedAt: null }, select: { date: true } }),
   ]);
   const empIds = employees.map((e) => e.id);
 

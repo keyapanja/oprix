@@ -32,7 +32,7 @@ export async function getMonthlyAttendance(companyId: string, year: number, mont
       select: { id: true, fullName: true, employeeCode: true, department: { select: { name: true } } },
     }),
     prisma.attendance.findMany({ where: { companyId, date: win }, select: { employeeId: true, date: true, type: true, markedManually: true } }),
-    prisma.holiday.findMany({ where: { companyId, date: win }, select: { date: true } }),
+    prisma.holiday.findMany({ where: { companyId, date: win, deletedAt: null }, select: { date: true } }),
     prisma.leaveRequest.findMany({
       where: { companyId, kind: "LEAVE", status: "HR_APPROVED", startDate: { lte: last }, endDate: { gte: first } },
       select: { employeeId: true, startDate: true, endDate: true },

@@ -51,11 +51,11 @@ export async function sendEventReminders(opts: {
   const tomorrow = dateAtUTC(addDaysISO(dateISO, 1));
   const [holidays, announcements] = await Promise.all([
     prisma.holiday.findMany({
-      where: { companyId: opts.companyId, date: tomorrow, reminderSentAt: null },
+      where: { companyId: opts.companyId, date: tomorrow, reminderSentAt: null, deletedAt: null },
       select: { id: true, name: true },
     }),
     prisma.announcement.findMany({
-      where: { companyId: opts.companyId, date: tomorrow, reminderSentAt: null },
+      where: { companyId: opts.companyId, date: tomorrow, reminderSentAt: null, deletedAt: null },
       select: { id: true, title: true },
     }),
   ]);

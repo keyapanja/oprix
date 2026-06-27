@@ -42,7 +42,7 @@ export async function computeLop(
   if (leaves.length === 0) return { days: 0, divisorDays };
 
   const holidays = await prisma.holiday.findMany({
-    where: { companyId, date: { gte: monthStart, lte: monthEnd } },
+    where: { companyId, date: { gte: monthStart, lte: monthEnd }, deletedAt: null },
     select: { date: true },
   });
   const holidaySet = new Set(holidays.map((h) => h.date.toISOString().slice(0, 10)));

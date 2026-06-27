@@ -15,7 +15,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const { id: announcementId } = await ctx.params;
 
   const ann = await prisma.announcement.findFirst({
-    where: { id: announcementId, companyId: session.companyId },
+    where: { id: announcementId, companyId: session.companyId, deletedAt: null },
     select: { id: true, authorId: true },
   });
   if (!ann) return NextResponse.json({ error: "Announcement not found" }, { status: 404 });

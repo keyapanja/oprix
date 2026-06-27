@@ -15,7 +15,7 @@ export default async function AnnouncementPage({ params }: { params: Promise<{ i
   const session = await requirePage();
 
   const ann = await prisma.announcement.findFirst({
-    where: { id, companyId: session.companyId },
+    where: { id, companyId: session.companyId, deletedAt: null },
     select: {
       title: true,
       body: true,

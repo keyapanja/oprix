@@ -115,7 +115,7 @@ export function ImageCropper({
     <Modal onClose={onCancel} title="Crop your photo">
       <div className="space-y-4">
         <div
-          className="relative mx-auto overflow-hidden rounded-full bg-canvas ring-1 ring-line-strong"
+          className="relative mx-auto overflow-hidden rounded-xl bg-canvas ring-1 ring-line-strong"
           style={{ width: VIEWPORT, height: VIEWPORT, touchAction: "none" }}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
@@ -134,6 +134,20 @@ export function ImageCropper({
               style={{ left: pos.x, top: pos.y, width: dw, height: dh }}
             />
           )}
+
+          {/* Crop guides — visual only, never intercept the drag. */}
+          <div className="pointer-events-none absolute inset-0">
+            {/* Avatar circle: outlines the round area and dims the square's corners. */}
+            <div
+              className="absolute inset-0 rounded-full ring-1 ring-white/80"
+              style={{ boxShadow: "0 0 0 9999px rgba(0,0,0,0.45)" }}
+            />
+            {/* Rule-of-thirds grid for composition. */}
+            <div className="absolute left-1/3 top-0 h-full w-px bg-white/30" />
+            <div className="absolute left-2/3 top-0 h-full w-px bg-white/30" />
+            <div className="absolute left-0 top-1/3 h-px w-full bg-white/30" />
+            <div className="absolute left-0 top-2/3 h-px w-full bg-white/30" />
+          </div>
         </div>
 
         <div className="flex items-center gap-3">
@@ -149,7 +163,9 @@ export function ImageCropper({
             aria-label="Zoom"
           />
         </div>
-        <p className="text-center text-xs text-faint">Drag to reposition · saved as a square, under 2 MB</p>
+        <p className="text-center text-xs text-faint">
+          Drag to reposition · slider to zoom · the circle is your avatar · saved square, under 2 MB
+        </p>
 
         <div className="flex justify-end gap-3 border-t border-line pt-4">
           <Button variant="secondary" onClick={onCancel}>
