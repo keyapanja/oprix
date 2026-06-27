@@ -56,8 +56,10 @@ export function NotificationsList({ notes }: { notes: ClientNote[] }) {
   }
 
   function markAll() {
+    const ids = notes.filter((n) => !n.isRead).map((n) => n.id);
+    if (!ids.length) return;
     start(async () => {
-      await markNotificationsRead();
+      await markNotificationsRead(ids);
       router.refresh();
     });
   }
@@ -157,8 +159,8 @@ export function NotificationsList({ notes }: { notes: ClientNote[] }) {
             {filtered.map((n) => {
               const cat = categorize(n.type);
               const st = CATEGORY_STYLES[cat];
-              const inner = (
-                <div className="flex gap-3.5 py-4 pr-5">
+              const body = (
+                <>
                   <span className={cn("flex size-9 shrink-0 items-center justify-center rounded-xl", st.soft, st.text)}>
                     <Icon name={st.icon} className="size-4" />
                   </span>
@@ -175,29 +177,30 @@ export function NotificationsList({ notes }: { notes: ClientNote[] }) {
                     </p>
                     {n.body && <p className="mt-0.5 text-sm text-muted">{n.body}</p>}
                   </div>
-                  {n.href && <Icon name="chevronRight" className="size-4 shrink-0 self-center text-faint" />}
-                </div>
+                  {n.href && <Icon name="chevronRight" className="size-4 shrink-0 text-faint" />}
+                </>
               );
               return (
                 <li
                   key={n.id}
-                  className={cn("flex items-stretch transition-colors", selected.has(n.id) ? "bg-accent-soft" : "hover:bg-canvas")}
+                  className={cn(
+                    "flex items-center gap-3 px-5 py-4 transition-colors",
+                    selected.has(n.id) ? "bg-accent-soft" : "hover:bg-canvas",
+                  )}
                 >
-                  <label className="flex cursor-pointer items-center pl-5 pr-1.5">
-                    <input
-                      type="checkbox"
-                      checked={selected.has(n.id)}
-                      onChange={() => toggleSelect(n.id)}
-                      className="size-4 rounded border-line-strong text-brand-600 focus:ring-brand-500"
-                      aria-label={`Select notification: ${n.title}`}
-                    />
-                  </label>
+                  <input
+                    type="checkbox"
+                    checked={selected.has(n.id)}
+                    onChange={() => toggleSelect(n.id)}
+                    className="size-4 shrink-0 rounded border-line-strong text-brand-600 focus:ring-brand-500"
+                    aria-label={`Select notification: ${n.title}`}
+                  />
                   {n.href ? (
-                    <Link href={n.href} className="min-w-0 flex-1">
-                      {inner}
+                    <Link href={n.href} className="flex min-w-0 flex-1 items-center gap-3.5">
+                      {body}
                     </Link>
                   ) : (
-                    <div className="min-w-0 flex-1">{inner}</div>
+                    <div className="flex min-w-0 flex-1 items-center gap-3.5">{body}</div>
                   )}
                 </li>
               );
