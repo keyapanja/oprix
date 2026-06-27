@@ -128,6 +128,7 @@ export async function pauseTaskTimer(
  * read-only everywhere — the worker's tracking is done.
  */
 export function canUseTimer(status: string, isAssignee: boolean, _isReviewer: boolean): boolean {
-  const workStates = status === "TODO" || status === "IN_PROGRESS" || status === "REDO";
+  const workStates =
+    status === "TODO" || status === "IN_PROGRESS" || status === "REDO" || status === "HOLD";
   return isAssignee && workStates;
 }

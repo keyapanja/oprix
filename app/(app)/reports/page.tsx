@@ -19,6 +19,7 @@ const fmtH = (h: number) => `${Math.round(h * 10) / 10}h`;
 const STATUS_COLOR: Record<TaskStatus, string> = {
   TODO: "#94a3b8",
   IN_PROGRESS: "#3b82f6",
+  HOLD: "#eab308",
   REVIEW: "#f59e0b",
   REDO: "#f43f5e",
   CLIENT_REVIEW: "#8b5cf6",

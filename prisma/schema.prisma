@@ -62,6 +62,7 @@ enum ProjectType {
 enum TaskStatus {
   TODO
   IN_PROGRESS
+  HOLD // paused by the assigner/assignee; excluded from deadline/overdue pressure until resumed
   REVIEW // submitted by the worker, waiting for the creator's review
   REDO // creator requested changes; back with the worker
   CLIENT_REVIEW // approved internally, waiting for client review

@@ -82,7 +82,8 @@ export async function getActiveTasksFor(session: SessionUser): Promise<ExtActive
       projectId: t.project.id,
       projectName: t.project.name,
       serviceName: t.service?.name ?? null,
-      status: t.status,
+      // The query filters to WORK_STATES, so this is always a dock status (no HOLD).
+      status: t.status as ExtTask["status"],
       priority: t.priority,
       dueDate: t.dueDate ? t.dueDate.toISOString().slice(0, 10) : null,
       isAssignee: true, // every task in this feed is assigned to the user

@@ -303,7 +303,7 @@ export function TasksTable({
               <td className="px-5 py-3"><Badge tone={PRIORITY_TONE[r.priority]}>{humanizeEnum(r.priority)}</Badge></td>
               <td className="px-5 py-3 text-muted">
                 {r.dueDate ? (
-                  <span className="inline-flex items-center">{formatDate(r.dueDate)}<BackdateBadge date={r.dueDate} /></span>
+                  <span className="inline-flex items-center">{formatDate(r.dueDate)}{r.status !== "HOLD" && <BackdateBadge date={r.dueDate} />}</span>
                 ) : (
                   "—"
                 )}

@@ -16,6 +16,7 @@ import { TaskChecklist } from "@/components/tasks/task-checklist";
 import { AttachmentsPanel } from "@/components/attachments/attachments-panel";
 import { TaskEdit } from "@/components/tasks/task-edit";
 import { TaskDuplicate } from "@/components/tasks/task-duplicate";
+import { TaskStatusEditor } from "@/components/tasks/task-status-editor";
 import { TaskWorkflow } from "@/components/tasks/task-workflow";
 import { CommentForm } from "@/components/tasks/comment-form";
 import { TaskTimerControl } from "@/components/timer/task-timer-control";
@@ -173,13 +174,17 @@ export default async function TaskDetailPage({
               {task.dueDate && (
                 <span className="inline-flex items-center text-xs text-faint">
                   Due {formatDate(task.dueDate)}
-                  <BackdateBadge date={task.dueDate.toISOString()} />
+                  {task.status !== "HOLD" && <BackdateBadge date={task.dueDate.toISOString()} />}
                 </span>
               )}
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Badge tone={TASK_STATUS_TONE[task.status]}>{TASK_STATUS_LABEL[task.status]}</Badge>
+            {canEdit ? (
+              <TaskStatusEditor taskId={task.id} status={task.status} />
+            ) : (
+              <Badge tone={TASK_STATUS_TONE[task.status]}>{TASK_STATUS_LABEL[task.status]}</Badge>
+            )}
             {isManager && <TaskDuplicate taskId={task.id} />}
             {canEdit && (
               <TaskEdit

@@ -13,6 +13,7 @@ export const PROJECT_STATUS_TONE: Record<ProjectStatus, Tone> = {
 export const TASK_STATUS_TONE: Record<TaskStatus, Tone> = {
   TODO: "gray",
   IN_PROGRESS: "blue",
+  HOLD: "amber",
   REVIEW: "amber",
   REDO: "red",
   CLIENT_REVIEW: "blue",
@@ -23,6 +24,7 @@ export const TASK_STATUS_TONE: Record<TaskStatus, Tone> = {
 export const TASK_STATUS_LABEL: Record<TaskStatus, string> = {
   TODO: "To Do",
   IN_PROGRESS: "In Progress",
+  HOLD: "On Hold",
   REVIEW: "Waiting for review",
   REDO: "Redo",
   CLIENT_REVIEW: "Client review",
@@ -39,6 +41,7 @@ export const PRIORITY_TONE: Record<Priority, Tone> = {
 export const TASK_COLUMNS: { status: TaskStatus; label: string }[] = [
   { status: "TODO", label: "To Do" },
   { status: "IN_PROGRESS", label: "In Progress" },
+  { status: "HOLD", label: "On Hold" },
   { status: "REVIEW", label: "Review" },
   { status: "CLIENT_REVIEW", label: "Client Review" },
   { status: "COMPLETED", label: "Completed" },

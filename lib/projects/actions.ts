@@ -9,8 +9,9 @@ import { getSession } from "@/lib/auth/session";
 import { hasPermission } from "@/lib/auth/permissions";
 import { dateAtUTC } from "@/lib/dates";
 import { logActivity, actorLabel, logTaskActivity } from "@/lib/activity";
-import { finalizeTaskTimer } from "@/lib/timer/finalize";
+import { finalizeTaskTimer, finalizeAllTaskTimers } from "@/lib/timer/finalize";
 import { canEditTask, toggleChecklistItemFor } from "@/lib/projects/task-access";
+import { TASK_STATUS_LABEL } from "@/lib/status";
 import { deleteUpload } from "@/lib/uploads";
 
 export type ProjectState = { error?: string; ok?: boolean; id?: string };
@@ -424,6 +425,43 @@ export async function updateTaskMeta(taskId: string, formData: FormData): Promis
   });
   revalidatePath(`/tasks/${taskId}`);
   revalidatePath(`/projects/${task.projectId}`);
+  return { ok: true };
+}
+
+const MANUAL_TASK_STATUSES: TaskStatus[] = ["TODO", "IN_PROGRESS", "HOLD"];
+
+/**
+ * Manually set a task's status to To Do / In Progress / On Hold. The review
+ * states (Review / Redo / Client review / Completed) stay driven by the review
+ * workflow, not this action. Restricted to the assigner or an assignee.
+ */
+export async function setTaskStatus(taskId: string, status: TaskStatus): Promise<ProjectState> {
+  const session = await getSession();
+  if (!session) return { error: "Not authenticated" };
+  if (!(await canEditTask(session, taskId))) {
+    return { error: "Only the person who assigned this task or an assignee can change the status." };
+  }
+  if (!MANUAL_TASK_STATUSES.includes(status)) {
+    return { error: "Review and Completed are set through the review workflow." };
+  }
+  const task = await prisma.task.findFirst({
+    where: { id: taskId, project: { companyId: session.companyId } },
+    select: { id: true, status: true },
+  });
+  if (!task) return { error: "Task not found" };
+  if (task.status === status) return { ok: true };
+
+  // Moving off active work (To Do / On Hold) stops any running timers on the task.
+  if (status !== "IN_PROGRESS") {
+    await finalizeAllTaskTimers(session.companyId, taskId);
+  }
+  await prisma.task.update({
+    where: { id: taskId },
+    data: { status, completedAt: null },
+  });
+  await logTaskActivity(session, taskId, `set the status to ${TASK_STATUS_LABEL[status]}`);
+  revalidatePath(`/tasks/${taskId}`);
+  revalidatePath("/tasks");
   return { ok: true };
 }
 
