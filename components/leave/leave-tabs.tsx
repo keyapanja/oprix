@@ -3,22 +3,20 @@
 import { toast } from "@/components/ui/toast";
 import { confirmDialog } from "@/components/ui/confirm";
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import type { LeavePaidType, AllowancePeriod } from "@prisma/client";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Combobox } from "@/components/ui/combobox";
 import { Field } from "@/components/ui/field";
+import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icons";
 import { AddForm } from "@/components/org/add-form";
 import { RequestForm } from "@/components/leave/request-form";
-import { RequestActions } from "@/components/leave/request-actions";
 import { TypeEdit } from "@/components/leave/type-edit";
 import { LeaveAllowanceFields } from "@/components/leave/leave-allowance-fields";
 import { createLeaveType, deleteLeaveType } from "@/lib/leave/actions";
-import { formatDate } from "@/lib/format";
-import { BackdateBadge } from "@/components/ui/backdate-badge";
-import { LeaveDetailModal, type LeaveDetail } from "@/components/leave/leave-detail-modal";
 import { cn } from "@/lib/cn";
 
 type LType = {
@@ -33,32 +31,11 @@ type LType = {
 };
 type Opt = { id: string; name: string };
 
-const STATUS_TONE: Record<string, { tone: "gray" | "blue" | "green" | "red"; label: string }> = {
-  PENDING: { tone: "gray", label: "Pending" },
-  MANAGER_APPROVED: { tone: "blue", label: "Manager approved" },
-  HR_APPROVED: { tone: "green", label: "Approved" },
-  APPROVED: { tone: "green", label: "Approved" },
-  REJECTED: { tone: "red", label: "Rejected" },
-};
-
 const TABS = ["Requests", "Leave types"] as const;
 type Tab = (typeof TABS)[number];
 
-export function LeaveTabs({
-  requests,
-  leaveTypes,
-  employees,
-  canApprove,
-  leaveTypeOpts,
-}: {
-  requests: LeaveDetail[];
-  leaveTypes: LType[];
-  employees: Opt[];
-  canApprove: boolean;
-  leaveTypeOpts: { id: string; name: string }[];
-}) {
+export function LeaveTabs({ leaveTypes, employees }: { leaveTypes: LType[]; employees: Opt[] }) {
   const [tab, setTab] = useState<Tab>("Requests");
-  const [sel, setSel] = useState<LeaveDetail | null>(null);
   const typeOpts = leaveTypes.map((t) => ({ id: t.id, name: t.name }));
 
   return (
@@ -85,63 +62,17 @@ export function LeaveTabs({
             <RequestForm employees={employees} leaveTypes={typeOpts} />
           </Card>
 
-          <Card>
-            {requests.length === 0 ? (
-              <p className="px-5 py-10 text-center text-sm text-muted">No requests yet.</p>
-            ) : (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wider text-faint">
-                    <th className="px-5 py-3">Employee</th>
-                    <th className="px-5 py-3">Type</th>
-                    <th className="px-5 py-3">Dates</th>
-                    <th className="px-5 py-3">Days</th>
-                    <th className="px-5 py-3">Status</th>
-                    {canApprove && <th className="px-5 py-3 text-right">Actions</th>}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-line">
-                  {requests.map((r) => {
-                    const s = STATUS_TONE[r.status] ?? STATUS_TONE.PENDING;
-                    return (
-                      <tr key={r.id} className="cursor-pointer hover:bg-canvas" onClick={() => setSel(r)}>
-                        <td className="px-5 py-3 font-medium text-content">{r.employeeName}</td>
-                        <td className="px-5 py-3">
-                          {r.kind === "WFH" ? (
-                            <Badge tone="blue">WFH</Badge>
-                          ) : (
-                            <span className="text-muted">{r.typeName ?? "Leave"}</span>
-                          )}
-                        </td>
-                        <td className="px-5 py-3 text-muted">
-                          <span className="inline-flex items-center">
-                            {formatDate(r.startDate)}
-                            {r.startDate !== r.endDate && ` – ${formatDate(r.endDate)}`}
-                            <BackdateBadge date={r.startDate} />
-                          </span>
-                        </td>
-                        <td className="px-5 py-3 text-muted">
-                          {r.days}{r.isHalfDay && " (half)"}
-                        </td>
-                        <td className="px-5 py-3">
-                          <Badge tone={s.tone}>{s.label}</Badge>
-                          {r.pendingEdit && (
-                            <span className="ml-2 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700 ring-1 ring-inset ring-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:ring-amber-500/25">
-                              Edit requested
-                            </span>
-                          )}
-                        </td>
-                        {canApprove && (
-                          <td className="px-5 py-3" onClick={(e) => e.stopPropagation()}>
-                            <RequestActions id={r.id} status={r.status} />
-                          </td>
-                        )}
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
+          <Card className="flex flex-wrap items-center justify-between gap-3 p-5">
+            <div>
+              <h3 className="text-sm font-semibold text-content">All leave requests</h3>
+              <p className="mt-0.5 text-xs text-muted">Search, filter, sort, and approve everyone&apos;s requests.</p>
+            </div>
+            <Link href="/leave/requests">
+              <Button variant="secondary">
+                View all requests
+                <Icon name="chevronRight" className="size-4" />
+              </Button>
+            </Link>
           </Card>
         </div>
       )}
@@ -216,16 +147,6 @@ export function LeaveTabs({
             )}
           </Card>
         </div>
-      )}
-
-      {sel && (
-        <LeaveDetailModal
-          req={sel}
-          canApprove={canApprove}
-          canEdit={false}
-          leaveTypes={leaveTypeOpts}
-          onClose={() => setSel(null)}
-        />
       )}
     </div>
   );

@@ -113,9 +113,9 @@ export function TrashView({ items }: { items: TrashItem[] }) {
                 onClick={() => setDetail(it)}
                 className="flex cursor-pointer items-center gap-3 px-5 py-3.5 transition-colors hover:bg-canvas"
               >
-                <Badge tone={TONE[it.type]} className="shrink-0">
-                  {it.typeLabel}
-                </Badge>
+                <div className="w-28 shrink-0">
+                  <Badge tone={TONE[it.type]}>{it.typeLabel}</Badge>
+                </div>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-content">{it.label}</p>
                   {it.sublabel && <p className="truncate text-xs text-muted">{it.sublabel}</p>}

@@ -46,15 +46,8 @@ export default async function LeavePage() {
       })
     : [];
 
-  // Manager data
-  const [allRequests, leaveTypes, employees, canApprove] = await Promise.all([
-    isManager
-      ? prisma.leaveRequest.findMany({
-          where: { companyId },
-          orderBy: { createdAt: "desc" },
-          select: { ...REQUEST_SELECT, employee: { select: { fullName: true } } },
-        })
-      : Promise.resolve([]),
+  // Manager data (the full request list lives on /leave/requests).
+  const [leaveTypes, employees] = await Promise.all([
     isManager
       ? prisma.leaveType.findMany({
           where: { companyId },
@@ -72,12 +65,11 @@ export default async function LeavePage() {
           select: { id: true, fullName: true },
         })
       : Promise.resolve([]),
-    isManager ? hasPermission(companyId, session.role, "leave:approve") : Promise.resolve(false),
   ]);
 
   // Resolve approver names (the approver's userId → employee name / email).
   const approverIds = [
-    ...new Set([...myRequests, ...allRequests].map((r) => r.hrApprovedById).filter((x): x is string => !!x)),
+    ...new Set(myRequests.map((r) => r.hrApprovedById).filter((x): x is string => !!x)),
   ];
   const approvers = approverIds.length
     ? await prisma.user.findMany({
@@ -103,25 +95,6 @@ export default async function LeavePage() {
     reason: r.reason,
     status: r.status,
     appliedAt: r.createdAt.toISOString(),
-    pendingEdit: asPending(r.pendingEdit),
-    decidedByName: approverName(r.hrApprovedById),
-    decidedAt: r.decidedAt?.toISOString() ?? null,
-    attachments: r.attachments,
-  }));
-
-  const allDetails: LeaveDetail[] = allRequests.map((r) => ({
-    id: r.id,
-    kind: r.kind,
-    typeName: r.leaveType?.name ?? null,
-    leaveTypeId: r.leaveTypeId,
-    startDate: iso(r.startDate),
-    endDate: iso(r.endDate),
-    days: r.days,
-    isHalfDay: r.isHalfDay,
-    reason: r.reason,
-    status: r.status,
-    appliedAt: r.createdAt.toISOString(),
-    employeeName: r.employee.fullName,
     pendingEdit: asPending(r.pendingEdit),
     decidedByName: approverName(r.hrApprovedById),
     decidedAt: r.decidedAt?.toISOString() ?? null,
@@ -158,11 +131,8 @@ export default async function LeavePage() {
         <div>
           {session.employeeId && <h2 className="mb-4 text-lg font-semibold text-content">Manage leave</h2>}
           <LeaveTabs
-            canApprove={canApprove}
-            requests={allDetails}
             leaveTypes={leaveTypes}
             employees={employees.map((e) => ({ id: e.id, name: e.fullName }))}
-            leaveTypeOpts={leaveTypeOpts}
           />
         </div>
       )}

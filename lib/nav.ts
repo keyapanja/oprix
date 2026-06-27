@@ -92,7 +92,10 @@ export const NAV: NavItem[] = [
     href: "/leave",
     icon: "calendar",
     action: "self:service",
-    children: [{ label: "Apply for leave", href: "/leave/apply", action: "self:service" }],
+    children: [
+      { label: "Apply for leave", href: "/leave/apply", action: "self:service" },
+      { label: "All requests", href: "/leave/requests", icon: "calendarDays", action: "leave:manage" },
+    ],
   },
   { label: "Organization", href: "/organization", icon: "building", action: "org:manage" },
   { label: "Trash", href: "/trash", icon: "trash", superAdminOnly: true },
