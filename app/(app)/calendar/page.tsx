@@ -36,7 +36,10 @@ export default async function CalendarPage({
       ? computeBalances(session.companyId, session.employeeId)
       : Promise.resolve([]),
   ]);
-  const canApplyLeave = !!session.employeeId;
+  // Applying for leave/WFH from the calendar was removed — people apply at
+  // /leave/apply. The calendar keeps date-selection for admins (holidays /
+  // announcements) only. (Calendar apply-leave code is kept but never enabled.)
+  const canApplyLeave = false;
 
   return (
     <>

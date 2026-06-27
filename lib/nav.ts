@@ -90,7 +90,7 @@ export const NAV: NavItem[] = [
     href: "/leave",
     icon: "calendar",
     action: "self:service",
-    children: [{ label: "Apply for leave", href: "/leave?apply=1", action: "self:service" }],
+    children: [{ label: "Apply for leave", href: "/leave/apply", action: "self:service" }],
   },
   { label: "Organization", href: "/organization", icon: "building", action: "org:manage" },
 ];

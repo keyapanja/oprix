@@ -750,6 +750,10 @@ model LeaveRequest {
   managerApprovedById String?
   hrApprovedById  String?
   decidedAt       DateTime?
+  // A proposed-but-unapproved change (startDate/endDate/leaveTypeId/isHalfDay/days/reason).
+  // The live request is untouched until an approver applies it. Null = no pending edit.
+  pendingEdit     Json?
+  editRequestedAt DateTime?
   createdAt       DateTime       @default(now())
 
   employee  Employee   @relation(fields: [employeeId], references: [id])

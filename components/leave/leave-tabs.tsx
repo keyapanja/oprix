@@ -3,7 +3,7 @@
 import { toast } from "@/components/ui/toast";
 import { confirmDialog } from "@/components/ui/confirm";
 import { useState, useTransition } from "react";
-import type { ApprovalStatus, LeavePaidType, AllowancePeriod } from "@prisma/client";
+import type { LeavePaidType, AllowancePeriod } from "@prisma/client";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -18,19 +18,9 @@ import { LeaveAllowanceFields } from "@/components/leave/leave-allowance-fields"
 import { createLeaveType, deleteLeaveType } from "@/lib/leave/actions";
 import { formatDate } from "@/lib/format";
 import { BackdateBadge } from "@/components/ui/backdate-badge";
+import { LeaveDetailModal, type LeaveDetail } from "@/components/leave/leave-detail-modal";
 import { cn } from "@/lib/cn";
 
-type Req = {
-  id: string;
-  status: ApprovalStatus;
-  kind: "LEAVE" | "WFH";
-  days: number;
-  isHalfDay: boolean;
-  startDate: string;
-  endDate: string;
-  employeeName: string;
-  typeName: string | null;
-};
 type LType = {
   id: string;
   name: string;
@@ -58,13 +48,16 @@ export function LeaveTabs({
   leaveTypes,
   employees,
   canApprove,
+  leaveTypeOpts,
 }: {
-  requests: Req[];
+  requests: LeaveDetail[];
   leaveTypes: LType[];
   employees: Opt[];
   canApprove: boolean;
+  leaveTypeOpts: { id: string; name: string }[];
 }) {
   const [tab, setTab] = useState<Tab>("Requests");
+  const [sel, setSel] = useState<LeaveDetail | null>(null);
   const typeOpts = leaveTypes.map((t) => ({ id: t.id, name: t.name }));
 
   return (
@@ -110,7 +103,7 @@ export function LeaveTabs({
                   {requests.map((r) => {
                     const s = STATUS_TONE[r.status] ?? STATUS_TONE.PENDING;
                     return (
-                      <tr key={r.id} className="hover:bg-canvas">
+                      <tr key={r.id} className="cursor-pointer hover:bg-canvas" onClick={() => setSel(r)}>
                         <td className="px-5 py-3 font-medium text-content">{r.employeeName}</td>
                         <td className="px-5 py-3">
                           {r.kind === "WFH" ? (
@@ -129,9 +122,16 @@ export function LeaveTabs({
                         <td className="px-5 py-3 text-muted">
                           {r.days}{r.isHalfDay && " (half)"}
                         </td>
-                        <td className="px-5 py-3"><Badge tone={s.tone}>{s.label}</Badge></td>
+                        <td className="px-5 py-3">
+                          <Badge tone={s.tone}>{s.label}</Badge>
+                          {r.pendingEdit && (
+                            <span className="ml-2 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700 ring-1 ring-inset ring-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:ring-amber-500/25">
+                              Edit pending
+                            </span>
+                          )}
+                        </td>
                         {canApprove && (
-                          <td className="px-5 py-3">
+                          <td className="px-5 py-3" onClick={(e) => e.stopPropagation()}>
                             <RequestActions id={r.id} status={r.status} />
                           </td>
                         )}
@@ -215,6 +215,16 @@ export function LeaveTabs({
             )}
           </Card>
         </div>
+      )}
+
+      {sel && (
+        <LeaveDetailModal
+          req={sel}
+          canApprove={canApprove}
+          canEdit
+          leaveTypes={leaveTypeOpts}
+          onClose={() => setSel(null)}
+        />
       )}
     </div>
   );
