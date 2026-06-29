@@ -23,13 +23,16 @@ type SubCat = {
 };
 type Proj = { id: string; name: string; subcategories: SubCat[] };
 type CheckItem = { text: string; isDone: boolean };
+type Picked = { file: File; preview: string | null };
 
 const PRIORITIES = ["LOW", "MEDIUM", "HIGH", "URGENT"];
 
-function fmtBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
-  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+/** One calendar day before the given YYYY-MM-DD (UTC), as YYYY-MM-DD. */
+function dayBefore(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, (m ?? 1) - 1, d ?? 1));
+  dt.setUTCDate(dt.getUTCDate() - 1);
+  return dt.toISOString().slice(0, 10);
 }
 
 export function NewTaskForm({
@@ -47,11 +50,12 @@ export function NewTaskForm({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState("MEDIUM");
+  const [clientDeadline, setClientDeadline] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [checklist, setChecklist] = useState<CheckItem[]>([]);
   const [checkText, setCheckText] = useState("");
-  const [files, setFiles] = useState<File[]>([]);
+  const [files, setFiles] = useState<Picked[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
@@ -87,6 +91,12 @@ export function NewTaskForm({
     }
   }
 
+  // Setting the client deadline auto-fills the due date to one day before.
+  function onClientDeadlineChange(v: string) {
+    setClientDeadline(v);
+    if (v) setDueDate(dayBefore(v));
+  }
+
   function addAssignee(id: string) {
     if (id && !assigneeIds.includes(id)) setAssigneeIds((l) => [...l, id]);
   }
@@ -106,18 +116,25 @@ export function NewTaskForm({
     setChecklist((l) => l.filter((_, idx) => idx !== i));
   }
   function onFilesPicked(e: ChangeEvent<HTMLInputElement>) {
-    const picked = Array.from(e.target.files ?? []);
+    const picked: Picked[] = Array.from(e.target.files ?? []).map((file) => ({
+      file,
+      preview: file.type.startsWith("image/") ? URL.createObjectURL(file) : null,
+    }));
     setFiles((f) => [...f, ...picked]);
     e.target.value = "";
   }
   function removeFile(i: number) {
-    setFiles((f) => f.filter((_, idx) => idx !== i));
+    setFiles((f) => {
+      const p = f[i];
+      if (p?.preview) URL.revokeObjectURL(p.preview);
+      return f.filter((_, idx) => idx !== i);
+    });
   }
 
   function submit() {
     setError(null);
     if (!projectId) return setError("Pick a project");
-    if (!name.trim()) return setError("Task name is required");
+    if (!name.trim()) return setError("Task title is required");
     start(async () => {
       const res = await createTask({
         projectId,
@@ -127,6 +144,7 @@ export function NewTaskForm({
         priority: priority as "LOW" | "MEDIUM" | "HIGH" | "URGENT",
         status: "TODO",
         dueDate: dueDate || null,
+        clientDeadline: clientDeadline || null,
         assigneeIds,
         checklist,
       });
@@ -136,7 +154,7 @@ export function NewTaskForm({
       if (files.length) {
         try {
           const fd = new FormData();
-          for (const f of files) fd.append("files", f);
+          for (const p of files) fd.append("files", p.file);
           const up = await fetch(`/api/tasks/${res.task.id}/attachments`, { method: "POST", body: fd });
           if (!up.ok) {
             const j = await up.json().catch(() => null);
@@ -186,7 +204,7 @@ export function NewTaskForm({
               options={taskTypeOptions}
             />
           </Field>
-          <Field label="Task name" htmlFor="t-name" required className="sm:col-span-2">
+          <Field label="Task Title" htmlFor="t-name" required className="sm:col-span-2">
             <Input id="t-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Design the landing page" />
           </Field>
           <Field label="Description" htmlFor="t-desc" className="sm:col-span-2">
@@ -197,10 +215,53 @@ export function NewTaskForm({
               placeholder="What needs to be done, context, links…"
             />
           </Field>
+
+          {/* Attachments — moved up, with a preview grid */}
+          <Field label="Attachments" className="sm:col-span-2">
+            <div>
+              {files.length > 0 && (
+                <div className="mb-3 grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5">
+                  {files.map((p, i) => (
+                    <div
+                      key={i}
+                      className="group relative aspect-square overflow-hidden rounded-lg bg-canvas ring-1 ring-inset ring-line"
+                    >
+                      {p.preview ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={p.preview} alt={p.file.name} className="h-full w-full object-cover" />
+                      ) : (
+                        <div className="flex h-full flex-col items-center justify-center gap-1 p-2 text-center">
+                          <Icon name="folder" className="size-6 text-faint" />
+                          <span className="line-clamp-2 break-all text-[10px] text-muted">{p.file.name}</span>
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => removeFile(i)}
+                        className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-full bg-black/50 text-white opacity-0 transition-opacity group-hover:opacity-100"
+                        aria-label={`Remove ${p.file.name}`}
+                      >
+                        <Icon name="x" className="size-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-canvas px-3 py-2 text-sm font-medium text-content ring-1 ring-inset ring-line transition-colors hover:bg-surface">
+                <Icon name="plus" className="size-4" />
+                Add files
+                <input type="file" multiple className="hidden" onChange={onFilesPicked} />
+              </label>
+            </div>
+          </Field>
+
           <Field label="Priority">
             <Combobox value={priority} onChange={setPriority} options={PRIORITIES.map((p) => ({ value: p, label: humanizeEnum(p) }))} />
           </Field>
-          <Field label="Due date">
+          <Field label="Client deadline" hint="Sets the due date a day earlier">
+            <DatePicker value={clientDeadline} onChange={onClientDeadlineChange} />
+          </Field>
+          <Field label="Due date" hint="Auto-set to one day before the client deadline — editable" className="sm:col-span-2">
             <DatePicker value={dueDate} onChange={setDueDate} />
           </Field>
 
@@ -275,31 +336,6 @@ export function NewTaskForm({
                 />
                 <Button type="button" variant="secondary" onClick={addCheckItem} disabled={!checkText.trim()}>Add</Button>
               </div>
-            </div>
-          </Field>
-
-          {/* Attachments — stored on the server, not the database */}
-          <Field label="Attachments" hint="Stored on the server" className="sm:col-span-2">
-            <div>
-              {files.length > 0 && (
-                <ul className="mb-2 space-y-1">
-                  {files.map((f, i) => (
-                    <li key={i} className="flex items-center gap-2 rounded-lg bg-canvas px-2.5 py-1.5 text-sm">
-                      <Icon name="folder" className="size-4 shrink-0 text-faint" />
-                      <span className="flex-1 truncate text-content">{f.name}</span>
-                      <span className="shrink-0 text-xs text-faint">{fmtBytes(f.size)}</span>
-                      <button type="button" onClick={() => removeFile(i)} className="shrink-0 text-faint hover:text-red-600" aria-label={`Remove ${f.name}`}>
-                        <Icon name="x" className="size-3.5" />
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-canvas px-3 py-2 text-sm font-medium text-content ring-1 ring-inset ring-line transition-colors hover:bg-surface">
-                <Icon name="plus" className="size-4" />
-                Add files
-                <input type="file" multiple className="hidden" onChange={onFilesPicked} />
-              </label>
             </div>
           </Field>
         </div>

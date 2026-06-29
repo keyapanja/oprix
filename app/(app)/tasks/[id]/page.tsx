@@ -47,6 +47,7 @@ export default async function TaskDetailPage({
       createdById: true,
       finalLink: true,
       dueDate: true,
+      clientDeadline: true,
       startedAt: true,
       completedAt: true,
       project: {
@@ -175,6 +176,11 @@ export default async function TaskDetailPage({
                 <span className="inline-flex items-center text-xs text-faint">
                   Due {formatDate(task.dueDate)}
                   {task.status !== "HOLD" && <BackdateBadge date={task.dueDate.toISOString()} />}
+                </span>
+              )}
+              {task.clientDeadline && (
+                <span className="inline-flex items-center text-xs text-faint">
+                  Client deadline {formatDate(task.clientDeadline)}
                 </span>
               )}
             </div>

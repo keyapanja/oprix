@@ -538,6 +538,7 @@ model Task {
   createdById  String? // userId of the creator — acts as the reviewer (A) in the review flow
   finalLink    String? // worker's submitted output / preview link (current submission)
   dueDate      DateTime?
+  clientDeadline DateTime? // client-facing deadline; the due date is auto-set a day before
   priority     Priority   @default(MEDIUM)
   status       TaskStatus @default(TODO)
   startedAt    DateTime? // first moved to In Progress

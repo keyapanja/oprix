@@ -130,41 +130,43 @@ export function AttachmentsPanel({
       {initial.length === 0 ? (
         <p className="text-sm text-muted">No attachments yet.</p>
       ) : (
-        <ul className="space-y-1.5">
+        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4">
           {initial.map((a) => {
             const label = a.title || a.fileName;
             const isLink = !!a.url;
+            const isImage = !isLink && !!a.mimeType?.startsWith("image/");
+            const href = a.url ? safeHref(a.url) : `/api/files/${a.id}`;
             return (
-              <li key={a.id} className="flex items-center gap-2 rounded-lg bg-canvas px-2.5 py-2 text-sm">
-                <Icon name={isLink ? "externalLink" : "folder"} className="size-4 shrink-0 text-faint" />
-                <a
-                  href={a.url ? safeHref(a.url) : `/api/files/${a.id}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex-1 truncate font-medium text-content hover:text-accent-strong hover:underline"
-                >
-                  {label}
+              <div key={a.id} className="group relative overflow-hidden rounded-xl ring-1 ring-inset ring-line">
+                <a href={href} target="_blank" rel="noopener noreferrer" className="block">
+                  <div className="flex aspect-[4/3] items-center justify-center bg-canvas">
+                    {isImage ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={href} alt={label} className="h-full w-full object-cover" />
+                    ) : (
+                      <Icon name={isLink ? "externalLink" : "folder"} className="size-8 text-faint" />
+                    )}
+                  </div>
+                  <div className="px-2.5 py-2">
+                    <p className="truncate text-xs font-medium text-content">{label}</p>
+                    <p className="text-[10px] text-faint">{isLink ? "Link" : fmtBytes(a.sizeBytes)}</p>
+                  </div>
                 </a>
-                {isLink ? (
-                  <span className="shrink-0 text-xs text-faint">Link</span>
-                ) : (
-                  a.sizeBytes != null && <span className="shrink-0 text-xs text-faint">{fmtBytes(a.sizeBytes)}</span>
-                )}
                 {canEdit && (
                   <button
                     type="button"
                     onClick={() => onDelete(a)}
                     disabled={pending}
-                    className="shrink-0 text-faint hover:text-red-600 disabled:opacity-50"
+                    className="absolute right-1.5 top-1.5 flex size-6 items-center justify-center rounded-full bg-black/50 text-white opacity-0 transition-opacity group-hover:opacity-100 disabled:opacity-50"
                     aria-label={`Delete ${label}`}
                   >
-                    <Icon name="trash" className="size-4" />
+                    <Icon name="trash" className="size-3.5" />
                   </button>
                 )}
-              </li>
+              </div>
             );
           })}
-        </ul>
+        </div>
       )}
 
       {canEdit && allowLinks && (

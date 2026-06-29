@@ -275,6 +275,7 @@ export async function createTask(input: {
   status?: TaskStatus;
   priority?: Priority;
   dueDate?: string | null;
+  clientDeadline?: string | null;
   /** Explicit assignees from the form (the picker is scoped to the sub-category's department). */
   assigneeIds?: string[];
   /** Explicit checklist from the form. When omitted, the sub-category template seeds it. */
@@ -307,6 +308,7 @@ export async function createTask(input: {
       status: input.status ?? "TODO",
       priority: input.priority ?? "MEDIUM",
       dueDate: input.dueDate ? dateAtUTC(input.dueDate) : null,
+      clientDeadline: input.clientDeadline ? dateAtUTC(input.clientDeadline) : null,
       assignees: assigneeIds.length ? { create: assigneeIds.map((employeeId) => ({ employeeId })) } : undefined,
     },
     select: TASK_SELECT,
