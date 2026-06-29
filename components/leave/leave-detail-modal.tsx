@@ -1,10 +1,11 @@
 "use client";
 
-import { useActionState, useEffect, useState, useTransition } from "react";
+import { useActionState, useEffect, useState, useTransition, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import type { ApprovalStatus } from "@prisma/client";
 import {
   requestLeaveEdit,
+  adminEditLeave,
   approveLeaveEdit,
   rejectLeaveEdit,
   type LeaveState,
@@ -80,6 +81,9 @@ export function LeaveDetailModal({
   const [eEnd, setEEnd] = useState(req.endDate);
   const [eType, setEType] = useState(req.leaveTypeId ?? "");
   const [eHalf, setEHalf] = useState(req.isHalfDay);
+  const [eStatus, setEStatus] = useState(
+    req.status === "PENDING" ? "PENDING" : req.status === "REJECTED" ? "REJECTED" : "HR_APPROVED",
+  );
 
   useEffect(() => {
     if (state.ok) {
@@ -111,6 +115,21 @@ export function LeaveDetailModal({
         toast.error(res.error);
       } else {
         toast.success("Change rejected");
+        router.refresh();
+        onClose();
+      }
+    });
+  }
+
+  function onAdminSave(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    startTx(async () => {
+      const res = await adminEditLeave({}, fd);
+      if (res.error) {
+        toast.error(res.error);
+      } else {
+        toast.success("Leave updated");
         router.refresh();
         onClose();
       }
@@ -247,7 +266,85 @@ export function LeaveDetailModal({
           </div>
         )}
 
-        {!req.pendingEdit && canEdit && !editing && (
+        {/* Approver / Super Admin — edit the request directly (details + status) */}
+        {!req.pendingEdit && canApprove && !editing && (
+          <div className="flex justify-end border-t border-line pt-3">
+            <Button variant="secondary" size="sm" onClick={() => setEditing(true)}>
+              Edit request
+            </Button>
+          </div>
+        )}
+
+        {!req.pendingEdit && canApprove && editing && (
+          <form onSubmit={onAdminSave} className="space-y-3 border-t border-line pt-3">
+            <p className="text-xs text-muted">Edit this request — changes apply immediately.</p>
+            <input type="hidden" name="id" value={req.id} />
+            <div className="grid gap-3 sm:grid-cols-2">
+              {req.kind === "LEAVE" && (
+                <Field label="Leave type" className="sm:col-span-2">
+                  <Combobox
+                    name="leaveTypeId"
+                    value={eType}
+                    onChange={setEType}
+                    options={leaveTypes.map((t) => ({ value: t.id, label: t.name }))}
+                    placeholder="Select leave type"
+                  />
+                </Field>
+              )}
+              <Field label="Start date">
+                <DatePicker
+                  name="startDate"
+                  value={eStart}
+                  onChange={(v) => {
+                    setEStart(v);
+                    if (!eEnd) setEEnd(v);
+                  }}
+                />
+              </Field>
+              <Field label="End date">
+                <DatePicker name="endDate" value={eEnd} onChange={setEEnd} />
+              </Field>
+              <Field label="Status" className="sm:col-span-2">
+                <Combobox
+                  name="status"
+                  value={eStatus}
+                  onChange={setEStatus}
+                  options={[
+                    { value: "PENDING", label: "Pending" },
+                    { value: "HR_APPROVED", label: "Approved" },
+                    { value: "REJECTED", label: "Rejected" },
+                  ]}
+                />
+              </Field>
+            </div>
+            {eSingle && (
+              <label className="flex items-center gap-2 text-sm text-content">
+                <input
+                  type="checkbox"
+                  name="isHalfDay"
+                  checked={eHalf}
+                  onChange={(e) => setEHalf(e.target.checked)}
+                  className="size-4 rounded border-line-strong text-brand-600 focus:ring-brand-500"
+                />
+                Half day
+              </label>
+            )}
+            <Field label="Reason">
+              <Textarea name="reason" defaultValue={req.reason ?? ""} placeholder="Optional note…" />
+            </Field>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="secondary" size="sm" onClick={() => setEditing(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" size="sm" disabled={pending}>
+                {pending ? "Saving…" : "Save changes"}
+              </Button>
+            </div>
+          </form>
+        )}
+
+        {/* Applicant — propose a change for an approver to apply */}
+        {!req.pendingEdit && canEdit && !canApprove && !editing && (
           <div className="flex justify-end border-t border-line pt-3">
             <Button variant="secondary" size="sm" onClick={() => setEditing(true)}>
               Request edit
@@ -255,7 +352,7 @@ export function LeaveDetailModal({
           </div>
         )}
 
-        {!req.pendingEdit && canEdit && editing && (
+        {!req.pendingEdit && canEdit && !canApprove && editing && (
           <form action={formAction} className="space-y-3 border-t border-line pt-3">
             <p className="text-xs text-muted">
               Propose a change — it won&apos;t take effect until an approver accepts it.

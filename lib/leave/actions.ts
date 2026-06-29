@@ -525,3 +525,81 @@ export async function rejectLeaveEdit(id: string): Promise<LeaveState> {
   revalidatePath(LEAVE);
   return { ok: true };
 }
+
+// ---- Direct edit by an approver / Super Admin ------------------------------
+const AdminEditSchema = EditSchema.extend({
+  status: z.enum(["PENDING", "HR_APPROVED", "REJECTED"]),
+});
+
+/**
+ * Direct edit of any leave/WFH request by someone with approve access (or a
+ * Super Admin) — changes the dates, type, half-day, reason AND status in one
+ * step and applies immediately (unlike the applicant's request-edit, which
+ * needs approval). Segregation of duties still holds: you can't approve your
+ * own leave by editing it.
+ */
+export async function adminEditLeave(_prev: LeaveState, formData: FormData): Promise<LeaveState> {
+  const session = await requireCapability("leave:approve");
+  const id = String(formData.get("id") ?? "");
+  if (!id) return { error: "Missing request id" };
+
+  const req = await prisma.leaveRequest.findFirst({
+    where: { id, companyId: session.companyId },
+    select: { kind: true, employee: { select: { user: { select: { id: true } } } } },
+  });
+  if (!req) return { error: "Request not found" };
+
+  const parsed = AdminEditSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  const d = parsed.data;
+
+  const start = dateAtUTC(d.startDate);
+  const end = dateAtUTC(d.endDate);
+  if (end < start) return { error: "End date can't be before the start date" };
+  if (req.kind === "LEAVE" && !d.leaveTypeId) return { error: "Select a leave type." };
+
+  // Segregation of duties: you can't approve your own leave by editing it.
+  if (req.employee.user?.id === session.userId && d.status === "HR_APPROVED") {
+    return { error: "You can't approve your own leave request." };
+  }
+
+  const singleDay = d.startDate === d.endDate;
+  const isHalfDay = singleDay && d.isHalfDay === "on";
+  const days = isHalfDay ? 0.5 : Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1;
+  const decided = d.status === "HR_APPROVED" || d.status === "REJECTED";
+
+  await prisma.leaveRequest.update({
+    where: { id },
+    data: {
+      startDate: start,
+      endDate: end,
+      leaveTypeId: req.kind === "LEAVE" ? d.leaveTypeId || null : null,
+      isHalfDay,
+      days,
+      reason: d.reason || null,
+      status: d.status,
+      hrApprovedById: d.status === "HR_APPROVED" ? session.userId : null,
+      decidedAt: decided ? new Date() : null,
+      // An admin override supersedes any pending applicant edit-request.
+      pendingEdit: Prisma.DbNull,
+      editRequestedAt: null,
+    },
+  });
+
+  try {
+    const empUserId = req.employee.user?.id;
+    if (empUserId && empUserId !== session.userId) {
+      await notifyUsers(
+        [empUserId],
+        "Leave request updated",
+        `Your ${req.kind === "WFH" ? "WFH" : "leave"} request (${formatDate(start)} – ${formatDate(end)}) was updated by an administrator.`,
+      );
+    }
+  } catch (e) {
+    console.error("[leave] notify admin edit failed:", e);
+  }
+
+  revalidatePath(LEAVE);
+  revalidatePath("/leave/requests");
+  return { ok: true };
+}
