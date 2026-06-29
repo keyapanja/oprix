@@ -24,16 +24,26 @@ export function NotificationsList({ notes }: { notes: ClientNote[] }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [pending, start] = useTransition();
 
-  const counts = useMemo(() => {
+  // Tabs persist for any category that has notifications (read or unread).
+  const presentCats = useMemo(() => {
+    const present = new Set<NoteCategory>();
+    for (const n of notes) present.add(categorize(n.type));
+    return CATEGORY_ORDER.filter((c) => present.has(c));
+  }, [notes]);
+
+  // Badge numbers reflect UNREAD only — per category and overall — so they
+  // disappear once everything's been read.
+  const unreadCounts = useMemo(() => {
     const m = new Map<NoteCategory, number>();
     for (const n of notes) {
+      if (n.isRead) continue;
       const c = categorize(n.type);
       m.set(c, (m.get(c) ?? 0) + 1);
     }
     return m;
   }, [notes]);
-  const presentCats = CATEGORY_ORDER.filter((c) => counts.has(c));
-  const hasUnread = notes.some((n) => !n.isRead);
+  const totalUnread = useMemo(() => notes.filter((n) => !n.isRead).length, [notes]);
+  const hasUnread = totalUnread > 0;
 
   const filtered = filter === "ALL" ? notes : notes.filter((n) => categorize(n.type) === filter);
   const filteredIds = filtered.map((n) => n.id);
@@ -56,10 +66,16 @@ export function NotificationsList({ notes }: { notes: ClientNote[] }) {
   }
 
   function markAll() {
-    const ids = notes.filter((n) => !n.isRead).map((n) => n.id);
-    if (!ids.length) return;
+    if (!hasUnread) return;
     start(async () => {
-      await markNotificationsRead(ids);
+      // No ids → the action marks every unread notification for this user,
+      // including any beyond the loaded list.
+      const res = await markNotificationsRead();
+      if (!res.ok) {
+        toast.error("Couldn't mark all as read.");
+        return;
+      }
+      toast.success("All notifications marked as read");
       router.refresh();
     });
   }
@@ -128,7 +144,7 @@ export function NotificationsList({ notes }: { notes: ClientNote[] }) {
       )}
 
       <div className="flex flex-wrap items-center gap-2">
-        <Chip active={filter === "ALL"} onClick={() => setFilter("ALL")} label="All" count={notes.length} />
+        <Chip active={filter === "ALL"} onClick={() => setFilter("ALL")} label="All" count={totalUnread} />
         {presentCats.map((c) => {
           const st = CATEGORY_STYLES[c];
           return (
@@ -137,7 +153,7 @@ export function NotificationsList({ notes }: { notes: ClientNote[] }) {
               active={filter === c}
               onClick={() => setFilter(c)}
               label={c}
-              count={counts.get(c) ?? 0}
+              count={unreadCounts.get(c) ?? 0}
               dot={st.dot}
               activeClass={cn(st.soft, st.text, "ring-1 ring-inset", st.ring)}
             />
@@ -239,7 +255,7 @@ function Chip({
     >
       {dot && <span className={cn("size-2 rounded-full", dot)} />}
       {label}
-      <span className="text-xs opacity-70">{count}</span>
+      {count > 0 && <span className="text-xs opacity-70">{count}</span>}
     </button>
   );
 }
