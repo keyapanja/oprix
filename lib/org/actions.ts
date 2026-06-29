@@ -209,6 +209,24 @@ export async function deleteSubcategories(
   return { ok: true, deleted, skipped };
 }
 
+/** Rename a category or sub-category. Service names are unique per company. */
+export async function renameService(id: string, name: string): Promise<ActionState> {
+  const session = await requireCapability("org:manage");
+  const parsed = NameSchema.safeParse({ name });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message };
+  try {
+    const res = await prisma.service.updateMany({
+      where: { id, companyId: session.companyId },
+      data: { name: parsed.data.name },
+    });
+    if (res.count === 0) return { error: "Service not found" };
+  } catch {
+    return { error: "A service with that name already exists" };
+  }
+  revalidatePath(ORG);
+  return { ok: true };
+}
+
 // ---- Work shifts ----------------------------------------------------------
 const ShiftSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(80),
