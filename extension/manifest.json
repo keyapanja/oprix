@@ -1,7 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Oprix Companion",
-  "version": "0.2.0",
+  "version": "0.3.0",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvXPZmopY0+umIvF/9XpmJXLfrltVn9eoXiBE+K0M+SE9sAHMQWUPb3fK3dQwZu2DI+xAX2cbPgpoYmUj7rpnxmu0v6XNllaUOzyWvNrrcTzTya+zJMjo3HmJkV91z4QzimNVIjyNdYcGkbynFQHA6BR4mJYnlC4NPryovfmhBhypOT0MGfn1Fr84ygSF6qRV29wyg7WCSEo/OfyPJ638Yxv696sIBR34La0i4RatdaoUcqoOlSgiI6n7ub9uaucODrbpzkwcKuWbLDpkQgzM9EIz5i8n+7jJIhRPOi8YArxiNTdAMS3pGEQAyEMws3sjstzZIUMkL9f6ue+a+1fR/QIDAQAB",
   "description": "Keep your running Oprix tasks, checklists, and related guides docked to the edge of your screen while you work.",
   "permissions": ["storage", "alarms", "identity"],
   "host_permissions": ["https://oprix.gowithepic.com/*", "http://localhost:3000/*"],

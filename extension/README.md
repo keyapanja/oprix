@@ -74,11 +74,14 @@ This build is **wired for production** — it talks to **https://oprix.gowithepi
 out of the box (`host_permissions` + default API origin), and the dock auto-hides on
 that site. The one remaining step is server-side CORS:
 
-1. **Load unpacked** (above), then copy the extension's id from `chrome://extensions`.
-   The id stays the same as long as you load from the same folder path.
-2. On the server (Coolify), set **`EXTENSION_ORIGINS=chrome-extension://<your-id>`**
-   and redeploy. Without it the API rejects the extension — CORS fails closed by design.
-3. Click **Connect** — the connect tab opens on oprix.gowithepic.com.
+The extension id is **pinned** via the manifest `key`, so it's the same for everyone
+who installs it: `cjmfclenldejgleeppfoaeekkfcdhgde`.
+
+1. On the server (Coolify), set this once and redeploy:
+   **`EXTENSION_ORIGINS=chrome-extension://cjmfclenldejgleeppfoaeekkfcdhgde`**
+   Without it the API rejects the extension — CORS fails closed by design.
+2. **Load unpacked** (above) and click **Connect** — the connect tab opens on
+   oprix.gowithepic.com. (You can confirm the id matches on the extension's card.)
 
 **For local dev:** open the extension **options → Oprix address** and set
 `http://localhost:3000` (localhost is still in `host_permissions`). Run `npm run dev`
