@@ -11,11 +11,9 @@ import { Combobox } from "@/components/ui/combobox";
 import { Icon } from "@/components/ui/icons";
 
 type Opt = { id: string; name: string };
-type SubCat = { id: string; name: string };
 type PS = {
   id: string;
   categoryName: string;
-  subcategories: SubCat[];
   primaryAssigneeId: string | null;
 };
 
@@ -116,17 +114,6 @@ export function ProjectServices({
                     />
                   </div>
                 </div>
-                {ps.subcategories.length > 0 ? (
-                  <div className="mt-2 flex flex-wrap gap-1.5 pl-7">
-                    {ps.subcategories.map((sub) => (
-                      <span key={sub.id} className="rounded-md bg-canvas px-2 py-0.5 text-xs text-muted">
-                        {sub.name}
-                      </span>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="mt-1.5 pl-7 text-xs text-faint">No sub-categories yet — add them in Organization.</p>
-                )}
               </div>
             ))}
           </div>

@@ -37,10 +37,7 @@ export default async function ProjectDetailPage({
             serviceId: true,
             primaryAssigneeId: true,
             service: {
-              select: {
-                name: true,
-                children: { orderBy: { name: "asc" }, select: { id: true, name: true } },
-              },
+              select: { name: true },
             },
           },
         },
@@ -147,7 +144,6 @@ export default async function ProjectDetailPage({
           items={project.services.map((ps) => ({
             id: ps.id,
             categoryName: ps.service.name,
-            subcategories: ps.service.children,
             primaryAssigneeId: ps.primaryAssigneeId,
           }))}
           available={available}
