@@ -12,7 +12,6 @@ import { ProjectStatusControl } from "@/components/projects/project-status";
 import { ProjectEdit } from "@/components/projects/project-edit";
 import { ProjectServices } from "@/components/projects/project-services";
 import { AttachmentsPanel } from "@/components/attachments/attachments-panel";
-import { DeliverablesPanel } from "@/components/projects/deliverables-panel";
 import { BackLink } from "@/components/ui/back-link";
 import type { KanbanTask } from "@/lib/projects/actions";
 
@@ -56,10 +55,6 @@ export default async function ProjectDetailPage({
             service: { select: { name: true } },
             assignees: { select: { employee: { select: { fullName: true } } } },
           },
-        },
-        deliverables: {
-          orderBy: { submittedAt: "desc" },
-          select: { id: true, name: true, description: true, link: true, status: true, feedback: true },
         },
         attachments: {
           orderBy: { createdAt: "desc" },
@@ -180,8 +175,6 @@ export default async function ProjectDetailPage({
             />
           </div>
         </Card>
-
-        {project.client && <DeliverablesPanel projectId={project.id} items={project.deliverables} />}
       </div>
 
       <KanbanBoard projectId={project.id} initialTasks={initialTasks} />

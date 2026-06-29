@@ -198,9 +198,11 @@ export function AttachmentsPanel({
                 <input type="file" multiple className="hidden" disabled={busy} onChange={onFilesPicked} />
               </label>
             ) : (
-              <div className="flex gap-2">
-                <Input value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} placeholder="https://…" />
-                <Button size="sm" onClick={addLink} disabled={busy}>
+              <div className="flex items-center gap-2">
+                <div className="min-w-0 flex-1">
+                  <Input value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} placeholder="https://…" />
+                </div>
+                <Button size="sm" onClick={addLink} disabled={busy} className="shrink-0 whitespace-nowrap">
                   {busy ? "Adding…" : "Add link"}
                 </Button>
               </div>
