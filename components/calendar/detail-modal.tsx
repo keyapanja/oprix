@@ -1,7 +1,7 @@
 "use client";
 
 import { Modal } from "@/components/ui/modal";
-import { Icon } from "@/components/ui/icons";
+import { AttachmentGrid } from "@/components/attachments/attachment-grid";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { renderMarkdown } from "@/lib/kb/markdown";
 
@@ -59,39 +59,7 @@ export function CalendarDetailModal({ item, onClose }: { item: CalendarDetail; o
             {item.attachments.length > 0 && (
               <div>
                 <p className="mb-2 text-xs font-medium uppercase tracking-wide text-faint">Attachments</p>
-                {item.attachments.some((a) => a.mimeType?.startsWith("image/")) && (
-                  <div className="mb-2 flex flex-wrap gap-2">
-                    {item.attachments
-                      .filter((a) => a.mimeType?.startsWith("image/"))
-                      .map((a) => (
-                        <a key={a.id} href={`/api/files/${a.id}`} target="_blank" rel="noopener noreferrer">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={`/api/files/${a.id}`}
-                            alt={a.fileName}
-                            className="h-28 w-28 rounded-lg object-cover ring-1 ring-inset ring-line transition-opacity hover:opacity-90"
-                          />
-                        </a>
-                      ))}
-                  </div>
-                )}
-                <ul className="space-y-1">
-                  {item.attachments
-                    .filter((a) => !a.mimeType?.startsWith("image/"))
-                    .map((a) => (
-                      <li key={a.id}>
-                        <a
-                          href={`/api/files/${a.id}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-2 text-sm font-medium text-accent-strong hover:underline"
-                        >
-                          <Icon name="download" className="size-4 shrink-0" />
-                          {a.fileName}
-                        </a>
-                      </li>
-                    ))}
-                </ul>
+                <AttachmentGrid items={item.attachments} />
               </div>
             )}
           </div>

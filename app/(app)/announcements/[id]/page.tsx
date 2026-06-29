@@ -7,6 +7,7 @@ import { renderMarkdown } from "@/lib/kb/markdown";
 import { BackLink } from "@/components/ui/back-link";
 import { Card } from "@/components/ui/card";
 import { Icon } from "@/components/ui/icons";
+import { AttachmentGrid } from "@/components/attachments/attachment-grid";
 
 export const metadata: Metadata = { title: "Announcement · Oprix" };
 
@@ -23,9 +24,6 @@ export default async function AnnouncementPage({ params }: { params: Promise<{ i
       attachments: { orderBy: { createdAt: "asc" }, select: { id: true, fileName: true, mimeType: true } },
     },
   });
-
-  const images = ann?.attachments.filter((a) => a.mimeType?.startsWith("image/")) ?? [];
-  const otherFiles = ann?.attachments.filter((a) => !a.mimeType?.startsWith("image/")) ?? [];
 
   return (
     <div className="mx-auto max-w-2xl">
@@ -52,35 +50,7 @@ export default async function AnnouncementPage({ params }: { params: Promise<{ i
           {ann.attachments.length > 0 && (
             <div className="mt-5 border-t border-line pt-4">
               <p className="mb-2 text-xs font-medium uppercase tracking-wide text-faint">Attachments</p>
-              {images.length > 0 && (
-                <div className="mb-3 flex flex-wrap gap-2">
-                  {images.map((a) => (
-                    <a key={a.id} href={`/api/files/${a.id}`} target="_blank" rel="noopener noreferrer">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={`/api/files/${a.id}`}
-                        alt={a.fileName}
-                        className="h-32 w-32 rounded-lg object-cover ring-1 ring-inset ring-line transition-opacity hover:opacity-90"
-                      />
-                    </a>
-                  ))}
-                </div>
-              )}
-              <ul className="space-y-1">
-                {otherFiles.map((a) => (
-                  <li key={a.id}>
-                    <a
-                      href={`/api/files/${a.id}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 text-sm font-medium text-accent-strong hover:underline"
-                    >
-                      <Icon name="download" className="size-4 shrink-0" />
-                      {a.fileName}
-                    </a>
-                  </li>
-                ))}
-              </ul>
+              <AttachmentGrid items={ann.attachments} />
             </div>
           )}
         </Card>

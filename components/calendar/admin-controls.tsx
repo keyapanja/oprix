@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Icon } from "@/components/ui/icons";
 import { RichTextEditor } from "@/components/kb/rich-text-editor";
+import { FilePreviewGrid, makePicked, type PickedFile } from "@/components/attachments/file-preview-grid";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/cn";
 
@@ -70,17 +71,21 @@ function AnnouncementForm() {
   const [date, setDate] = useState("");
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
-  const [files, setFiles] = useState<File[]>([]);
+  const [files, setFiles] = useState<PickedFile[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [key, setKey] = useState(0); // remounts the editor on reset
 
   function onFilesPicked(e: ChangeEvent<HTMLInputElement>) {
-    setFiles((f) => [...f, ...Array.from(e.target.files ?? [])]);
+    setFiles((f) => [...f, ...makePicked(e.target.files ?? [])]);
     e.target.value = "";
   }
   function removeFile(i: number) {
-    setFiles((f) => f.filter((_, idx) => idx !== i));
+    setFiles((f) => {
+      const p = f[i];
+      if (p?.preview) URL.revokeObjectURL(p.preview);
+      return f.filter((_, idx) => idx !== i);
+    });
   }
 
   async function submit() {
@@ -100,7 +105,7 @@ function AnnouncementForm() {
       }
       if (files.length) {
         const up = new FormData();
-        for (const f of files) up.append("files", f);
+        for (const p of files) up.append("files", p.file);
         const r = await fetch(`/api/announcements/${res.id}/attachments`, { method: "POST", body: up });
         if (!r.ok) {
           const j = await r.json().catch(() => null);
@@ -143,24 +148,7 @@ function AnnouncementForm() {
 
       <Field label="Attachments" hint="Images appear in the announcement; other files attach as downloads">
         <div>
-          {files.length > 0 && (
-            <ul className="mb-2 space-y-1">
-              {files.map((f, i) => (
-                <li key={i} className="flex items-center gap-2 rounded-lg bg-canvas px-2.5 py-1.5 text-sm">
-                  <Icon name="folder" className="size-4 shrink-0 text-faint" />
-                  <span className="flex-1 truncate text-content">{f.name}</span>
-                  <button
-                    type="button"
-                    onClick={() => removeFile(i)}
-                    className="shrink-0 text-faint hover:text-red-600"
-                    aria-label={`Remove ${f.name}`}
-                  >
-                    <Icon name="x" className="size-3.5" />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
+          <FilePreviewGrid files={files} onRemove={removeFile} />
           <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-canvas px-3 py-2 text-sm font-medium text-content ring-1 ring-inset ring-line transition-colors hover:bg-surface">
             <Icon name="plus" className="size-4" />
             Add images or files

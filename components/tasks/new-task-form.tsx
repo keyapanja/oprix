@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Icon } from "@/components/ui/icons";
+import { FilePreviewGrid, makePicked, type PickedFile } from "@/components/attachments/file-preview-grid";
 import { humanizeEnum } from "@/lib/format";
 import { cn } from "@/lib/cn";
 
@@ -23,7 +24,6 @@ type SubCat = {
 };
 type Proj = { id: string; name: string; subcategories: SubCat[] };
 type CheckItem = { text: string; isDone: boolean };
-type Picked = { file: File; preview: string | null };
 
 const PRIORITIES = ["LOW", "MEDIUM", "HIGH", "URGENT"];
 
@@ -55,7 +55,7 @@ export function NewTaskForm({
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [checklist, setChecklist] = useState<CheckItem[]>([]);
   const [checkText, setCheckText] = useState("");
-  const [files, setFiles] = useState<Picked[]>([]);
+  const [files, setFiles] = useState<PickedFile[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
@@ -116,11 +116,7 @@ export function NewTaskForm({
     setChecklist((l) => l.filter((_, idx) => idx !== i));
   }
   function onFilesPicked(e: ChangeEvent<HTMLInputElement>) {
-    const picked: Picked[] = Array.from(e.target.files ?? []).map((file) => ({
-      file,
-      preview: file.type.startsWith("image/") ? URL.createObjectURL(file) : null,
-    }));
-    setFiles((f) => [...f, ...picked]);
+    setFiles((f) => [...f, ...makePicked(e.target.files ?? [])]);
     e.target.value = "";
   }
   function removeFile(i: number) {
@@ -219,34 +215,7 @@ export function NewTaskForm({
           {/* Attachments — moved up, with a preview grid */}
           <Field label="Attachments" className="sm:col-span-2">
             <div>
-              {files.length > 0 && (
-                <div className="mb-3 grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5">
-                  {files.map((p, i) => (
-                    <div
-                      key={i}
-                      className="group relative aspect-square overflow-hidden rounded-lg bg-canvas ring-1 ring-inset ring-line"
-                    >
-                      {p.preview ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={p.preview} alt={p.file.name} className="h-full w-full object-cover" />
-                      ) : (
-                        <div className="flex h-full flex-col items-center justify-center gap-1 p-2 text-center">
-                          <Icon name="folder" className="size-6 text-faint" />
-                          <span className="line-clamp-2 break-all text-[10px] text-muted">{p.file.name}</span>
-                        </div>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => removeFile(i)}
-                        className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-full bg-black/50 text-white opacity-0 transition-opacity group-hover:opacity-100"
-                        aria-label={`Remove ${p.file.name}`}
-                      >
-                        <Icon name="x" className="size-3" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <FilePreviewGrid files={files} onRemove={removeFile} />
               <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-canvas px-3 py-2 text-sm font-medium text-content ring-1 ring-inset ring-line transition-colors hover:bg-surface">
                 <Icon name="plus" className="size-4" />
                 Add files

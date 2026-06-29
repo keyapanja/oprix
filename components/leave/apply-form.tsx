@@ -10,6 +10,7 @@ import { Combobox } from "@/components/ui/combobox";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Icon } from "@/components/ui/icons";
 import { toast } from "@/components/ui/toast";
+import { FilePreviewGrid, makePicked, type PickedFile } from "@/components/attachments/file-preview-grid";
 import { cn } from "@/lib/cn";
 
 type Balance = {
@@ -43,7 +44,7 @@ export function ApplyForm({
   const [start, setStart] = useState(initialStart);
   const [end, setEnd] = useState(initialEnd);
   const [half, setHalf] = useState(false);
-  const [files, setFiles] = useState<File[]>([]);
+  const [files, setFiles] = useState<PickedFile[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -74,11 +75,15 @@ export function ApplyForm({
   const showAttachment = kind === "LEAVE" && !!selected?.attachmentEnabled;
 
   function onFilesPicked(e: ChangeEvent<HTMLInputElement>) {
-    setFiles((f) => [...f, ...Array.from(e.target.files ?? [])]);
+    setFiles((f) => [...f, ...makePicked(e.target.files ?? [])]);
     e.target.value = "";
   }
   function removeFile(i: number) {
-    setFiles((f) => f.filter((_, idx) => idx !== i));
+    setFiles((f) => {
+      const p = f[i];
+      if (p?.preview) URL.revokeObjectURL(p.preview);
+      return f.filter((_, idx) => idx !== i);
+    });
   }
 
   function resetForm() {
@@ -107,7 +112,7 @@ export function ApplyForm({
       }
       if (showAttachment && files.length) {
         const up = new FormData();
-        for (const f of files) up.append("files", f);
+        for (const p of files) up.append("files", p.file);
         const r = await fetch(`/api/leave/${res.id}/attachments`, { method: "POST", body: up });
         if (!r.ok) {
           const j = await r.json().catch(() => null);
@@ -214,24 +219,7 @@ export function ApplyForm({
         {showAttachment && (
           <Field label="Attachment" hint="e.g. a medical certificate (optional)">
             <div>
-              {files.length > 0 && (
-                <ul className="mb-2 space-y-1">
-                  {files.map((f, i) => (
-                    <li key={i} className="flex items-center gap-2 rounded-lg bg-canvas px-2.5 py-1.5 text-sm">
-                      <Icon name="folder" className="size-4 shrink-0 text-faint" />
-                      <span className="flex-1 truncate text-content">{f.name}</span>
-                      <button
-                        type="button"
-                        onClick={() => removeFile(i)}
-                        className="shrink-0 text-faint hover:text-red-600"
-                        aria-label={`Remove ${f.name}`}
-                      >
-                        <Icon name="x" className="size-3.5" />
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
+              <FilePreviewGrid files={files} onRemove={removeFile} />
               <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-canvas px-3 py-2 text-sm font-medium text-content ring-1 ring-inset ring-line transition-colors hover:bg-surface">
                 <Icon name="plus" className="size-4" />
                 Add file
