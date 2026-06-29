@@ -39,10 +39,14 @@ export function NewTaskForm({
   projects,
   employees,
   initialProjectId = "",
+  lockProject = false,
 }: {
   projects: Proj[];
   employees: Emp[];
   initialProjectId?: string;
+  /** When arriving from a project's page the project is fixed — show it, but
+   *  don't let it be changed. */
+  lockProject?: boolean;
 }) {
   const router = useRouter();
   const [projectId, setProjectId] = useState(initialProjectId);
@@ -188,11 +192,12 @@ export function NewTaskForm({
           </div>
         )}
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Project" required>
+          <Field label="Project" required hint={lockProject ? "Set from the project you came from" : undefined}>
             <Combobox
               value={projectId}
               onChange={onProjectChange}
               placeholder="Select project"
+              disabled={lockProject}
               options={projects.map((p) => ({ value: p.id, label: p.name }))}
             />
           </Field>

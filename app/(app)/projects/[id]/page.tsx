@@ -5,6 +5,8 @@ import { requirePage } from "@/lib/auth/guard";
 import { prisma } from "@/lib/db";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Icon } from "@/components/ui/icons";
 import { humanizeEnum, formatDate } from "@/lib/format";
 import { PRIORITY_TONE } from "@/lib/status";
 import { KanbanBoard } from "@/components/projects/kanban-board";
@@ -88,8 +90,14 @@ export default async function ProjectDetailPage({
 
   return (
     <div>
-      <div className="mb-4">
+      <div className="mb-4 flex items-center justify-between gap-4">
         <BackLink href="/projects">Back to projects</BackLink>
+        <Link href={`/tasks/new?project=${project.id}`}>
+          <Button>
+            <Icon name="plus" className="size-4" />
+            Add task
+          </Button>
+        </Link>
       </div>
 
       <Card className="mb-6 p-6">

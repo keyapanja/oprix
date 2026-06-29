@@ -64,6 +64,7 @@ export default async function NewTaskPage({
       <PageHeader title="New task" description="Create a task under a project." />
       <NewTaskForm
         initialProjectId={initialProjectId}
+        lockProject={Boolean(initialProjectId)}
         projects={projects.map((p) => ({
           id: p.id,
           name: p.name,
