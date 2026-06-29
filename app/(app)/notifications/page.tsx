@@ -3,6 +3,7 @@ import { requirePage } from "@/lib/auth/guard";
 import { prisma } from "@/lib/db";
 import { PageHeader } from "@/components/ui/page-header";
 import { NotificationsList } from "@/components/notifications/notifications-list";
+import { PushToggle } from "@/components/notifications/push-toggle";
 import { noteHref, formatNoteTime, type ClientNote } from "@/lib/notifications/categories";
 
 export const metadata: Metadata = { title: "Notifications · Oprix" };
@@ -32,6 +33,7 @@ export default async function NotificationsPage() {
       <PageHeader
         title="Notifications"
         description={`${notes.length} ${notes.length === 1 ? "notification" : "notifications"}.`}
+        action={<PushToggle />}
       />
       <NotificationsList notes={notes} />
     </>

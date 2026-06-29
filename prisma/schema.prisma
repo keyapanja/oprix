@@ -372,9 +372,25 @@ model User {
   client        Client?        @relation(fields: [clientId], references: [id])
   notifications Notification[]
   extensionTokens ExtensionToken[]
+  pushSubscriptions PushSubscription[]
 
   @@unique([companyId, email])
   @@index([companyId])
+}
+
+// Web Push subscriptions — one per browser/device a user opts in on. Backs
+// OS-level push notifications delivered via the Web Push protocol (VAPID).
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
 }
 
 // Long-lived bearer tokens for the browser extension (and future API clients).

@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/db";
 import { sendTaskAssignedEmail, appUrl } from "@/lib/email";
 import { formatDate } from "@/lib/format";
+import { notify } from "@/lib/notifications/notify";
 
 /**
  * Notify newly-assigned employees of a task: an in-app notification (for those
@@ -46,14 +47,12 @@ export async function notifyTaskAssigned(opts: {
       .map((e) => e.user?.id)
       .filter((x): x is string => !!x && x !== assignerUserId);
     if (noteUserIds.length) {
-      await prisma.notification.createMany({
-        data: noteUserIds.map((userId) => ({
-          userId,
-          type: "TASK",
-          title: "New task assigned",
-          body: `${assignerName} assigned you "${task.name}".`,
-          meta: { taskId },
-        })),
+      // Central notify: writes the in-app bell row AND fires a Web Push.
+      await notify(noteUserIds, {
+        type: "TASK",
+        title: "New task assigned",
+        body: `${assignerName} assigned you "${task.name}".`,
+        meta: { taskId },
       });
     }
 
