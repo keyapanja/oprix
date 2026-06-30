@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icons";
 import { toast } from "@/components/ui/toast";
 import { FieldInput, type FieldValue } from "@/components/forms/field-input";
-import { isInputField, type FieldDef } from "@/lib/forms/types";
+import { isInputField, type FieldDef, type Lookups } from "@/lib/forms/types";
 import { cn } from "@/lib/cn";
 
 type SubmitResult = { ok?: boolean; error?: string; fieldErrors?: Record<string, string> };
@@ -15,10 +15,12 @@ export function FormFill({
   form,
   allowMultiple,
   action,
+  lookups,
 }: {
   form: { id: string; title: string; description: string | null; schema: { fields: FieldDef[] } };
   allowMultiple: boolean;
   action: (formId: string, data: Record<string, unknown>) => Promise<SubmitResult>;
+  lookups?: Lookups;
 }) {
   const [values, setValues] = useState<Record<string, FieldValue>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -37,8 +39,11 @@ export function FormFill({
     for (const f of fields) {
       if (!isInputField(f.type) || !f.required) continue;
       const v = values[f.id];
-      const empty =
-        v == null || v === "" || (Array.isArray(v) && v.length === 0) || (f.type === "yesno" && v === undefined);
+      let empty: boolean;
+      if (f.type === "daterange") empty = !(Array.isArray(v) && v[0] && v[1]);
+      else if (f.type === "yesno") empty = v === undefined;
+      else if (Array.isArray(v)) empty = v.length === 0;
+      else empty = v == null || v === "";
       if (empty) errs[f.id] = "This field is required.";
     }
     if (Object.keys(errs).length) {
@@ -91,6 +96,7 @@ export function FormFill({
                 value={values[f.id]}
                 onChange={(v) => setValue(f.id, v)}
                 error={errors[f.id]}
+                lookups={lookups}
               />
             </div>
           ))}

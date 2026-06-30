@@ -1,11 +1,18 @@
 "use client";
 
 import { Input, Textarea } from "@/components/ui/input";
+import { Combobox } from "@/components/ui/combobox";
 import { Icon } from "@/components/ui/icons";
 import { cn } from "@/lib/cn";
-import { hasOptions, isInputField, newId, type FieldDef, type FieldOption } from "@/lib/forms/types";
+import { hasOptions, isInputField, newId, type FieldDef, type FieldOption, type RefSource } from "@/lib/forms/types";
+import { RepeaterFieldsEditor } from "@/components/forms/repeater-fields-editor";
 
-const TEXTY = new Set(["text", "textarea", "number", "email", "phone", "dropdown"]);
+const TEXTY = new Set(["text", "textarea", "number", "email", "phone", "dropdown", "reference"]);
+const SOURCE_OPTS = [
+  { value: "clients", label: "Clients" },
+  { value: "projects", label: "Projects" },
+  { value: "employees", label: "Employees" },
+];
 
 export function FieldConfigPanel({
   field,
@@ -87,6 +94,18 @@ export function FieldConfigPanel({
             placeholder="Optional hint under the field"
           />
         </label>
+      )}
+
+      {field.type === "reference" && (
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium text-muted">Data source</span>
+          <Combobox value={field.source ?? "clients"} onChange={(v) => onChange({ source: v as RefSource })} options={SOURCE_OPTS} />
+          <span className="mt-1 block text-xs text-muted">Options come live from your {field.source ?? "clients"}.</span>
+        </label>
+      )}
+
+      {field.type === "repeater" && (
+        <RepeaterFieldsEditor subFields={field.subFields ?? []} onChange={(subFields) => onChange({ subFields })} />
       )}
 
       {choice && (

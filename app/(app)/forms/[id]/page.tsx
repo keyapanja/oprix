@@ -3,6 +3,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requirePage } from "@/lib/auth/guard";
 import { getFormForFill } from "@/lib/forms/data";
+import { getLookups } from "@/lib/forms/lookups";
+import { neededSources } from "@/lib/forms/types";
 import { submitForm } from "@/lib/forms/actions";
 import { FormFill } from "@/components/forms/form-fill";
 import { BackLink } from "@/components/ui/back-link";
@@ -17,6 +19,7 @@ export default async function FillFormPage({ params }: { params: Promise<{ id: s
   const access = await getFormForFill(session, id);
   if (!access) notFound();
   const { form, canManage, canViewAll } = access;
+  const lookups = await getLookups(session.companyId, neededSources(form.schema.fields));
 
   return (
     <div>
@@ -52,6 +55,7 @@ export default async function FillFormPage({ params }: { params: Promise<{ id: s
         form={{ id: form.id, title: form.title, description: form.description, schema: form.schema }}
         allowMultiple={form.allowMultiple}
         action={submitForm}
+        lookups={lookups}
       />
     </div>
   );
