@@ -92,27 +92,24 @@ function SortableField({
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: field.id });
   const style = { transform: CSS.Transform.toString(transform), transition };
   return (
+    // The whole card is the drag handle (grab anywhere to reorder); a click that
+    // doesn't move selects the field for editing. dnd-kit's 5px activation
+    // distance separates the two.
     <div
       ref={setNodeRef}
       style={style}
       onClick={onSelect}
+      {...attributes}
+      {...listeners}
       className={cn(
-        "rounded-xl border bg-surface p-4 transition-shadow",
+        "cursor-grab touch-none rounded-xl border bg-surface p-4 transition-shadow active:cursor-grabbing",
         selected ? "border-brand-500 ring-1 ring-brand-500" : "border-line hover:border-line-strong",
-        isDragging && "opacity-50",
+        isDragging && "opacity-50 shadow-card-hover",
       )}
     >
-      <div className="mb-2 flex items-center gap-2">
-        <button
-          {...attributes}
-          {...listeners}
-          onClick={(e) => e.stopPropagation()}
-          className="cursor-grab text-faint hover:text-content active:cursor-grabbing"
-          title="Drag to reorder"
-        >
-          <Icon name="list" className="size-4" />
-        </button>
-        <span className="text-xs font-medium uppercase tracking-wide text-faint">{fieldMeta(field.type).label}</span>
+      <div className="mb-2 flex items-center gap-2 text-faint">
+        <Icon name="grip" className="size-4" />
+        <span className="text-xs font-medium uppercase tracking-wide">{fieldMeta(field.type).label}</span>
       </div>
       <FieldInput field={field} disabled />
     </div>

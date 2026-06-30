@@ -22,6 +22,7 @@ export type FieldType =
   | "yesno"
   | "reference"
   | "repeater"
+  | "list"
   | "calculation"
   | "heading"
   | "paragraph";
@@ -44,6 +45,7 @@ export type FieldDef = {
   required?: boolean;
   options?: FieldOption[]; // dropdown / multiselect / radio / checkbox
   source?: RefSource; // reference
+  itemType?: FieldType; // add-more list: the input type for each entry (text/number/email/phone/date)
   subFields?: FieldDef[]; // repeater (scalar input fields only — no nesting)
   formula?: string; // calculation — e.g. "{qtyId} * {priceId}" or "{repId.subId}" (column sum)
   decimals?: number | null; // calculation — round to N decimals
@@ -89,6 +91,7 @@ export const FIELD_CATALOG: FieldMeta[] = [
   { type: "yesno", label: "Yes / No", icon: "toggle", hasOptions: false, input: true },
   { type: "reference", label: "Dynamic list", icon: "userGroup", hasOptions: false, input: true },
   { type: "repeater", label: "Repeater", icon: "copy", hasOptions: false, input: true },
+  { type: "list", label: "Add-more list", icon: "listPlus", hasOptions: false, input: true },
   { type: "calculation", label: "Calculation", icon: "equals", hasOptions: false, input: true },
   { type: "heading", label: "Section heading", icon: "heading", hasOptions: false, input: false },
   { type: "paragraph", label: "Description text", icon: "text", hasOptions: false, input: false },
@@ -126,6 +129,7 @@ export function makeField(type: FieldType): FieldDef {
   }
   if (type === "reference") base.source = "clients";
   if (type === "repeater") base.subFields = [{ id: newId(), type: "text", label: "Item", required: false, width: "full" }];
+  if (type === "list") base.itemType = "text";
   if (type === "calculation") base.formula = "";
   return base;
 }
@@ -153,7 +157,7 @@ const SourceZ = z.enum(["clients", "projects", "employees"]);
 const TypeZ = z.enum([
   "text", "textarea", "number", "email", "phone", "date", "daterange",
   "dropdown", "multiselect", "radio", "checkbox", "yesno", "reference",
-  "repeater", "calculation", "heading", "paragraph",
+  "repeater", "list", "calculation", "heading", "paragraph",
 ]);
 
 const FieldDefZ: z.ZodType<FieldDef> = z.lazy(() =>
@@ -166,6 +170,7 @@ const FieldDefZ: z.ZodType<FieldDef> = z.lazy(() =>
     required: z.boolean().optional(),
     options: z.array(OptionZ).max(100).optional(),
     source: SourceZ.optional(),
+    itemType: TypeZ.optional(),
     subFields: z.array(FieldDefZ).max(50).optional(),
     formula: z.string().max(500).optional(),
     decimals: z.number().int().min(0).max(6).nullable().optional(),
@@ -356,6 +361,13 @@ export function validateAnswers(
       const arr = Array.isArray(v) ? v.filter((x) => typeof x === "string") : [];
       if (f.required && arr.length === 0) errors[f.id] = "Select at least one option.";
       clean[f.id] = arr;
+      continue;
+    }
+
+    if (f.type === "list") {
+      const arr = Array.isArray(v) ? v.map((x) => (x == null ? "" : String(x).trim())).filter((x) => x !== "") : [];
+      if (f.required && arr.length === 0) errors[f.id] = "Add at least one entry.";
+      clean[f.id] = arr.slice(0, 100).map((x) => x.slice(0, 1000));
       continue;
     }
 

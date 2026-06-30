@@ -150,6 +150,41 @@ export function FieldInput({
         </div>
       );
       break;
+    case "list": {
+      const items = Array.isArray(value) ? (value as string[]) : [];
+      const list = items.length ? items : [""];
+      const it = field.itemType ?? "text";
+      const inputType = it === "number" ? "number" : it === "email" ? "email" : it === "phone" ? "tel" : "text";
+      const setItem = (idx: number, v: string) => set(list.map((x, i) => (i === idx ? v : x)));
+      control = (
+        <div className="space-y-2">
+          {list.map((val, idx) => (
+            <div key={idx} className="flex items-center gap-2">
+              <div className="flex-1">
+                {it === "date" ? (
+                  <div className={cn(disabled && "pointer-events-none opacity-60")}>
+                    <DatePicker value={val} onChange={(v) => setItem(idx, v)} />
+                  </div>
+                ) : (
+                  <Input type={inputType} value={val} onChange={(e) => setItem(idx, e.target.value)} placeholder={field.placeholder} disabled={disabled} />
+                )}
+              </div>
+              {!disabled && list.length > 1 && (
+                <button type="button" onClick={() => set(list.filter((_, i) => i !== idx))}
+                  className="shrink-0 rounded-lg p-1.5 text-faint hover:text-red-600" title="Remove entry">
+                  <Icon name="x" className="size-4" />
+                </button>
+              )}
+            </div>
+          ))}
+          <button type="button" disabled={disabled} onClick={() => set([...list, ""])}
+            className={cn("inline-flex items-center gap-1.5 text-sm font-medium text-accent-strong hover:underline", disabled && "opacity-60")}>
+            <Icon name="plus" className="size-4" /> Add more
+          </button>
+        </div>
+      );
+      break;
+    }
     case "yesno":
       control = (
         <div className="flex gap-4">

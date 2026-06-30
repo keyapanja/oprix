@@ -8,11 +8,18 @@ import { hasOptions, isInputField, newId, type CondOp, type FieldDef, type Field
 import { RepeaterFieldsEditor } from "@/components/forms/repeater-fields-editor";
 import { FormulaEditor } from "@/components/forms/formula-editor";
 
-const TEXTY = new Set(["text", "textarea", "number", "email", "phone", "dropdown", "reference"]);
+const TEXTY = new Set(["text", "textarea", "number", "email", "phone", "dropdown", "reference", "list"]);
 const SOURCE_OPTS = [
   { value: "clients", label: "Clients" },
   { value: "projects", label: "Projects" },
   { value: "employees", label: "Employees" },
+];
+const ITEM_TYPE_OPTS = [
+  { value: "text", label: "Text" },
+  { value: "number", label: "Number" },
+  { value: "email", label: "Email" },
+  { value: "phone", label: "Phone" },
+  { value: "date", label: "Date" },
 ];
 const OP_OPTS = [
   { value: "eq", label: "equals" },
@@ -127,6 +134,18 @@ export function FieldConfigPanel({
           <span className="mb-1 block text-xs font-medium text-muted">Data source</span>
           <Combobox value={field.source ?? "clients"} onChange={(v) => onChange({ source: v as RefSource })} options={SOURCE_OPTS} />
           <span className="mt-1 block text-xs text-muted">Options come live from your {field.source ?? "clients"}.</span>
+        </label>
+      )}
+
+      {field.type === "list" && (
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium text-muted">Entry type</span>
+          <Combobox
+            value={field.itemType ?? "text"}
+            onChange={(v) => onChange({ itemType: v as FieldDef["itemType"] })}
+            options={ITEM_TYPE_OPTS}
+          />
+          <span className="mt-1 block text-xs text-muted">People can add as many of these as they need.</span>
         </label>
       )}
 
