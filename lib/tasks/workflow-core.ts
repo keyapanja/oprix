@@ -4,7 +4,7 @@ import type { SessionUser } from "@/lib/auth/session";
 import { hasPermission } from "@/lib/auth/permissions";
 import { logTaskActivity, actorLabel } from "@/lib/activity";
 import { finalizeAllTaskTimers } from "@/lib/timer/finalize";
-import { normalizeHttpUrl } from "@/lib/url";
+import { normalizeHttpUrl, looksLikeUrl } from "@/lib/url";
 
 // Session-agnostic "submit for review" — shared by the web Server Action
 // (lib/tasks/workflow.ts) and the extension API. The worker submits a final
@@ -38,13 +38,14 @@ export async function submitForReviewFor(
   if (!["TODO", "IN_PROGRESS", "REDO"].includes(task.status)) {
     return { error: "This task can't be submitted from its current status." };
   }
-  const link = finalLink.trim();
-  if (!link) return { error: "Add the final output / preview link before submitting." };
-  const safeLink = normalizeHttpUrl(link);
-  if (!safeLink) return { error: "Enter a valid link (http:// or https://)." };
+  const raw = finalLink.trim();
+  if (!raw) return { error: "Add the final link or a status note before submitting." };
+  // The field accepts either a link or plain status text. Links are normalized
+  // to a safe http(s) form; anything else is stored verbatim (capped).
+  const value = looksLikeUrl(raw) ? (normalizeHttpUrl(raw) ?? raw.slice(0, 1000)) : raw.slice(0, 1000);
 
   await finalizeAllTaskTimers(session.companyId, taskId);
-  await prisma.task.update({ where: { id: taskId }, data: { status: "REVIEW", finalLink: safeLink } });
+  await prisma.task.update({ where: { id: taskId }, data: { status: "REVIEW", finalLink: value } });
 
   const actor = await actorLabel(session.userId);
   if (task.createdById && task.createdById !== session.userId) {

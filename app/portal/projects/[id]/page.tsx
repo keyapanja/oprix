@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { requirePortal } from "@/lib/auth/guard";
 import { getClientProject, progressOf } from "@/lib/portal/data";
-import { safeHref } from "@/lib/url";
+import { safeHref, isHttpUrl } from "@/lib/url";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Icon } from "@/components/ui/icons";
@@ -93,17 +93,20 @@ export default async function PortalProjectDetailPage({ params }: { params: Prom
                   <p className="font-medium text-content">{t.name}</p>
                   {t.service?.name && <p className="text-xs text-muted">{t.service.name}</p>}
                 </div>
-                {t.finalLink && (
-                  <a
-                    href={safeHref(t.finalLink)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 text-sm font-medium text-accent-strong hover:underline"
-                  >
-                    <Icon name="folder" className="size-4" />
-                    Open preview
-                  </a>
-                )}
+                {t.finalLink &&
+                  (isHttpUrl(t.finalLink) ? (
+                    <a
+                      href={safeHref(t.finalLink)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-sm font-medium text-accent-strong hover:underline"
+                    >
+                      <Icon name="folder" className="size-4" />
+                      Open preview
+                    </a>
+                  ) : (
+                    <span className="text-sm text-muted">{t.finalLink}</span>
+                  ))}
               </div>
               <div className="mt-3 border-t border-line pt-3">
                 <ReviewControls kind="task" id={t.id} />

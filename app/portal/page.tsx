@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requirePortal } from "@/lib/auth/guard";
-import { safeHref } from "@/lib/url";
+import { safeHref, isHttpUrl } from "@/lib/url";
 import {
   getPortalSummary,
   listClientProjects,
@@ -77,17 +77,20 @@ export default async function PortalHomePage() {
                     {t.service?.name ? ` · ${t.service.name}` : ""}
                   </p>
                 </div>
-                {t.finalLink && (
-                  <a
-                    href={safeHref(t.finalLink)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 text-sm font-medium text-accent-strong hover:underline"
-                  >
-                    <Icon name="folder" className="size-4" />
-                    Open preview
-                  </a>
-                )}
+                {t.finalLink &&
+                  (isHttpUrl(t.finalLink) ? (
+                    <a
+                      href={safeHref(t.finalLink)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-sm font-medium text-accent-strong hover:underline"
+                    >
+                      <Icon name="folder" className="size-4" />
+                      Open preview
+                    </a>
+                  ) : (
+                    <span className="text-sm text-muted">{t.finalLink}</span>
+                  ))}
               </div>
               <div className="mt-3 border-t border-line pt-3">
                 <ReviewControls kind="task" id={t.id} />
