@@ -4,7 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { Prisma, type Role } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { requireCapability } from "@/lib/auth/guard";
+import { requireCapability, requirePortalAction } from "@/lib/auth/guard";
 import { getSession } from "@/lib/auth/session";
 import { canManageForms, audienceAllows } from "@/lib/forms/access";
 import { FormSchemaZ, validateAnswers, parseSchema } from "@/lib/forms/types";
@@ -155,6 +155,40 @@ export async function submitForm(
     },
   });
   revalidatePath(`/forms/${formId}/entries`);
+  return { ok: true };
+}
+
+/** Submit a portal form as the signed-in client. */
+export async function submitPortalForm(
+  formId: string,
+  data: Record<string, unknown>,
+): Promise<FormActionState> {
+  const session = await requirePortalAction();
+  const form = await prisma.form.findFirst({
+    where: { id: formId, companyId: session.companyId, deletedAt: null, status: "PUBLISHED", portalEnabled: true },
+  });
+  if (!form) return { error: "Form not found." };
+
+  const schema = parseSchema(form.schema);
+  const { ok, errors, clean } = validateAnswers(schema.fields, data);
+  if (!ok) return { error: "Please fix the highlighted fields.", fieldErrors: errors };
+
+  if (!form.allowMultiple) {
+    const existing = await prisma.formSubmission.findFirst({
+      where: { formId, companyId: session.companyId, submittedByClientId: session.clientId, deletedAt: null },
+      select: { id: true },
+    });
+    if (existing) return { error: "You've already submitted this form." };
+  }
+
+  await prisma.formSubmission.create({
+    data: {
+      companyId: session.companyId,
+      formId,
+      data: asJson(clean),
+      submittedByClientId: session.clientId,
+    },
+  });
   return { ok: true };
 }
 

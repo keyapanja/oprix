@@ -15,7 +15,8 @@ export type TrashType =
   | "leave"
   | "announcement"
   | "kb"
-  | "holiday";
+  | "holiday"
+  | "form";
 
 export type TrashDetail = { label: string; value: string };
 
@@ -46,7 +47,7 @@ function detail(label: string, value: string | null | undefined): TrashDetail | 
  * (the page + actions enforce the role).
  */
 export async function getTrash(companyId: string): Promise<TrashItem[]> {
-  const [projects, clients, employees, tasks, announcements, holidays] = await Promise.all([
+  const [projects, clients, employees, tasks, announcements, holidays, forms] = await Promise.all([
     prisma.project.findMany({
       where: { companyId, deletedAt: { not: null } },
       orderBy: { deletedAt: "desc" },
@@ -87,6 +88,11 @@ export async function getTrash(companyId: string): Promise<TrashItem[]> {
       where: { companyId, deletedAt: { not: null } },
       orderBy: { deletedAt: "desc" },
       select: { id: true, name: true, date: true, deletedAt: true, deletedById: true },
+    }),
+    prisma.form.findMany({
+      where: { companyId, deletedAt: { not: null } },
+      orderBy: { deletedAt: "desc" },
+      select: { id: true, title: true, description: true, status: true, deletedAt: true, deletedById: true },
     }),
   ]);
 
@@ -178,6 +184,20 @@ export async function getTrash(companyId: string): Promise<TrashItem[]> {
       details: [detail("Date", formatDate(h.date))].filter(Boolean) as TrashDetail[],
       deletedAt: h.deletedAt!.toISOString(),
       deletedById: h.deletedById,
+      deletedByName: null,
+    })),
+    ...forms.map((f) => ({
+      type: "form" as const,
+      typeLabel: "Form",
+      id: f.id,
+      label: f.title,
+      sublabel: titleCase(f.status),
+      details: [
+        detail("Status", titleCase(f.status)),
+        detail("Description", f.description),
+      ].filter(Boolean) as TrashDetail[],
+      deletedAt: f.deletedAt!.toISOString(),
+      deletedById: f.deletedById,
       deletedByName: null,
     })),
   ];

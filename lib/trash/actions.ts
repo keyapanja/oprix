@@ -61,6 +61,10 @@ export async function restoreItem(type: TrashType, id: string): Promise<TrashSta
       }
       revalidatePath("/calendar");
       break;
+    case "form":
+      await prisma.form.updateMany({ where, data });
+      revalidatePath("/forms");
+      break;
     default:
       return { error: "This item type can't be restored yet." };
   }

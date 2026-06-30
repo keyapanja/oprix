@@ -8,21 +8,23 @@ import { Icon } from "@/components/ui/icons";
 import { ThemeToggle } from "@/components/shell/theme-toggle";
 import { cn } from "@/lib/cn";
 
-const NAV = [
-  { label: "Overview", href: "/portal" },
-  { label: "Projects", href: "/portal/projects" },
-  { label: "Deliverables", href: "/portal/deliverables" },
-];
-
 export function PortalHeader({
   companyName,
   clientName,
   email,
+  showForms,
 }: {
   companyName: string;
   clientName: string;
   email: string;
+  showForms?: boolean;
 }) {
+  const NAV = [
+    { label: "Overview", href: "/portal" },
+    { label: "Projects", href: "/portal/projects" },
+    { label: "Deliverables", href: "/portal/deliverables" },
+    ...(showForms ? [{ label: "Forms", href: "/portal/forms" }] : []),
+  ];
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);

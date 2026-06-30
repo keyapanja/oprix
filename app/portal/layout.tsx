@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { requirePortal } from "@/lib/auth/guard";
 import { prisma } from "@/lib/db";
+import { companyHasPortalForms } from "@/lib/forms/data";
 import { PortalHeader } from "@/components/portal/portal-header";
 
 // The client portal is a separate shell from the internal app: no sidebar,
@@ -17,10 +18,11 @@ export default async function PortalLayout({ children }: { children: React.React
 
   const companyName = client.company?.name ?? "Oprix";
   const clientName = client.companyName || client.name;
+  const showForms = await companyHasPortalForms(session.companyId);
 
   return (
     <div className="min-h-dvh bg-canvas">
-      <PortalHeader companyName={companyName} clientName={clientName} email={session.email} />
+      <PortalHeader companyName={companyName} clientName={clientName} email={session.email} showForms={showForms} />
       <main className="mx-auto max-w-6xl px-6 py-8">
         <div className="animate-rise">{children}</div>
       </main>

@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/db";
 import type { SessionUser } from "@/lib/auth/session";
+import type { PortalSession } from "@/lib/auth/guard";
 import { canManageForms, audienceAllows, viewAllAllows } from "@/lib/forms/access";
 import { parseSchema, type FormSchema } from "@/lib/forms/types";
 
@@ -148,4 +149,50 @@ export async function listSubmissions(
       createdAt: r.createdAt.toISOString(),
     })),
   };
+}
+
+// ---- Client portal --------------------------------------------------------
+
+/** Published, portal-enabled forms for the signed-in client. Submission counts
+ *  reflect only this client's own entries. */
+export async function listPortalForms(session: PortalSession): Promise<FormListItem[]> {
+  const rows = await prisma.form.findMany({
+    where: { companyId: session.companyId, deletedAt: null, status: "PUBLISHED", portalEnabled: true },
+    orderBy: { updatedAt: "desc" },
+    select: {
+      id: true,
+      title: true,
+      description: true,
+      status: true,
+      updatedAt: true,
+      _count: {
+        select: { submissions: { where: { deletedAt: null, submittedByClientId: session.clientId } } },
+      },
+    },
+  });
+  return rows.map((f) => ({
+    id: f.id,
+    title: f.title,
+    description: f.description,
+    status: f.status,
+    submissions: f._count.submissions,
+    updatedAt: f.updatedAt.toISOString(),
+  }));
+}
+
+/** A single portal form to fill. Null unless published + portal-enabled. */
+export async function getPortalForm(session: PortalSession, id: string) {
+  const form = await prisma.form.findFirst({
+    where: { id, companyId: session.companyId, deletedAt: null, status: "PUBLISHED", portalEnabled: true },
+  });
+  if (!form) return null;
+  return { ...form, schema: parseSchema(form.schema) as FormSchema };
+}
+
+/** Whether any portal forms exist for this company (drives the portal nav tab). */
+export async function companyHasPortalForms(companyId: string): Promise<boolean> {
+  const n = await prisma.form.count({
+    where: { companyId, deletedAt: null, status: "PUBLISHED", portalEnabled: true },
+  });
+  return n > 0;
 }
