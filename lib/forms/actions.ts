@@ -192,6 +192,34 @@ export async function submitPortalForm(
   return { ok: true };
 }
 
+/** Edit an entry's answers — a form manager, or the person who submitted it.
+ *  Re-validated against the live form schema; calc fields are recomputed. */
+export async function updateSubmission(
+  id: string,
+  data: Record<string, unknown>,
+): Promise<FormActionState> {
+  const session = await getSession();
+  if (!session) return { error: "Not authenticated." };
+  const sub = await prisma.formSubmission.findFirst({
+    where: { id, companyId: session.companyId, deletedAt: null },
+    select: { id: true, formId: true, submittedByUserId: true, form: { select: { schema: true } } },
+  });
+  if (!sub) return { error: "Entry not found." };
+
+  const manage = await canManageForms(session);
+  if (!manage && sub.submittedByUserId !== session.userId) {
+    return { error: "You can't edit this entry." };
+  }
+
+  const schema = parseSchema(sub.form.schema);
+  const { ok, errors, clean } = validateAnswers(schema.fields, data);
+  if (!ok) return { error: "Please fix the highlighted fields.", fieldErrors: errors };
+
+  await prisma.formSubmission.update({ where: { id }, data: { data: asJson(clean) } });
+  revalidatePath(`/forms/${sub.formId}/entries`);
+  return { ok: true };
+}
+
 /** Delete an entry — a form manager, or the person who submitted it. */
 export async function deleteSubmission(id: string): Promise<FormActionState> {
   const session = await getSession();

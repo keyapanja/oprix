@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { requirePage } from "@/lib/auth/guard";
 import { listSubmissions } from "@/lib/forms/data";
+import { getLookups } from "@/lib/forms/lookups";
+import { neededSources } from "@/lib/forms/types";
 import { EntriesTable } from "@/components/forms/entries-table";
 import { BackLink } from "@/components/ui/back-link";
 import { PageHeader } from "@/components/ui/page-header";
@@ -13,6 +15,7 @@ export default async function FormEntriesPage({ params }: { params: Promise<{ id
   const { id } = await params;
   const data = await listSubmissions(session, id);
   if (!data) notFound();
+  const lookups = await getLookups(session.companyId, neededSources(data.form.schema.fields));
 
   return (
     <div>
@@ -29,6 +32,7 @@ export default async function FormEntriesPage({ params }: { params: Promise<{ id
         rows={data.rows}
         canDeleteAny={data.canManage}
         showSubmitter={data.canViewAll}
+        lookups={lookups}
       />
     </div>
   );

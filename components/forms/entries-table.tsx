@@ -3,7 +3,8 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { deleteSubmission } from "@/lib/forms/actions";
-import { answerToText, isInputField, type FieldDef } from "@/lib/forms/types";
+import { answerToText, isInputField, type FieldDef, type Lookups } from "@/lib/forms/types";
+import { EntryDetailModal } from "@/components/forms/entry-detail-modal";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -40,12 +41,14 @@ export function EntriesTable({
   rows,
   canDeleteAny,
   showSubmitter,
+  lookups,
 }: {
   formTitle: string;
   fields: FieldDef[];
   rows: Row[];
   canDeleteAny: boolean;
   showSubmitter: boolean;
+  lookups?: Lookups;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -56,6 +59,7 @@ export function EntriesTable({
   const [pageSize, setPageSize] = useState(25);
   const [page, setPage] = useState(0);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [view, setView] = useState<Row | null>(null);
 
   const inputCols = useMemo(() => fields.filter((f) => isInputField(f.type)), [fields]);
 
@@ -110,6 +114,9 @@ export function EntriesTable({
     return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]));
   }, [groupKey, sorted, cols]);
 
+  // When grouped by a column, don't repeat that column inside each group's rows.
+  const groupedCols = useMemo(() => cols.filter((c) => c.key !== groupKey), [cols, groupKey]);
+
   const total = sorted.length;
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
   const curPage = Math.min(page, pageCount - 1);
@@ -151,10 +158,10 @@ export function EntriesTable({
     });
   }
 
-  const header = (sortable: boolean) => (
+  const header = (sortable: boolean, columns: Col[]) => (
     <thead className="border-b border-line bg-canvas/40 text-xs uppercase tracking-wide text-faint">
       <tr>
-        {cols.map((c) => (
+        {columns.map((c) => (
           <th key={c.key} className="whitespace-nowrap px-4 py-2.5 font-medium">
             {sortable ? (
               <button onClick={() => toggleSort(c.key)} className="inline-flex items-center gap-1 hover:text-content">
@@ -171,11 +178,11 @@ export function EntriesTable({
     </thead>
   );
 
-  const body = (data: Row[]) => (
+  const body = (data: Row[], columns: Col[]) => (
     <tbody className="divide-y divide-line">
       {data.map((r) => (
-        <tr key={r.id} className="hover:bg-canvas">
-          {cols.map((c) => (
+        <tr key={r.id} onClick={() => setView(r)} className="cursor-pointer hover:bg-canvas">
+          {columns.map((c) => (
             <td
               key={c.key}
               title={c.display(r)}
@@ -194,7 +201,10 @@ export function EntriesTable({
           <td className="px-4 py-2.5 text-right">
             {(canDeleteAny || r.mine) && (
               <button
-                onClick={() => remove(r.id)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  remove(r.id);
+                }}
                 disabled={pending}
                 className="rounded-lg p-1.5 text-faint hover:bg-surface hover:text-red-600 disabled:opacity-50"
                 title="Delete entry"
@@ -209,6 +219,7 @@ export function EntriesTable({
   );
 
   return (
+    <>
     <Card className="overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3">
         <div className="flex flex-wrap items-center gap-2">
@@ -263,8 +274,8 @@ export function EntriesTable({
                 {open && (
                   <div className="overflow-x-auto border-t border-line">
                     <table className="w-full text-left text-sm">
-                      {header(false)}
-                      {body(grows)}
+                      {header(false, groupedCols)}
+                      {body(grows, groupedCols)}
                     </table>
                   </div>
                 )}
@@ -276,8 +287,8 @@ export function EntriesTable({
         <>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
-              {header(true)}
-              {body(pageRows)}
+              {header(true, cols)}
+              {body(pageRows, cols)}
             </table>
           </div>
           {pageCount > 1 && (
@@ -309,5 +320,16 @@ export function EntriesTable({
         </>
       )}
     </Card>
+    {view && (
+      <EntryDetailModal
+        fields={fields}
+        entry={view}
+        lookups={lookups}
+        canEdit={canDeleteAny || view.mine}
+        showSubmitter={showSubmitter}
+        onClose={() => setView(null)}
+      />
+    )}
+    </>
   );
 }
