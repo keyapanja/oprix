@@ -176,6 +176,8 @@ model Company {
   payrollRuns      PayrollRun[]
   kbCategories     KbCategory[]
   ptSlabs          ProfessionalTaxSlab[]
+  forms            Form[]
+  formSubmissions  FormSubmission[]
 }
 
 // Company holidays — shown to every employee on the calendar.
@@ -1052,4 +1054,64 @@ model ActivityLog {
   createdAt  DateTime @default(now())
 
   @@index([companyId, entityType, entityId])
+}
+
+// ============================================================
+// FORM BUILDER (Module 12)
+// ============================================================
+
+enum FormStatus {
+  DRAFT
+  PUBLISHED
+  CLOSED
+}
+
+// A user-built form. Field definitions + per-field config (validation, options,
+// conditional rules, calculations, repeaters) live in `schema` as JSON, so new
+// field types never need a migration. Access is per-form: `audienceRoles` =
+// staff roles that can open/submit; `portalEnabled` = exposed to the client
+// portal; `viewAllRoles` = roles whose members see everyone's entries (others
+// see only their own). Only form:manage users (Super Admin always) build forms.
+model Form {
+  id            String     @id @default(cuid())
+  companyId     String
+  title         String
+  description   String?
+  status        FormStatus @default(DRAFT)
+  schema        Json // { fields: FieldDef[] } — see lib/forms/types.ts
+  audienceRoles Role[]     @default([])
+  viewAllRoles  Role[]     @default([])
+  portalEnabled Boolean    @default(false)
+  allowMultiple Boolean    @default(true) // can one person submit more than once?
+  createdById   String? // userId of the builder
+  deletedAt     DateTime?
+  deletedById   String? // userId who moved it to trash
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  company     Company          @relation(fields: [companyId], references: [id])
+  submissions FormSubmission[]
+
+  @@index([companyId])
+}
+
+// One filled-in entry. Answers live in `data`, keyed by field id (repeater rows
+// included). Exactly one of submittedByUserId / submittedByClientId is set.
+model FormSubmission {
+  id                  String    @id @default(cuid())
+  companyId           String
+  formId              String
+  data                Json // { [fieldId]: value }
+  submittedByUserId   String? // staff submitter (userId)
+  submittedByClientId String? // portal submitter (clientId)
+  deletedAt           DateTime?
+  deletedById         String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id])
+  form    Form    @relation(fields: [formId], references: [id])
+
+  @@index([companyId])
+  @@index([formId])
 }

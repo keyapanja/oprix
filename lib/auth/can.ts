@@ -21,6 +21,7 @@ export type Action =
   | "timesheet:approve"
   | "client:manage"
   | "kb:manage"
+  | "form:manage"
   | "report:view"
   | "self:service"
   | "portal:access";
@@ -30,7 +31,7 @@ export const DEFAULT_PERMISSIONS: Record<Role, Action[]> = {
     "org:manage", "roles:manage", "employee:manage", "employee:read",
     "attendance:manage", "leave:manage", "leave:approve", "payroll:manage",
     "project:manage", "task:manage", "timesheet:approve", "client:manage",
-    "kb:manage", "report:view", "self:service",
+    "kb:manage", "form:manage", "report:view", "self:service",
   ],
   HR_MANAGER: [
     "employee:manage", "employee:read", "attendance:manage", "leave:manage",
@@ -76,6 +77,7 @@ export const EDITABLE_ACTIONS: Action[] = [
   "task:manage",
   "client:manage",
   "kb:manage",
+  "form:manage",
   "payroll:manage",
   "org:manage",
 ];
@@ -92,6 +94,7 @@ export const ACTION_LABELS: Partial<Record<Action, { label: string; description:
   "task:manage": { label: "Manage tasks", description: "Create and move tasks" },
   "client:manage": { label: "Manage clients", description: "Clients and contacts" },
   "kb:manage": { label: "Manage knowledge base", description: "Articles and categories" },
+  "form:manage": { label: "Build forms", description: "Create forms and set who can access them" },
   "payroll:manage": { label: "Manage payroll", description: "Salary and payroll runs" },
   "org:manage": { label: "Organization settings", description: "Departments, locations, access" },
 };
