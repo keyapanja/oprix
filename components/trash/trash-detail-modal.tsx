@@ -25,12 +25,16 @@ export function TrashDetailModal({
   item,
   onClose,
   onRestore,
+  onPurge,
   restoring,
+  purging,
 }: {
   item: TrashItem;
   onClose: () => void;
   onRestore: () => void;
+  onPurge: () => void;
   restoring: boolean;
+  purging: boolean;
 }) {
   return (
     <Modal onClose={onClose} title="Trashed item">
@@ -56,16 +60,21 @@ export function TrashDetailModal({
           </dd>
         </dl>
 
-        <div className="flex justify-end gap-2 border-t border-line pt-3">
-          <button
-            onClick={onClose}
-            className="rounded-lg px-3 py-1.5 text-sm font-medium text-muted transition-colors hover:bg-canvas hover:text-content"
-          >
-            Close
-          </button>
-          <Button onClick={onRestore} disabled={restoring}>
-            {restoring ? "Restoring…" : "Restore"}
+        <div className="flex items-center justify-between gap-2 border-t border-line pt-3">
+          <Button variant="danger" onClick={onPurge} disabled={purging || restoring}>
+            {purging ? "Deleting…" : "Delete permanently"}
           </Button>
+          <div className="flex gap-2">
+            <button
+              onClick={onClose}
+              className="rounded-lg px-3 py-1.5 text-sm font-medium text-muted transition-colors hover:bg-canvas hover:text-content"
+            >
+              Close
+            </button>
+            <Button onClick={onRestore} disabled={restoring || purging}>
+              {restoring ? "Restoring…" : "Restore"}
+            </Button>
+          </div>
         </div>
       </div>
     </Modal>
