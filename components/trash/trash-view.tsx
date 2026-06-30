@@ -23,6 +23,7 @@ const TONE: Record<TrashType, "gray" | "green" | "amber" | "blue" | "red"> = {
   kb: "gray",
   holiday: "green",
   form: "blue",
+  formEntry: "gray",
 };
 
 export function TrashView({ items }: { items: TrashItem[] }) {

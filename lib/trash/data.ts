@@ -16,7 +16,8 @@ export type TrashType =
   | "announcement"
   | "kb"
   | "holiday"
-  | "form";
+  | "form"
+  | "formEntry";
 
 export type TrashDetail = { label: string; value: string };
 
@@ -47,7 +48,7 @@ function detail(label: string, value: string | null | undefined): TrashDetail | 
  * (the page + actions enforce the role).
  */
 export async function getTrash(companyId: string): Promise<TrashItem[]> {
-  const [projects, clients, employees, tasks, announcements, holidays, forms] = await Promise.all([
+  const [projects, clients, employees, tasks, announcements, holidays, forms, formEntries] = await Promise.all([
     prisma.project.findMany({
       where: { companyId, deletedAt: { not: null } },
       orderBy: { deletedAt: "desc" },
@@ -94,7 +95,38 @@ export async function getTrash(companyId: string): Promise<TrashItem[]> {
       orderBy: { deletedAt: "desc" },
       select: { id: true, title: true, description: true, status: true, deletedAt: true, deletedById: true },
     }),
+    prisma.formSubmission.findMany({
+      where: { companyId, deletedAt: { not: null } },
+      orderBy: { deletedAt: "desc" },
+      select: {
+        id: true,
+        createdAt: true,
+        deletedAt: true,
+        deletedById: true,
+        submittedByUserId: true,
+        submittedByClientId: true,
+        form: { select: { title: true } },
+      },
+    }),
   ]);
+
+  // Resolve form-entry submitter names (staff users + portal clients).
+  const subUserIds = [...new Set(formEntries.map((e) => e.submittedByUserId).filter((x): x is string => !!x))];
+  const subClientIds = [...new Set(formEntries.map((e) => e.submittedByClientId).filter((x): x is string => !!x))];
+  const [subUsers, subClients] = await Promise.all([
+    subUserIds.length
+      ? prisma.user.findMany({ where: { id: { in: subUserIds } }, select: { id: true, email: true, employee: { select: { fullName: true } } } })
+      : Promise.resolve([]),
+    subClientIds.length
+      ? prisma.client.findMany({ where: { id: { in: subClientIds } }, select: { id: true, name: true } })
+      : Promise.resolve([]),
+  ]);
+  const subUserName = new Map(subUsers.map((u) => [u.id, u.employee?.fullName ?? u.email]));
+  const subClientName = new Map(subClients.map((c) => [c.id, c.name]));
+  const submitterOf = (e: (typeof formEntries)[number]): string =>
+    (e.submittedByUserId && subUserName.get(e.submittedByUserId)) ||
+    (e.submittedByClientId && `${subClientName.get(e.submittedByClientId) ?? "Client"} (client)`) ||
+    "—";
 
   const items: TrashItem[] = [
     ...projects.map((p) => ({
@@ -198,6 +230,21 @@ export async function getTrash(companyId: string): Promise<TrashItem[]> {
       ].filter(Boolean) as TrashDetail[],
       deletedAt: f.deletedAt!.toISOString(),
       deletedById: f.deletedById,
+      deletedByName: null,
+    })),
+    ...formEntries.map((e) => ({
+      type: "formEntry" as const,
+      typeLabel: "Form entry",
+      id: e.id,
+      label: `Entry — ${e.form?.title ?? "form"}`,
+      sublabel: submitterOf(e),
+      details: [
+        detail("Form", e.form?.title),
+        detail("Submitted by", submitterOf(e)),
+        detail("Submitted on", formatDate(e.createdAt)),
+      ].filter(Boolean) as TrashDetail[],
+      deletedAt: e.deletedAt!.toISOString(),
+      deletedById: e.deletedById,
       deletedByName: null,
     })),
   ];

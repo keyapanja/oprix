@@ -17,6 +17,7 @@ const TONE: Record<TrashType, "gray" | "green" | "amber" | "blue" | "red"> = {
   kb: "gray",
   holiday: "green",
   form: "blue",
+  formEntry: "gray",
 };
 
 /** Read-only detail popup for a single trashed item, with a Restore action. */
