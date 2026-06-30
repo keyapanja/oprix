@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Icon } from "@/components/ui/icons";
 import { BackLink } from "@/components/ui/back-link";
+import { LinkifiedText } from "@/components/ui/linkified-text";
 import { humanizeEnum, formatDate } from "@/lib/format";
 import { PROJECT_STATUS_TONE, PRIORITY_TONE } from "@/lib/status";
 import { ProgressBar } from "@/components/portal/progress-bar";
@@ -49,7 +50,9 @@ export default async function PortalProjectDetailPage({ params }: { params: Prom
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <h1 className="text-2xl font-bold tracking-tight text-content">{project.name}</h1>
-            {project.description && <p className="mt-2 max-w-2xl text-sm text-muted">{project.description}</p>}
+            {project.description && (
+              <LinkifiedText text={project.description} className="mt-2 max-w-2xl text-sm text-muted" />
+            )}
           </div>
           <div className="flex items-center gap-2">
             <Badge tone={PRIORITY_TONE[project.priority]}>{humanizeEnum(project.priority)}</Badge>

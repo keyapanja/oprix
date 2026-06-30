@@ -18,8 +18,35 @@ function escapeHtml(s: string): string {
     .replace(/'/g, "&#39;");
 }
 
+// Turn bare http(s)/www URLs into new-tab links, skipping anything already
+// inside an <a>…</a> or <code>…</code>. Input is already HTML-escaped, so a URL
+// can contain neither '<' nor a literal '"' — the inserted href can't break out.
+function autolinkBareUrls(html: string): string {
+  return html
+    .split(/(<a\b[^>]*>.*?<\/a>|<code\b[^>]*>.*?<\/code>)/gi)
+    .map((seg, i) => {
+      if (i % 2 === 1) return seg; // a captured <a>/<code> chunk — leave intact
+      return seg.replace(/(^|[\s(])((?:https?:\/\/|www\.)[^\s<]+)/gi, (_full, pre, raw) => {
+        let core = raw as string;
+        let trail = "";
+        const punct = core.match(/[.,;:!?]+$/);
+        if (punct) {
+          trail = punct[0];
+          core = core.slice(0, -trail.length);
+        }
+        if (core.endsWith(")") && !core.includes("(")) {
+          core = core.slice(0, -1);
+          trail = ")" + trail;
+        }
+        const href = /^www\./i.test(core) ? `https://${core}` : core;
+        return `${pre}<a href="${href}" class="text-accent-strong underline" target="_blank" rel="noopener noreferrer">${core}</a>${trail}`;
+      });
+    })
+    .join("");
+}
+
 function inline(s: string): string {
-  return s
+  const withMarkup = s
     .replace(/`([^`]+)`/g, '<code class="rounded bg-canvas px-1 py-0.5 text-[0.85em]">$1</code>')
     .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
     .replace(/(^|[^*])\*([^*\s][^*]*?)\*/g, "$1<em>$2</em>")
@@ -27,6 +54,7 @@ function inline(s: string): string {
       /\[([^\]]+)\]\((https?:\/\/[^\s)]+|\/[^\s)]*)\)/g,
       '<a href="$2" class="text-accent-strong underline" target="_blank" rel="noopener noreferrer">$1</a>',
     );
+  return autolinkBareUrls(withMarkup);
 }
 
 export function renderMarkdown(md: string): string {

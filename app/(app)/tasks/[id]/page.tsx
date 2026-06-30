@@ -14,6 +14,7 @@ import { PRIORITY_TONE, TASK_STATUS_TONE, TASK_STATUS_LABEL } from "@/lib/status
 import { TaskAssignees } from "@/components/tasks/task-assignees";
 import { TaskChecklist } from "@/components/tasks/task-checklist";
 import { AttachmentsPanel } from "@/components/attachments/attachments-panel";
+import { LinkifiedText } from "@/components/ui/linkified-text";
 import { TaskEdit } from "@/components/tasks/task-edit";
 import { TaskDuplicate } from "@/components/tasks/task-duplicate";
 import { TaskStatusEditor } from "@/components/tasks/task-status-editor";
@@ -211,7 +212,7 @@ export default async function TaskDetailPage({
           </div>
         </div>
         {task.description && (
-          <p className="mt-3 whitespace-pre-wrap border-t border-line pt-3 text-sm text-muted">{task.description}</p>
+          <LinkifiedText text={task.description} className="mt-3 border-t border-line pt-3 text-sm text-muted" />
         )}
       </Card>
 

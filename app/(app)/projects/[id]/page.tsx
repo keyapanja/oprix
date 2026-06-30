@@ -14,6 +14,7 @@ import { ProjectStatusControl } from "@/components/projects/project-status";
 import { ProjectEdit } from "@/components/projects/project-edit";
 import { ProjectServices } from "@/components/projects/project-services";
 import { AttachmentsPanel } from "@/components/attachments/attachments-panel";
+import { LinkifiedText } from "@/components/ui/linkified-text";
 import { BackLink } from "@/components/ui/back-link";
 import type { KanbanTask } from "@/lib/projects/actions";
 
@@ -114,7 +115,7 @@ export default async function ProjectDetailPage({
               )}
             </p>
             {project.description && (
-              <p className="mt-3 max-w-2xl text-sm text-muted">{project.description}</p>
+              <LinkifiedText text={project.description} className="mt-3 max-w-2xl text-sm text-muted" />
             )}
           </div>
           <div className="flex items-center gap-2">
