@@ -5,7 +5,7 @@ import { Combobox } from "@/components/ui/combobox";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Icon } from "@/components/ui/icons";
 import { cn } from "@/lib/cn";
-import { isVisible } from "@/lib/forms/types";
+import { computeCalc, formatCalc, isVisible } from "@/lib/forms/types";
 import type { FieldDef, FieldValue, Lookups, RepeaterRows, ScalarValue } from "@/lib/forms/types";
 
 export type { FieldValue } from "@/lib/forms/types";
@@ -90,6 +90,15 @@ export function FieldInput({
           options={opts.map((o) => ({ value: o.label, label: o.label }))} />
       );
       break;
+    case "calculation": {
+      const shown = typeof value === "string" ? value : value == null ? "" : String(value);
+      control = (
+        <div className="flex h-10 items-center rounded-xl bg-canvas px-3.5 text-sm font-semibold text-content ring-1 ring-inset ring-line">
+          {shown || "—"}
+        </div>
+      );
+      break;
+    }
     case "reference": {
       const list = lookups?.[field.source ?? "clients"] ?? [];
       control = (
@@ -182,8 +191,13 @@ export function FieldInput({
                   .filter((sf) => isVisible(sf, row as Record<string, unknown>))
                   .map((sf) => (
                   <div key={sf.id} className={cn((sf.width ?? "full") === "half" ? "sm:col-span-1" : "sm:col-span-2")}>
-                    <FieldInput field={sf} value={row[sf.id]} disabled={disabled} lookups={lookups}
-                      onChange={(v) => updateRow(i, sf.id, v as ScalarValue)} />
+                    <FieldInput
+                      field={sf}
+                      value={sf.type === "calculation" ? formatCalc(sf, computeCalc(sf, subs, row as Record<string, unknown>)) : row[sf.id]}
+                      disabled={disabled}
+                      lookups={lookups}
+                      onChange={(v) => updateRow(i, sf.id, v as ScalarValue)}
+                    />
                   </div>
                 ))}
               </div>

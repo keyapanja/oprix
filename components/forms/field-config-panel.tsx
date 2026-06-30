@@ -6,6 +6,7 @@ import { Icon } from "@/components/ui/icons";
 import { cn } from "@/lib/cn";
 import { hasOptions, isInputField, newId, type CondOp, type FieldDef, type FieldOption, type RefSource } from "@/lib/forms/types";
 import { RepeaterFieldsEditor } from "@/components/forms/repeater-fields-editor";
+import { FormulaEditor } from "@/components/forms/formula-editor";
 
 const TEXTY = new Set(["text", "textarea", "number", "email", "phone", "dropdown", "reference"]);
 const SOURCE_OPTS = [
@@ -40,6 +41,18 @@ export function FieldConfigPanel({
   const choice = hasOptions(field.type);
   const cond = field.visibleWhen;
   const condFields = siblings.filter((s) => s.id !== field.id && isInputField(s.type));
+
+  // Insertable tokens for a calculation's formula: number/calc fields, plus Σ
+  // tokens that sum a repeater column.
+  const calcTokens: { value: string; label: string }[] = [];
+  for (const s of siblings) {
+    if (s.id === field.id) continue;
+    if (s.type === "number" || s.type === "calculation") calcTokens.push({ value: `{${s.id}}`, label: s.label || "(field)" });
+    if (s.type === "repeater")
+      for (const sub of s.subFields ?? [])
+        if (sub.type === "number" || sub.type === "calculation")
+          calcTokens.push({ value: `{${s.id}.${sub.id}}`, label: `Σ ${s.label || "repeater"} › ${sub.label || "field"}` });
+  }
 
   function setOption(i: number, label: string) {
     const next = [...(field.options ?? [])];
@@ -119,6 +132,16 @@ export function FieldConfigPanel({
 
       {field.type === "repeater" && (
         <RepeaterFieldsEditor subFields={field.subFields ?? []} onChange={(subFields) => onChange({ subFields })} />
+      )}
+
+      {field.type === "calculation" && (
+        <FormulaEditor
+          formula={field.formula ?? ""}
+          decimals={field.decimals}
+          tokens={calcTokens}
+          onFormula={(s) => onChange({ formula: s })}
+          onDecimals={(n) => onChange({ decimals: n })}
+        />
       )}
 
       {choice && (
@@ -219,15 +242,17 @@ export function FieldConfigPanel({
 
       {input && (
         <div className="space-y-2 border-t border-line pt-3">
-          <label className="flex items-center justify-between text-sm text-content">
-            Required
-            <input
-              type="checkbox"
-              checked={!!field.required}
-              onChange={(e) => onChange({ required: e.target.checked })}
-              className="size-4 rounded border-line-strong text-brand-600 focus:ring-brand-500"
-            />
-          </label>
+          {field.type !== "calculation" && (
+            <label className="flex items-center justify-between text-sm text-content">
+              Required
+              <input
+                type="checkbox"
+                checked={!!field.required}
+                onChange={(e) => onChange({ required: e.target.checked })}
+                className="size-4 rounded border-line-strong text-brand-600 focus:ring-brand-500"
+              />
+            </label>
+          )}
           <div className="flex items-center justify-between text-sm text-content">
             <span>Width</span>
             <div className="flex gap-1">

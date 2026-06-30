@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icons";
 import { toast } from "@/components/ui/toast";
 import { FieldInput, type FieldValue } from "@/components/forms/field-input";
-import { isInputField, isVisible, type FieldDef, type Lookups } from "@/lib/forms/types";
+import { computeCalc, formatCalc, isInputField, isVisible, type FieldDef, type Lookups } from "@/lib/forms/types";
 import { cn } from "@/lib/cn";
 
 type SubmitResult = { ok?: boolean; error?: string; fieldErrors?: Record<string, string> };
@@ -97,7 +97,11 @@ export function FormFill({
             <div key={f.id} className={cn((f.width ?? "full") === "half" ? "sm:col-span-1" : "sm:col-span-2")}>
               <FieldInput
                 field={f}
-                value={values[f.id]}
+                value={
+                  f.type === "calculation"
+                    ? formatCalc(f, computeCalc(f, fields, values as Record<string, unknown>))
+                    : values[f.id]
+                }
                 onChange={(v) => setValue(f.id, v)}
                 error={errors[f.id]}
                 lookups={lookups}

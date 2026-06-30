@@ -3,6 +3,7 @@
 import { Combobox } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
 import { Icon } from "@/components/ui/icons";
+import { FormulaEditor } from "@/components/forms/formula-editor";
 import { cn } from "@/lib/cn";
 import {
   REPEATER_SUBTYPES,
@@ -77,16 +78,32 @@ export function RepeaterFieldsEditor({
               </div>
             )}
 
-            <div className="mt-2 flex items-center gap-3 text-xs text-content">
-              <label className="flex items-center gap-1.5">
-                <input
-                  type="checkbox"
-                  checked={!!sf.required}
-                  onChange={(e) => update(i, { required: e.target.checked })}
-                  className="size-3.5 rounded border-line-strong text-brand-600 focus:ring-brand-500"
+            {sf.type === "calculation" && (
+              <div className="mt-2">
+                <FormulaEditor
+                  formula={sf.formula ?? ""}
+                  decimals={sf.decimals}
+                  tokens={subs
+                    .filter((x, xi) => xi !== i && (x.type === "number" || x.type === "calculation"))
+                    .map((x) => ({ value: `{${x.id}}`, label: x.label || "(field)" }))}
+                  onFormula={(s) => update(i, { formula: s })}
+                  onDecimals={(n) => update(i, { decimals: n })}
                 />
-                Required
-              </label>
+              </div>
+            )}
+
+            <div className="mt-2 flex items-center gap-3 text-xs text-content">
+              {sf.type !== "calculation" && (
+                <label className="flex items-center gap-1.5">
+                  <input
+                    type="checkbox"
+                    checked={!!sf.required}
+                    onChange={(e) => update(i, { required: e.target.checked })}
+                    className="size-3.5 rounded border-line-strong text-brand-600 focus:ring-brand-500"
+                  />
+                  Required
+                </label>
+              )}
               <div className="ml-auto flex gap-1">
                 {(["full", "half"] as const).map((w) => (
                   <button

@@ -22,6 +22,7 @@ export type FieldType =
   | "yesno"
   | "reference"
   | "repeater"
+  | "calculation"
   | "heading"
   | "paragraph";
 
@@ -88,6 +89,7 @@ export const FIELD_CATALOG: FieldMeta[] = [
   { type: "yesno", label: "Yes / No", icon: "toggle", hasOptions: false, input: true },
   { type: "reference", label: "Dynamic list", icon: "userGroup", hasOptions: false, input: true },
   { type: "repeater", label: "Repeater", icon: "copy", hasOptions: false, input: true },
+  { type: "calculation", label: "Calculation", icon: "equals", hasOptions: false, input: true },
   { type: "heading", label: "Section heading", icon: "heading", hasOptions: false, input: false },
   { type: "paragraph", label: "Description text", icon: "text", hasOptions: false, input: false },
 ];
@@ -100,7 +102,7 @@ export const hasOptions = (t: FieldType): boolean => fieldMeta(t).hasOptions;
 /** Field types a repeater row may contain (no nesting, no display blocks). */
 export const REPEATER_SUBTYPES: FieldType[] = [
   "text", "textarea", "number", "email", "phone", "date", "daterange",
-  "dropdown", "multiselect", "radio", "checkbox", "yesno", "reference",
+  "dropdown", "multiselect", "radio", "checkbox", "yesno", "reference", "calculation",
 ];
 
 // ---- Factories (builder, client-side) -------------------------------------
@@ -124,6 +126,7 @@ export function makeField(type: FieldType): FieldDef {
   }
   if (type === "reference") base.source = "clients";
   if (type === "repeater") base.subFields = [{ id: newId(), type: "text", label: "Item", required: false, width: "full" }];
+  if (type === "calculation") base.formula = "";
   return base;
 }
 
@@ -150,7 +153,7 @@ const SourceZ = z.enum(["clients", "projects", "employees"]);
 const TypeZ = z.enum([
   "text", "textarea", "number", "email", "phone", "date", "daterange",
   "dropdown", "multiselect", "radio", "checkbox", "yesno", "reference",
-  "repeater", "heading", "paragraph",
+  "repeater", "calculation", "heading", "paragraph",
 ]);
 
 const FieldDefZ: z.ZodType<FieldDef> = z.lazy(() =>
@@ -219,6 +222,116 @@ export function isVisible(field: FieldDef, values: Record<string, unknown>): boo
   }
 }
 
+// ---- Auto-calculation -----------------------------------------------------
+
+// Tiny recursive-descent arithmetic evaluator. NO eval/Function (CSP-safe). Only
+// + - * / ( ) and numbers; {refs} in the formula are pre-substituted with values.
+function parseArith(s: string): number {
+  let i = 0;
+  const ws = () => {
+    while (i < s.length && s[i] === " ") i++;
+  };
+  function factor(): number {
+    ws();
+    if (s[i] === "(") {
+      i++;
+      const v = expr();
+      ws();
+      if (s[i] === ")") i++;
+      return v;
+    }
+    if (s[i] === "-") {
+      i++;
+      return -factor();
+    }
+    if (s[i] === "+") {
+      i++;
+      return factor();
+    }
+    const start = i;
+    while (i < s.length && /[\d.]/.test(s[i])) i++;
+    return parseFloat(s.slice(start, i)) || 0;
+  }
+  function term(): number {
+    let v = factor();
+    ws();
+    while (s[i] === "*" || s[i] === "/") {
+      const op = s[i++];
+      const r = factor();
+      v = op === "*" ? v * r : r === 0 ? 0 : v / r;
+      ws();
+    }
+    return v;
+  }
+  function expr(): number {
+    let v = term();
+    ws();
+    while (s[i] === "+" || s[i] === "-") {
+      const op = s[i++];
+      const r = term();
+      v = op === "+" ? v + r : v - r;
+      ws();
+    }
+    return v;
+  }
+  return expr();
+}
+
+/** Evaluate a formula like "{qty} * {price}", with {refs} resolved to numbers. */
+export function evalFormula(formula: string, resolve: (ref: string) => number): number | null {
+  if (!formula || !formula.trim()) return null;
+  const expr = formula.replace(/\{([^}]+)\}/g, (_m, ref) => {
+    const n = resolve(String(ref).trim());
+    return Number.isFinite(n) ? `(${n})` : "(0)";
+  });
+  if (!/^[\d.+\-*/()\s]*$/.test(expr)) return null; // anything unresolved/odd → bail
+  try {
+    const val = parseArith(expr);
+    return Number.isFinite(val) ? val : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Compute a calculation field from the current answers. Refs: `{fieldId}` =
+ * that field's number; `{repeaterId.subId}` = the sum of that column across the
+ * repeater's rows. Recurses into calc refs with a cycle guard.
+ */
+export function computeCalc(
+  field: FieldDef,
+  fields: FieldDef[],
+  values: Record<string, unknown>,
+  seen: Set<string> = new Set(),
+): number | null {
+  if (seen.has(field.id)) return 0;
+  const next = new Set(seen).add(field.id);
+  const resolve = (ref: string): number => {
+    if (ref.includes(".")) {
+      const [repId, subId] = ref.split(".");
+      const rep = fields.find((f) => f.id === repId && f.type === "repeater");
+      const subs = rep?.subFields ?? [];
+      const sub = subs.find((f) => f.id === subId);
+      const rows = Array.isArray(values[repId]) ? (values[repId] as Record<string, unknown>[]) : [];
+      return rows.reduce((sum, row) => {
+        const v = sub?.type === "calculation" ? (computeCalc(sub, subs, row, next) ?? 0) : Number(row[subId]) || 0;
+        return sum + v;
+      }, 0);
+    }
+    const f = fields.find((x) => x.id === ref);
+    if (f?.type === "calculation") return computeCalc(f, fields, values, next) ?? 0;
+    return Number(values[ref]) || 0;
+  };
+  return evalFormula(field.formula ?? "", resolve);
+}
+
+/** Format a computed value for display/storage (honours `decimals`). */
+export function formatCalc(field: FieldDef, n: number | null): string {
+  if (n == null || !Number.isFinite(n)) return "";
+  const d = field.decimals;
+  return d != null && d >= 0 ? n.toFixed(d) : String(Math.round(n * 1e6) / 1e6);
+}
+
 export type AnswerErrors = Record<string, string>;
 
 /**
@@ -236,6 +349,7 @@ export function validateAnswers(
   for (const f of fields) {
     if (!isInputField(f.type)) continue;
     if (!isVisible(f, raw)) continue; // hidden by a condition → not stored, not required
+    if (f.type === "calculation") continue; // computed in the second pass, below
     const v = raw[f.id];
 
     if (f.type === "checkbox" || f.type === "multiselect") {
@@ -312,6 +426,13 @@ export function validateAnswers(
       if (!f.options.some((o) => o.label === s)) errors[f.id] = "Pick one of the options.";
     }
     clean[f.id] = s.slice(0, 5000);
+  }
+
+  // Second pass: compute visible calculation fields from the cleaned values
+  // (server-authoritative — the client's number is never trusted).
+  for (const f of fields) {
+    if (f.type !== "calculation" || !isVisible(f, raw)) continue;
+    clean[f.id] = formatCalc(f, computeCalc(f, fields, clean));
   }
 
   return { ok: Object.keys(errors).length === 0, errors, clean };
