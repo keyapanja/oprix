@@ -7,9 +7,11 @@ import { answerToText, isInputField, type FieldDef } from "@/lib/forms/types";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Combobox } from "@/components/ui/combobox";
 import { Icon } from "@/components/ui/icons";
 import { toast } from "@/components/ui/toast";
 import { confirmDialog } from "@/components/ui/confirm";
+import { cn } from "@/lib/cn";
 
 type Row = {
   id: string;
@@ -18,6 +20,15 @@ type Row = {
   mine: boolean;
   createdAt: string;
 };
+
+type Col = {
+  key: string;
+  label: string;
+  display: (r: Row) => string;
+  sortVal: (r: Row) => string | number;
+};
+
+const PAGE_SIZES = [10, 25, 50, 100];
 
 function csvCell(v: string): string {
   return /[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
@@ -28,34 +39,94 @@ export function EntriesTable({
   fields,
   rows,
   canDeleteAny,
+  showSubmitter,
 }: {
   formTitle: string;
   fields: FieldDef[];
   rows: Row[];
   canDeleteAny: boolean;
+  showSubmitter: boolean;
 }) {
   const router = useRouter();
-  const cols = useMemo(() => fields.filter((f) => isInputField(f.type)), [fields]);
-  const [q, setQ] = useState("");
   const [pending, start] = useTransition();
+  const [q, setQ] = useState("");
+  const [sortKey, setSortKey] = useState("__date");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [groupKey, setGroupKey] = useState("");
+  const [pageSize, setPageSize] = useState(25);
+  const [page, setPage] = useState(0);
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+
+  const inputCols = useMemo(() => fields.filter((f) => isInputField(f.type)), [fields]);
+
+  const cols: Col[] = useMemo(() => {
+    const list: Col[] = [];
+    if (showSubmitter)
+      list.push({ key: "__submitter", label: "Submitted by", display: (r) => r.submitterName, sortVal: (r) => r.submitterName.toLowerCase() });
+    list.push({ key: "__date", label: "Date", display: (r) => new Date(r.createdAt).toLocaleString(), sortVal: (r) => r.createdAt });
+    for (const f of inputCols) {
+      const numeric = f.type === "number" || f.type === "calculation";
+      list.push({
+        key: f.id,
+        label: f.label,
+        display: (r) => answerToText(f, r.data[f.id]),
+        sortVal: (r) => (numeric ? Number(answerToText(f, r.data[f.id])) || 0 : answerToText(f, r.data[f.id]).toLowerCase()),
+      });
+    }
+    return list;
+  }, [inputCols, showSubmitter]);
 
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
     if (!s) return rows;
-    return rows.filter(
-      (r) =>
-        r.submitterName.toLowerCase().includes(s) ||
-        cols.some((c) => answerToText(c, r.data[c.id]).toLowerCase().includes(s)),
-    );
+    return rows.filter((r) => cols.some((c) => c.display(r).toLowerCase().includes(s)));
   }, [rows, q, cols]);
 
+  const sorted = useMemo(() => {
+    const col = cols.find((c) => c.key === sortKey) ?? cols[0];
+    const dir = sortDir === "asc" ? 1 : -1;
+    return [...filtered].sort((a, b) => {
+      const av = col.sortVal(a);
+      const bv = col.sortVal(b);
+      return av < bv ? -dir : av > bv ? dir : 0;
+    });
+  }, [filtered, cols, sortKey, sortDir]);
+
+  const groupOptions = useMemo(() => {
+    const opts = [{ value: "", label: "No grouping" }];
+    if (showSubmitter) opts.push({ value: "__submitter", label: "Submitter" });
+    for (const f of inputCols) opts.push({ value: f.id, label: f.label });
+    return opts;
+  }, [inputCols, showSubmitter]);
+
+  const groups = useMemo(() => {
+    if (!groupKey) return [] as [string, Row[]][];
+    const col = cols.find((c) => c.key === groupKey);
+    const m = new Map<string, Row[]>();
+    for (const r of sorted) {
+      const key = (col ? col.display(r) : "") || "—";
+      (m.get(key) ?? m.set(key, []).get(key)!).push(r);
+    }
+    return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  }, [groupKey, sorted, cols]);
+
+  const total = sorted.length;
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  const curPage = Math.min(page, pageCount - 1);
+  const pageRows = sorted.slice(curPage * pageSize, curPage * pageSize + pageSize);
+
+  function toggleSort(key: string) {
+    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+    setPage(0);
+  }
+
   function exportCsv() {
-    const header = ["Submitted by", "Date", ...cols.map((c) => c.label)];
-    const body = filtered.map((r) => [
-      r.submitterName,
-      new Date(r.createdAt).toLocaleString(),
-      ...cols.map((c) => answerToText(c, r.data[c.id])),
-    ]);
+    const header = cols.map((c) => c.label);
+    const body = sorted.map((r) => cols.map((c) => c.display(r)));
     const csv = [header, ...body].map((row) => row.map((cell) => csvCell(String(cell ?? ""))).join(",")).join("\r\n");
     const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -67,7 +138,7 @@ export function EntriesTable({
   }
 
   async function remove(id: string) {
-    const ok = await confirmDialog({ message: "Delete this entry? This can't be undone.", tone: "danger", confirmLabel: "Delete" });
+    const ok = await confirmDialog({ message: "Delete this entry? It moves to Trash.", tone: "danger", confirmLabel: "Delete" });
     if (!ok) return;
     start(async () => {
       const res = await deleteSubmission(id);
@@ -80,63 +151,162 @@ export function EntriesTable({
     });
   }
 
+  const header = (sortable: boolean) => (
+    <thead className="border-b border-line bg-canvas/40 text-xs uppercase tracking-wide text-faint">
+      <tr>
+        {cols.map((c) => (
+          <th key={c.key} className="whitespace-nowrap px-4 py-2.5 font-medium">
+            {sortable ? (
+              <button onClick={() => toggleSort(c.key)} className="inline-flex items-center gap-1 hover:text-content">
+                {c.label}
+                {sortKey === c.key && <Icon name="chevronDown" className={cn("size-3.5", sortDir === "asc" && "rotate-180")} />}
+              </button>
+            ) : (
+              c.label
+            )}
+          </th>
+        ))}
+        <th className="px-4 py-2.5" />
+      </tr>
+    </thead>
+  );
+
+  const body = (data: Row[]) => (
+    <tbody className="divide-y divide-line">
+      {data.map((r) => (
+        <tr key={r.id} className="hover:bg-canvas">
+          {cols.map((c) => (
+            <td
+              key={c.key}
+              title={c.display(r)}
+              className={cn(
+                "px-4 py-2.5",
+                c.key === "__submitter"
+                  ? "whitespace-nowrap font-medium text-content"
+                  : c.key === "__date"
+                    ? "whitespace-nowrap text-muted"
+                    : "max-w-xs truncate text-content",
+              )}
+            >
+              {c.display(r) || "—"}
+            </td>
+          ))}
+          <td className="px-4 py-2.5 text-right">
+            {(canDeleteAny || r.mine) && (
+              <button
+                onClick={() => remove(r.id)}
+                disabled={pending}
+                className="rounded-lg p-1.5 text-faint hover:bg-surface hover:text-red-600 disabled:opacity-50"
+                title="Delete entry"
+              >
+                <Icon name="trash" className="size-4" />
+              </button>
+            )}
+          </td>
+        </tr>
+      ))}
+    </tbody>
+  );
+
   return (
     <Card className="overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3">
-        <div className="w-56 max-w-full">
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search entries…" />
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="w-52 max-w-full">
+            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search entries…" />
+          </div>
+          <div className="w-44">
+            <Combobox value={groupKey} onChange={(v) => { setGroupKey(v); setPage(0); }} options={groupOptions} placeholder="Group by…" />
+          </div>
+          {!groupKey && (
+            <div className="w-32">
+              <Combobox
+                value={String(pageSize)}
+                onChange={(v) => { setPageSize(Number(v)); setPage(0); }}
+                options={PAGE_SIZES.map((n) => ({ value: String(n), label: `${n} / page` }))}
+              />
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-sm text-muted">{filtered.length} entr{filtered.length === 1 ? "y" : "ies"}</span>
-          <Button variant="secondary" size="sm" onClick={exportCsv} disabled={filtered.length === 0}>
+          <span className="text-sm text-muted">{total} entr{total === 1 ? "y" : "ies"}</span>
+          <Button variant="secondary" size="sm" onClick={exportCsv} disabled={total === 0}>
             <Icon name="download" className="size-4" />
             CSV
           </Button>
         </div>
       </div>
 
-      {filtered.length === 0 ? (
-        <p className="px-5 py-16 text-center text-sm text-muted">No entries yet.</p>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-line text-xs uppercase tracking-wide text-faint">
-              <tr>
-                <th className="whitespace-nowrap px-4 py-2.5 font-medium">Submitted by</th>
-                <th className="whitespace-nowrap px-4 py-2.5 font-medium">Date</th>
-                {cols.map((c) => (
-                  <th key={c.id} className="whitespace-nowrap px-4 py-2.5 font-medium">{c.label}</th>
-                ))}
-                <th className="px-4 py-2.5" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-line">
-              {filtered.map((r) => (
-                <tr key={r.id} className="hover:bg-canvas">
-                  <td className="whitespace-nowrap px-4 py-2.5 font-medium text-content">{r.submitterName}</td>
-                  <td className="whitespace-nowrap px-4 py-2.5 text-muted">{new Date(r.createdAt).toLocaleString()}</td>
-                  {cols.map((c) => (
-                    <td key={c.id} className="max-w-xs truncate px-4 py-2.5 text-content" title={answerToText(c, r.data[c.id])}>
-                      {answerToText(c, r.data[c.id]) || "—"}
-                    </td>
-                  ))}
-                  <td className="px-4 py-2.5 text-right">
-                    {(canDeleteAny || r.mine) && (
-                      <button
-                        onClick={() => remove(r.id)}
-                        disabled={pending}
-                        className="rounded-lg p-1.5 text-faint hover:bg-surface hover:text-red-600 disabled:opacity-50"
-                        title="Delete entry"
-                      >
-                        <Icon name="trash" className="size-4" />
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {total === 0 ? (
+        <p className="px-5 py-16 text-center text-sm text-muted">No entries here.</p>
+      ) : groupKey ? (
+        <div className="divide-y divide-line">
+          {groups.map(([gval, grows]) => {
+            const open = !collapsed.has(gval);
+            return (
+              <div key={gval}>
+                <button
+                  onClick={() =>
+                    setCollapsed((s) => {
+                      const n = new Set(s);
+                      if (n.has(gval)) n.delete(gval);
+                      else n.add(gval);
+                      return n;
+                    })
+                  }
+                  className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm font-medium text-content hover:bg-canvas"
+                >
+                  <Icon name="chevronDown" className={cn("size-4 text-faint transition-transform", !open && "-rotate-90")} />
+                  <span className="truncate">{gval}</span>
+                  <span className="text-xs text-muted">({grows.length})</span>
+                </button>
+                {open && (
+                  <div className="overflow-x-auto border-t border-line">
+                    <table className="w-full text-left text-sm">
+                      {header(false)}
+                      {body(grows)}
+                    </table>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
+      ) : (
+        <>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              {header(true)}
+              {body(pageRows)}
+            </table>
+          </div>
+          {pageCount > 1 && (
+            <div className="flex items-center justify-between gap-3 border-t border-line px-4 py-2.5 text-sm text-muted">
+              <span>
+                {curPage * pageSize + 1}–{Math.min(total, (curPage + 1) * pageSize)} of {total}
+              </span>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setPage(curPage - 1)}
+                  disabled={curPage === 0}
+                  className="rounded-lg px-2.5 py-1 font-medium text-content hover:bg-canvas disabled:opacity-40"
+                >
+                  Prev
+                </button>
+                <span className="px-1 text-xs">
+                  {curPage + 1} / {pageCount}
+                </span>
+                <button
+                  onClick={() => setPage(curPage + 1)}
+                  disabled={curPage >= pageCount - 1}
+                  className="rounded-lg px-2.5 py-1 font-medium text-content hover:bg-canvas disabled:opacity-40"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </Card>
   );

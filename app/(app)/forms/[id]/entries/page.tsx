@@ -28,6 +28,7 @@ export default async function FormEntriesPage({ params }: { params: Promise<{ id
         fields={data.form.schema.fields}
         rows={data.rows}
         canDeleteAny={data.canManage}
+        showSubmitter={data.canViewAll}
       />
     </div>
   );

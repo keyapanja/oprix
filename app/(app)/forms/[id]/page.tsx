@@ -26,14 +26,12 @@ export default async function FillFormPage({ params }: { params: Promise<{ id: s
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <BackLink href="/forms">Back to forms</BackLink>
         <div className="flex items-center gap-2">
-          {(canManage || canViewAll) && (
-            <Link href={`/forms/${form.id}/entries`}>
-              <Button variant="secondary" size="sm">
-                <Icon name="chart" className="size-4" />
-                Entries
-              </Button>
-            </Link>
-          )}
+          <Link href={`/forms/${form.id}/entries`}>
+            <Button variant="secondary" size="sm">
+              <Icon name="chart" className="size-4" />
+              {canManage || canViewAll ? "Entries" : "My entries"}
+            </Button>
+          </Link>
           {canManage && (
             <Link href={`/forms/${form.id}/edit`}>
               <Button variant="secondary" size="sm">

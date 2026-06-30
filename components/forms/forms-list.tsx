@@ -65,24 +65,30 @@ export function FormsList({ forms, canManage }: { forms: Item[]; canManage: bool
             <span className="w-20 text-right text-xs text-muted">
               {f.submissions} entr{f.submissions === 1 ? "y" : "ies"}
             </span>
-            {canManage && (
-              <div className="flex items-center gap-1">
-                <Link href={`/forms/${f.id}/entries`} className="rounded-lg p-1.5 text-faint hover:bg-surface hover:text-content" title="Entries">
-                  <Icon name="chart" className="size-4" />
-                </Link>
-                <Link href={`/forms/${f.id}/edit`} className="rounded-lg p-1.5 text-faint hover:bg-surface hover:text-content" title="Edit">
-                  <Icon name="pencil" className="size-4" />
-                </Link>
-                <button
-                  onClick={() => remove(f.id, f.title)}
-                  disabled={pending}
-                  className="rounded-lg p-1.5 text-faint hover:bg-surface hover:text-red-600 disabled:opacity-50"
-                  title="Delete"
-                >
-                  <Icon name="trash" className="size-4" />
-                </button>
-              </div>
-            )}
+            <div className="flex items-center gap-1">
+              <Link
+                href={`/forms/${f.id}/entries`}
+                className="rounded-lg p-1.5 text-faint hover:bg-surface hover:text-content"
+                title={canManage ? "Entries" : "My entries"}
+              >
+                <Icon name="chart" className="size-4" />
+              </Link>
+              {canManage && (
+                <>
+                  <Link href={`/forms/${f.id}/edit`} className="rounded-lg p-1.5 text-faint hover:bg-surface hover:text-content" title="Edit">
+                    <Icon name="pencil" className="size-4" />
+                  </Link>
+                  <button
+                    onClick={() => remove(f.id, f.title)}
+                    disabled={pending}
+                    className="rounded-lg p-1.5 text-faint hover:bg-surface hover:text-red-600 disabled:opacity-50"
+                    title="Delete"
+                  >
+                    <Icon name="trash" className="size-4" />
+                  </button>
+                </>
+              )}
+            </div>
           </li>
         ))}
       </ul>
