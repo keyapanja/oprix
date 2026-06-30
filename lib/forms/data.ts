@@ -88,10 +88,15 @@ export type EntryRow = {
 export async function listSubmissions(
   session: SessionUser,
   formId: string,
-): Promise<{ form: { id: string; title: string; schema: FormSchema }; canViewAll: boolean; rows: EntryRow[] } | null> {
+): Promise<{
+  form: { id: string; title: string; schema: FormSchema };
+  canViewAll: boolean;
+  canManage: boolean;
+  rows: EntryRow[];
+} | null> {
   const access = await getFormForFill(session, formId);
   if (!access) return null;
-  const { form, canViewAll } = access;
+  const { form, canViewAll, canManage } = access;
 
   const rows = await prisma.formSubmission.findMany({
     where: {
@@ -131,6 +136,7 @@ export async function listSubmissions(
   return {
     form: { id: form.id, title: form.title, schema: form.schema },
     canViewAll,
+    canManage,
     rows: rows.map((r) => ({
       id: r.id,
       data: (r.data && typeof r.data === "object" ? r.data : {}) as Record<string, unknown>,

@@ -62,6 +62,12 @@ export const NAV: NavItem[] = [
     children: [{ label: "New article", href: "/knowledge-base/new" }],
   },
   {
+    label: "Forms",
+    href: "/forms",
+    icon: "formInput",
+    children: [{ label: "New form", href: "/forms/new", action: "form:manage" }],
+  },
+  {
     label: "Clients",
     href: "/clients",
     icon: "userGroup",
