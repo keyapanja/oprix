@@ -26,6 +26,8 @@ export type TaskRow = {
   priority: Priority;
   assigneeNames: string[];
   dueDate: string | null;
+  /** Client deadline (YYYY-MM-DD); the due date is auto-set a day before it. */
+  clientDeadline: string | null;
   /** Date the task was created/assigned (YYYY-MM-DD) — calendar spans from here to dueDate. */
   assignedDate: string | null;
   mine: boolean;
@@ -314,7 +316,7 @@ export function TasksTable({
               <td className="px-5 py-3"><Badge tone={PRIORITY_TONE[r.priority]}>{humanizeEnum(r.priority)}</Badge></td>
               <td className="px-5 py-3 text-muted">
                 {r.dueDate ? (
-                  <span className="inline-flex items-center">{formatDate(r.dueDate)}{r.status !== "HOLD" && <BackdateBadge date={r.dueDate} />}</span>
+                  <span className="inline-flex items-center">{formatDate(r.dueDate)}{r.status !== "HOLD" && <BackdateBadge date={r.clientDeadline ?? r.dueDate} assignedDate={r.assignedDate} />}</span>
                 ) : (
                   "—"
                 )}
