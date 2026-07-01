@@ -53,6 +53,7 @@ export type FieldDef = {
   min?: number | null; // number
   max?: number | null; // number
   maxLength?: number | null; // text / textarea
+  rangeDays?: number | null; // daterange: auto-fill end = start + (rangeDays - 1); locks the end
   width?: "full" | "half";
 };
 
@@ -144,6 +145,15 @@ function defaultLabel(type: FieldType): string {
   return fieldMeta(type).label;
 }
 
+/** Add n days to a YYYY-MM-DD date, returning YYYY-MM-DD (UTC-safe). */
+export function addDaysISO(iso: string, n: number): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  if (!y || !m || !d) return iso;
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + n);
+  return dt.toISOString().slice(0, 10);
+}
+
 /** Reference sources actually used by a form (incl. inside repeaters). */
 export function neededSources(fields: FieldDef[]): RefSource[] {
   const s = new Set<RefSource>();
@@ -188,6 +198,7 @@ const FieldDefZ: z.ZodType<FieldDef> = z.lazy(() =>
     min: z.number().nullable().optional(),
     max: z.number().nullable().optional(),
     maxLength: z.number().int().positive().nullable().optional(),
+    rangeDays: z.number().int().positive().max(3650).nullable().optional(),
     width: z.enum(["full", "half"]).optional(),
   }),
 );
@@ -381,7 +392,9 @@ export function validateAnswers(
     if (f.type === "daterange") {
       const a = Array.isArray(v) ? v : [];
       const start = typeof a[0] === "string" ? a[0] : "";
-      const end = typeof a[1] === "string" ? a[1] : "";
+      let end = typeof a[1] === "string" ? a[1] : "";
+      // Fixed-length range: the end is derived from the start (authoritative).
+      if (f.rangeDays && f.rangeDays > 0 && start) end = addDaysISO(start, f.rangeDays - 1);
       if (f.required && (!start || !end)) errors[f.id] = "Select a start and end date.";
       else if (start && end && start > end) errors[f.id] = "The end date can't be before the start.";
       clean[f.id] = [start, end];

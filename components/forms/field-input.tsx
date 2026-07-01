@@ -5,7 +5,7 @@ import { Combobox } from "@/components/ui/combobox";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Icon } from "@/components/ui/icons";
 import { cn } from "@/lib/cn";
-import { computeCalc, formatCalc, isVisible } from "@/lib/forms/types";
+import { addDaysISO, computeCalc, formatCalc, isVisible } from "@/lib/forms/types";
 import type { FieldDef, FieldValue, Lookups, RepeaterRows, ScalarValue } from "@/lib/forms/types";
 
 export type { FieldValue } from "@/lib/forms/types";
@@ -73,13 +73,19 @@ export function FieldInput({
       );
       break;
     case "daterange": {
+      const fixed = field.rangeDays && field.rangeDays > 0 ? field.rangeDays : 0;
       const start = typeof arr[0] === "string" ? arr[0] : "";
-      const end = typeof arr[1] === "string" ? arr[1] : "";
+      // With a fixed length the end is derived from the start and locked.
+      const end = fixed && start ? addDaysISO(start, fixed - 1) : typeof arr[1] === "string" ? arr[1] : "";
       control = (
         <div className={cn("flex flex-wrap items-center gap-2", disabled && "pointer-events-none opacity-60")}>
-          <div className="min-w-36 flex-1"><DatePicker value={start} onChange={(v) => set([v, end])} /></div>
+          <div className="min-w-36 flex-1">
+            <DatePicker value={start} onChange={(v) => set([v, fixed && v ? addDaysISO(v, fixed - 1) : end])} />
+          </div>
           <span className="text-muted">→</span>
-          <div className="min-w-36 flex-1"><DatePicker value={end} onChange={(v) => set([start, v])} /></div>
+          <div className={cn("min-w-36 flex-1", !!fixed && "pointer-events-none opacity-60")}>
+            <DatePicker value={end} onChange={(v) => set([start, v])} />
+          </div>
         </div>
       );
       break;

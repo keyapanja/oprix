@@ -210,6 +210,21 @@ export function FieldConfigPanel({
         </div>
       )}
 
+      {field.type === "daterange" && (
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium text-muted">Fixed range length (days)</span>
+          <Input
+            type="number"
+            value={field.rangeDays ?? ""}
+            onChange={(e) => onChange({ rangeDays: e.target.value === "" ? null : Math.max(1, Math.round(Number(e.target.value))) })}
+            placeholder="Free range"
+          />
+          <span className="mt-1 block text-xs text-muted">
+            End auto-fills this many days from the start (e.g. 7 = a week) and locks. Blank = free range.
+          </span>
+        </label>
+      )}
+
       {(field.type === "text" || field.type === "textarea") && (
         <label className="block">
           <span className="mb-1 block text-xs font-medium text-muted">Max length</span>
