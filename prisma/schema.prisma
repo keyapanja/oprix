@@ -1083,6 +1083,10 @@ model Form {
   viewAllRoles  Role[]     @default([])
   portalEnabled Boolean    @default(false)
   allowMultiple Boolean    @default(true) // can one person submit more than once?
+  // Scheduled "please fill this out" reminders to the audience roles.
+  notifyEnabled    Boolean @default(false)
+  notifySchedule   Json? // { frequency, time, weekday?, monthday?, date? } — see lib/forms/schedule.ts
+  notifyLastRunKey String? // "YYYY-MM-DD" the reminder last fired (per-day dedupe guard)
   createdById   String? // userId of the builder
   deletedAt     DateTime?
   deletedById   String? // userId who moved it to trash

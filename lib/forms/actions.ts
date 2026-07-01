@@ -8,6 +8,7 @@ import { requireCapability, requirePortalAction } from "@/lib/auth/guard";
 import { getSession } from "@/lib/auth/session";
 import { canManageForms, audienceAllows } from "@/lib/forms/access";
 import { FormSchemaZ, validateAnswers, parseSchema } from "@/lib/forms/types";
+import { ScheduleZ } from "@/lib/forms/schedule";
 import { EDITABLE_ROLES } from "@/lib/auth/can";
 
 export type FormActionState = {
@@ -50,6 +51,8 @@ const UpdateZ = z.object({
   portalEnabled: z.boolean(),
   allowMultiple: z.boolean(),
   status: z.enum(["DRAFT", "PUBLISHED", "CLOSED"]),
+  notifyEnabled: z.boolean().optional(),
+  notifySchedule: ScheduleZ.nullish(),
 });
 export type UpdateFormInput = z.input<typeof UpdateZ>;
 
@@ -75,6 +78,8 @@ export async function updateForm(input: UpdateFormInput): Promise<FormActionStat
       portalEnabled: d.portalEnabled,
       allowMultiple: d.allowMultiple,
       status: d.status,
+      notifyEnabled: !!d.notifyEnabled,
+      notifySchedule: d.notifySchedule ? asJson(d.notifySchedule) : Prisma.DbNull,
     },
   });
   if (res.count === 0) return { error: "Form not found." };

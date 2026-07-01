@@ -11,6 +11,7 @@ export type NoteCategory =
   | "Announcements"
   | "Payroll"
   | "Clients"
+  | "Forms"
   | "General";
 
 export const CATEGORY_ORDER: NoteCategory[] = [
@@ -21,6 +22,7 @@ export const CATEGORY_ORDER: NoteCategory[] = [
   "Announcements",
   "Payroll",
   "Clients",
+  "Forms",
   "General",
 ];
 
@@ -34,6 +36,7 @@ export function categorize(type: string): NoteCategory {
   if (t.startsWith("ANNOUNCE") || t.startsWith("HOLIDAY")) return "Announcements";
   if (t.startsWith("PAYROLL") || t.startsWith("PAYSLIP") || t.startsWith("SALARY")) return "Payroll";
   if (t.startsWith("CLIENT") || t.includes("DELIVERABLE") || t.includes("FEEDBACK")) return "Clients";
+  if (t.startsWith("FORM")) return "Forms";
   return "General";
 }
 
@@ -53,6 +56,7 @@ export const CATEGORY_STYLES: Record<NoteCategory, CategoryStyle> = {
   Announcements: { icon: "calendarDays", dot: "bg-sky-500", text: "text-sky-700 dark:text-sky-300", soft: "bg-sky-500/15", ring: "ring-sky-500/30" },
   Payroll: { icon: "chart", dot: "bg-fuchsia-500", text: "text-fuchsia-700 dark:text-fuchsia-300", soft: "bg-fuchsia-500/15", ring: "ring-fuchsia-500/30" },
   Clients: { icon: "briefcase", dot: "bg-orange-500", text: "text-orange-700 dark:text-orange-300", soft: "bg-orange-500/15", ring: "ring-orange-500/30" },
+  Forms: { icon: "formInput", dot: "bg-teal-500", text: "text-teal-700 dark:text-teal-300", soft: "bg-teal-500/15", ring: "ring-teal-500/30" },
   General: { icon: "bell", dot: "bg-slate-400", text: "text-slate-600 dark:text-slate-300", soft: "bg-slate-500/15", ring: "ring-slate-400/30" },
 };
 
@@ -71,6 +75,7 @@ export function noteHref(type: string, meta: unknown): string | null {
   if (cat === "Payroll") return typeof m.payslipId === "string" ? `/payslips/${m.payslipId}` : "/dashboard";
   // Client portal events (deliverable decisions, feedback) point at the project.
   if (cat === "Clients") return typeof m.projectId === "string" ? `/projects/${m.projectId}` : null;
+  if (cat === "Forms") return typeof m.formId === "string" ? `/forms/${m.formId}` : "/forms";
   return null;
 }
 
