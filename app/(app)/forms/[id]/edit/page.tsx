@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { requirePage } from "@/lib/auth/guard";
 import { getFormForManage } from "@/lib/forms/data";
+import { parseSchedule } from "@/lib/forms/schedule";
 import { FormBuilder } from "@/components/forms/form-builder";
 
 export const metadata: Metadata = { title: "Edit form · Oprix" };
@@ -24,6 +25,8 @@ export default async function EditFormPage({ params }: { params: Promise<{ id: s
         viewAllRoles: form.viewAllRoles,
         portalEnabled: form.portalEnabled,
         allowMultiple: form.allowMultiple,
+        notifyEnabled: form.notifyEnabled,
+        notifySchedule: parseSchedule(form.notifySchedule),
       }}
     />
   );

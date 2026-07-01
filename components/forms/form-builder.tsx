@@ -27,12 +27,14 @@ import {
   type FieldType,
 } from "@/lib/forms/types";
 import { EDITABLE_ROLES, ROLE_LABELS } from "@/lib/auth/can";
+import { WEEKDAY_LABELS, type FormNotifySchedule, type ScheduleFrequency } from "@/lib/forms/schedule";
 import { FieldInput } from "@/components/forms/field-input";
 import { FieldConfigPanel } from "@/components/forms/field-config-panel";
 import { Card } from "@/components/ui/card";
 import { Input, Textarea } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Icon } from "@/components/ui/icons";
 import { BackLink } from "@/components/ui/back-link";
 import { toast } from "@/components/ui/toast";
@@ -48,6 +50,8 @@ type Initial = {
   viewAllRoles: string[];
   portalEnabled: boolean;
   allowMultiple: boolean;
+  notifyEnabled: boolean;
+  notifySchedule: FormNotifySchedule | null;
 };
 
 const STATUS_OPTS = [
@@ -55,6 +59,14 @@ const STATUS_OPTS = [
   { value: "PUBLISHED", label: "Published" },
   { value: "CLOSED", label: "Closed" },
 ];
+
+const FREQ_OPTS = [
+  { value: "ONCE", label: "One time" },
+  { value: "DAILY", label: "Every day" },
+  { value: "WEEKLY", label: "Every week" },
+  { value: "MONTHLY", label: "Every month" },
+];
+const WEEKDAY_OPTS = WEEKDAY_LABELS.map((l, i) => ({ value: String(i), label: l }));
 
 function toggle<T>(arr: T[], v: T): T[] {
   return arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v];
@@ -130,6 +142,12 @@ export function FormBuilder({ initial }: { initial: Initial }) {
   const [portalEnabled, setPortalEnabled] = useState(initial.portalEnabled);
   const [allowMultiple, setAllowMultiple] = useState(initial.allowMultiple);
   const [defaultGroupBy, setDefaultGroupBy] = useState(initial.schema.defaultGroupBy ?? "");
+  const [notifyEnabled, setNotifyEnabled] = useState(initial.notifyEnabled);
+  const [notifyFreq, setNotifyFreq] = useState<ScheduleFrequency>(initial.notifySchedule?.frequency ?? "WEEKLY");
+  const [notifyTime, setNotifyTime] = useState(initial.notifySchedule?.time ?? "09:00");
+  const [notifyWeekday, setNotifyWeekday] = useState(initial.notifySchedule?.weekday ?? 1);
+  const [notifyMonthday, setNotifyMonthday] = useState(initial.notifySchedule?.monthday ?? 1);
+  const [notifyDate, setNotifyDate] = useState(initial.notifySchedule?.date ?? "");
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [rightTab, setRightTab] = useState<"field" | "settings">("settings");
@@ -197,6 +215,19 @@ export function FormBuilder({ initial }: { initial: Initial }) {
       toast.error("Give the form a title.");
       return;
     }
+    if (notifyEnabled && notifyFreq === "ONCE" && !notifyDate) {
+      toast.error("Pick a date for the one-time reminder.");
+      return;
+    }
+    const notifySchedule: FormNotifySchedule | null = notifyEnabled
+      ? {
+          frequency: notifyFreq,
+          time: notifyTime,
+          ...(notifyFreq === "WEEKLY" ? { weekday: notifyWeekday } : {}),
+          ...(notifyFreq === "MONTHLY" ? { monthday: notifyMonthday } : {}),
+          ...(notifyFreq === "ONCE" ? { date: notifyDate } : {}),
+        }
+      : null;
     start(async () => {
       const res = await updateForm({
         id: initial.id,
@@ -208,6 +239,8 @@ export function FormBuilder({ initial }: { initial: Initial }) {
         portalEnabled,
         allowMultiple,
         status,
+        notifyEnabled,
+        notifySchedule,
       });
       if (res.error) {
         toast.error(res.error);
@@ -389,6 +422,55 @@ export function FormBuilder({ initial }: { initial: Initial }) {
                     className="size-4 rounded border-line-strong text-brand-600 focus:ring-brand-500"
                   />
                 </label>
+
+                <div className="space-y-2 border-t border-line pt-3">
+                  <label className="flex items-center justify-between text-sm text-content">
+                    Send fill-out reminders
+                    <input
+                      type="checkbox"
+                      checked={notifyEnabled}
+                      onChange={(e) => setNotifyEnabled(e.target.checked)}
+                      className="size-4 rounded border-line-strong text-brand-600 focus:ring-brand-500"
+                    />
+                  </label>
+                  {notifyEnabled && (
+                    <div className="space-y-2 rounded-lg p-2.5 ring-1 ring-inset ring-line">
+                      <label className="block">
+                        <span className="mb-1 block text-xs font-medium text-muted">Frequency</span>
+                        <Combobox value={notifyFreq} onChange={(v) => setNotifyFreq(v as ScheduleFrequency)} options={FREQ_OPTS} />
+                      </label>
+                      {notifyFreq === "WEEKLY" && (
+                        <label className="block">
+                          <span className="mb-1 block text-xs font-medium text-muted">Day of week</span>
+                          <Combobox value={String(notifyWeekday)} onChange={(v) => setNotifyWeekday(Number(v))} options={WEEKDAY_OPTS} />
+                        </label>
+                      )}
+                      {notifyFreq === "MONTHLY" && (
+                        <label className="block">
+                          <span className="mb-1 block text-xs font-medium text-muted">Day of month</span>
+                          <Input
+                            type="number"
+                            value={notifyMonthday}
+                            onChange={(e) => setNotifyMonthday(Math.min(31, Math.max(1, Number(e.target.value) || 1)))}
+                          />
+                        </label>
+                      )}
+                      {notifyFreq === "ONCE" && (
+                        <label className="block">
+                          <span className="mb-1 block text-xs font-medium text-muted">Date</span>
+                          <DatePicker value={notifyDate} onChange={setNotifyDate} />
+                        </label>
+                      )}
+                      <label className="block">
+                        <span className="mb-1 block text-xs font-medium text-muted">Time</span>
+                        <Input type="time" value={notifyTime} onChange={(e) => setNotifyTime(e.target.value)} />
+                      </label>
+                      <p className="text-xs text-muted">
+                        Notifies everyone in the form&apos;s audience roles to fill it out. Times are in the company timezone.
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </Card>
