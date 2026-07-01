@@ -236,6 +236,7 @@ const RequestSchema = z.object({
   startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Start date is required"),
   endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "End date is required"),
   reason: z.string().trim().max(300).optional().or(z.literal("")),
+  isHalfDay: z.enum(["true", "false"]).optional(),
 });
 
 export async function createLeaveRequest(
@@ -264,7 +265,9 @@ export async function createLeaveRequest(
   const start = dateAtUTC(d.startDate);
   const end = dateAtUTC(d.endDate);
   if (end < start) return { error: "End date can't be before the start date" };
-  const days = Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1;
+  const half = d.isHalfDay === "true";
+  if (half && d.startDate !== d.endDate) return { error: "Half-day leave must be on a single day." };
+  const days = half ? 0.5 : Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1;
 
   // Enforce the same balance + overlap guards as self-service apply.
   const remaining = await remainingForType(session.companyId, d.employeeId, d.leaveTypeId);
@@ -283,6 +286,7 @@ export async function createLeaveRequest(
       startDate: start,
       endDate: end,
       days,
+      isHalfDay: half,
       reason: d.reason || null,
       status: "PENDING",
     },

@@ -7,15 +7,19 @@ import { Field } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { DatePicker } from "@/components/ui/date-picker";
+import { toast } from "@/components/ui/toast";
 
 type Opt = { id: string; name: string };
 
 export function RequestForm({
   employees,
   leaveTypes,
+  onSuccess,
 }: {
   employees: Opt[];
   leaveTypes: Opt[];
+  /** Called after a request is created (e.g. to close a modal + refresh). */
+  onSuccess?: () => void;
 }) {
   const [state, formAction, pending] = useActionState<LeaveState, FormData>(
     createLeaveRequest,
@@ -24,8 +28,12 @@ export function RequestForm({
   // Remount fields on success so Comboboxes/DatePickers reset too.
   const [resetKey, setResetKey] = useState(0);
   useEffect(() => {
-    if (state.ok) setResetKey((k) => k + 1);
-  }, [state]);
+    if (state.ok) {
+      setResetKey((k) => k + 1);
+      toast.success("Leave request added");
+      onSuccess?.();
+    }
+  }, [state]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const ready = employees.length > 0 && leaveTypes.length > 0;
 
@@ -65,6 +73,17 @@ export function RequestForm({
           </Field>
           <Field label="End date" required>
             <DatePicker name="endDate" disabled={!ready} />
+          </Field>
+          <Field label="Duration">
+            <Combobox
+              name="isHalfDay"
+              defaultValue="false"
+              disabled={!ready}
+              options={[
+                { value: "false", label: "Full day" },
+                { value: "true", label: "Half day" },
+              ]}
+            />
           </Field>
         </div>
         <Field label="Reason" htmlFor="lr-reason">

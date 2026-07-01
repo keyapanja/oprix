@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { BackLink } from "@/components/ui/back-link";
 import { PageHeader } from "@/components/ui/page-header";
 import { AllRequests } from "@/components/leave/all-requests";
+import { AddLeaveButton } from "@/components/leave/add-leave-button";
 import { type LeaveDetail } from "@/components/leave/leave-detail-modal";
 
 export const metadata: Metadata = { title: "Leave requests · Oprix" };
@@ -26,13 +27,18 @@ export default async function LeaveRequestsPage() {
   const session = await requirePage("leave:manage");
   const companyId = session.companyId;
 
-  const [requests, leaveTypeOpts, canApprove] = await Promise.all([
+  const [requests, leaveTypeOpts, employees, canApprove] = await Promise.all([
     prisma.leaveRequest.findMany({
       where: { companyId },
       orderBy: { createdAt: "desc" },
       select: REQUEST_SELECT,
     }),
     prisma.leaveType.findMany({ where: { companyId }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    prisma.employee.findMany({
+      where: { companyId, deletedAt: null },
+      orderBy: { fullName: "asc" },
+      select: { id: true, fullName: true },
+    }),
     hasPermission(companyId, session.role, "leave:approve"),
   ]);
 
@@ -74,7 +80,11 @@ export default async function LeaveRequestsPage() {
       <div className="mb-4">
         <BackLink href="/leave">Back to leave</BackLink>
       </div>
-      <PageHeader title="Leave requests" description="Every employee's leave & WFH requests — search, filter, sort, and approve." />
+      <PageHeader
+        title="Leave requests"
+        description="Every employee's leave & WFH requests — search, filter, sort, and approve."
+        action={<AddLeaveButton employees={employees.map((e) => ({ id: e.id, name: e.fullName }))} leaveTypes={leaveTypeOpts} />}
+      />
       <AllRequests requests={details} canApprove={canApprove} leaveTypeOpts={leaveTypeOpts} />
     </div>
   );
