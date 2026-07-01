@@ -2,7 +2,7 @@
 
 import { toast } from "@/components/ui/toast";
 import { confirmDialog } from "@/components/ui/confirm";
-import { useEffect, useMemo, useState, useTransition, type MouseEvent } from "react";
+import { Fragment, useEffect, useMemo, useState, useTransition, type MouseEvent } from "react";
 import { useRouter } from "next/navigation";
 import type { TaskStatus, Priority } from "@prisma/client";
 import { deleteTask, deleteTasks, duplicateTask } from "@/lib/projects/actions";
@@ -53,6 +53,15 @@ const VIEWS: { value: View; label: string }[] = [
   { value: "created", label: "Assigned by me" },
 ];
 
+const GROUP_OPTS = [
+  { value: "", label: "No grouping" },
+  { value: "status", label: "Group: Status" },
+  { value: "project", label: "Group: Project" },
+  { value: "department", label: "Group: Department" },
+];
+// Status groups render in workflow order, not alphabetical.
+const STATUS_ORDER = ["TODO", "IN_PROGRESS", "REVIEW", "REDO", "CLIENT_REVIEW", "COMPLETED", "HOLD"];
+
 export function TasksTable({
   rows,
   canTrack,
@@ -73,12 +82,41 @@ export function TasksTable({
   const [project, setProject] = useState("ALL");
   const [page, setPage] = useState(1);
   const pageSize = 15;
+  const [groupBy, setGroupBy] = useState("");
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
   // Keep the view in sync with the URL (sidebar "My tasks" / "Assigned by me").
   useEffect(() => {
     setView(initialView);
     setPage(1);
   }, [initialView]);
+
+  // The grouping choice persists across visits (per device) until changed.
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("oprix:tasks-group");
+      if (saved !== null) setGroupBy(saved);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  function changeGroup(v: string) {
+    setGroupBy(v);
+    setPage(1);
+    try {
+      localStorage.setItem("oprix:tasks-group", v);
+    } catch {
+      /* ignore */
+    }
+  }
+  function toggleCollapse(key: string) {
+    setCollapsed((s) => {
+      const n = new Set(s);
+      if (n.has(key)) n.delete(key);
+      else n.add(key);
+      return n;
+    });
+  }
 
   const deptOptions = useMemo(() => {
     const set = new Set<string>();
@@ -121,13 +159,33 @@ export function TasksTable({
   const startIdx = (current - 1) * pageSize;
   const pageRows = filtered.slice(startIdx, startIdx + pageSize);
 
+  const colSpan = canTrack ? 10 : 9;
+  const groups = useMemo(() => {
+    if (!groupBy) return [] as { key: string; label: string; rows: TaskRow[] }[];
+    const m = new Map<string, TaskRow[]>();
+    for (const r of filtered) {
+      const key =
+        groupBy === "status" ? r.status : groupBy === "project" ? r.projectName || "—" : r.departmentName || "No department";
+      (m.get(key) ?? m.set(key, []).get(key)!).push(r);
+    }
+    const entries = [...m.entries()];
+    if (groupBy === "status") {
+      entries.sort((a, b) => STATUS_ORDER.indexOf(a[0]) - STATUS_ORDER.indexOf(b[0]));
+      return entries.map(([key, rows]) => ({ key, label: humanizeEnum(key), rows }));
+    }
+    entries.sort((a, b) => a[0].localeCompare(b[0]));
+    return entries.map(([key, rows]) => ({ key, label: key, rows }));
+  }, [groupBy, filtered]);
+  // Selection "select all" targets what's on screen: the page, or all rows when grouped.
+  const visibleRows = groupBy ? filtered : pageRows;
+
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
   const [, startDelete] = useTransition();
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkPending, startBulk] = useTransition();
-  const pageAllSelected = pageRows.length > 0 && pageRows.every((r) => selected.has(r.id));
+  const pageAllSelected = visibleRows.length > 0 && visibleRows.every((r) => selected.has(r.id));
 
   function toggleSelect(id: string) {
     setSelected((s) => {
@@ -138,7 +196,7 @@ export function TasksTable({
     });
   }
   function togglePage() {
-    const ids = pageRows.map((r) => r.id);
+    const ids = visibleRows.map((r) => r.id);
     setSelected((s) => {
       const n = new Set(s);
       ids.forEach((id) => (pageAllSelected ? n.delete(id) : n.add(id)));
@@ -190,6 +248,63 @@ export function TasksTable({
       }
     });
   }
+
+  const renderRow = (r: TaskRow) => (
+    <tr
+      key={r.id}
+      className={cn("cursor-pointer hover:bg-canvas", selected.has(r.id) && "bg-accent-soft hover:bg-accent-soft")}
+      onClick={() => router.push(`/tasks/${r.id}`)}
+    >
+      <td className="px-5 py-3" onClick={(e) => e.stopPropagation()}>
+        <input
+          type="checkbox"
+          checked={selected.has(r.id)}
+          onChange={() => toggleSelect(r.id)}
+          className="size-4 rounded border-line-strong text-brand-600 focus:ring-brand-500"
+          aria-label={`Select ${r.name}`}
+        />
+      </td>
+      <td className="px-5 py-3 font-medium text-content">{r.name}</td>
+      <td className="px-5 py-3 text-muted">{r.projectName}</td>
+      <td className="px-5 py-3 text-muted">{r.serviceName ?? "—"}</td>
+      <td className="px-5 py-3"><Badge tone={TASK_STATUS_TONE[r.status]}>{humanizeEnum(r.status)}</Badge></td>
+      <td className="px-5 py-3"><Badge tone={PRIORITY_TONE[r.priority]}>{humanizeEnum(r.priority)}</Badge></td>
+      <td className="px-5 py-3 text-muted">
+        {r.dueDate ? (
+          <span className="inline-flex items-center">{formatDate(r.dueDate)}{r.status !== "HOLD" && <BackdateBadge date={r.clientDeadline ?? r.dueDate} assignedDate={r.assignedDate} />}</span>
+        ) : (
+          "—"
+        )}
+      </td>
+      <td className="px-5 py-3 text-muted">{r.assigneeNames.length ? r.assigneeNames.join(", ") : "—"}</td>
+      {canTrack && (
+        <td className="px-5 py-3">
+          <div className="flex justify-end">
+            <InlineTimer taskId={r.id} status={r.timer.status} baseSeconds={r.timer.baseSeconds} runStartedAtMs={r.timer.runStartedAtMs} locked={r.timer.locked} />
+          </div>
+        </td>
+      )}
+      <td className="px-5 py-3">
+        <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+          <button type="button" onClick={(e) => onEdit(e, r.id)} title="Edit task" aria-label="Edit task" className="flex size-8 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface hover:text-content">
+            <Icon name="pencil" className="size-4" />
+          </button>
+          <button type="button" onClick={(e) => onDuplicate(e, r.id)} disabled={duplicatingId === r.id} title="Duplicate task" aria-label="Duplicate task" className="flex size-8 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface hover:text-content disabled:opacity-40">
+            <Icon name="copy" className="size-4" />
+          </button>
+          <button type="button" onClick={(e) => onDelete(e, r.id)} disabled={deletingId === r.id} title="Delete task" aria-label="Delete task" className="flex size-8 items-center justify-center rounded-lg text-muted transition-colors hover:bg-red-500/10 hover:text-red-600 disabled:opacity-40 dark:hover:text-red-400">
+            <Icon name="trash" className="size-4" />
+          </button>
+        </div>
+      </td>
+    </tr>
+  );
+
+  const emptyRow = (
+    <tr>
+      <td colSpan={colSpan} className="px-5 py-12 text-center text-sm text-muted">No tasks match your filters.</td>
+    </tr>
+  );
 
   return (
     <div className="overflow-hidden rounded-2xl border border-line bg-surface shadow-card">
@@ -267,6 +382,9 @@ export function TasksTable({
           <div className="w-44">
             <Combobox value={status} onChange={(v) => { setStatus(v); setPage(1); }} options={STATUS_FILTER} />
           </div>
+          <div className="w-40">
+            <Combobox value={groupBy} onChange={changeGroup} options={GROUP_OPTS} />
+          </div>
         </div>
       </div>
 
@@ -294,102 +412,57 @@ export function TasksTable({
           </tr>
         </thead>
         <tbody className="divide-y divide-line">
-          {pageRows.map((r) => (
-            <tr
-              key={r.id}
-              className={cn("cursor-pointer hover:bg-canvas", selected.has(r.id) && "bg-accent-soft hover:bg-accent-soft")}
-              onClick={() => router.push(`/tasks/${r.id}`)}
-            >
-              <td className="px-5 py-3" onClick={(e) => e.stopPropagation()}>
-                <input
-                  type="checkbox"
-                  checked={selected.has(r.id)}
-                  onChange={() => toggleSelect(r.id)}
-                  className="size-4 rounded border-line-strong text-brand-600 focus:ring-brand-500"
-                  aria-label={`Select ${r.name}`}
-                />
-              </td>
-              <td className="px-5 py-3 font-medium text-content">{r.name}</td>
-              <td className="px-5 py-3 text-muted">{r.projectName}</td>
-              <td className="px-5 py-3 text-muted">{r.serviceName ?? "—"}</td>
-              <td className="px-5 py-3"><Badge tone={TASK_STATUS_TONE[r.status]}>{humanizeEnum(r.status)}</Badge></td>
-              <td className="px-5 py-3"><Badge tone={PRIORITY_TONE[r.priority]}>{humanizeEnum(r.priority)}</Badge></td>
-              <td className="px-5 py-3 text-muted">
-                {r.dueDate ? (
-                  <span className="inline-flex items-center">{formatDate(r.dueDate)}{r.status !== "HOLD" && <BackdateBadge date={r.clientDeadline ?? r.dueDate} assignedDate={r.assignedDate} />}</span>
-                ) : (
-                  "—"
-                )}
-              </td>
-              <td className="px-5 py-3 text-muted">{r.assigneeNames.length ? r.assigneeNames.join(", ") : "—"}</td>
-              {canTrack && (
-                <td className="px-5 py-3">
-                  <div className="flex justify-end">
-                    <InlineTimer
-                      taskId={r.id}
-                      status={r.timer.status}
-                      baseSeconds={r.timer.baseSeconds}
-                      runStartedAtMs={r.timer.runStartedAtMs}
-                      locked={r.timer.locked}
-                    />
-                  </div>
-                </td>
-              )}
-              <td className="px-5 py-3">
-                <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
-                  <button
-                    type="button"
-                    onClick={(e) => onEdit(e, r.id)}
-                    title="Edit task"
-                    aria-label="Edit task"
-                    className="flex size-8 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface hover:text-content"
-                  >
-                    <Icon name="pencil" className="size-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(e) => onDuplicate(e, r.id)}
-                    disabled={duplicatingId === r.id}
-                    title="Duplicate task"
-                    aria-label="Duplicate task"
-                    className="flex size-8 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface hover:text-content disabled:opacity-40"
-                  >
-                    <Icon name="copy" className="size-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(e) => onDelete(e, r.id)}
-                    disabled={deletingId === r.id}
-                    title="Delete task"
-                    aria-label="Delete task"
-                    className="flex size-8 items-center justify-center rounded-lg text-muted transition-colors hover:bg-red-500/10 hover:text-red-600 disabled:opacity-40 dark:hover:text-red-400"
-                  >
-                    <Icon name="trash" className="size-4" />
-                  </button>
-                </div>
-              </td>
-            </tr>
-          ))}
-          {pageRows.length === 0 && (
-            <tr>
-              <td colSpan={canTrack ? 10 : 9} className="px-5 py-12 text-center text-sm text-muted">No tasks match your filters.</td>
-            </tr>
+          {!groupBy ? (
+            <>
+              {pageRows.map(renderRow)}
+              {pageRows.length === 0 && emptyRow}
+            </>
+          ) : groups.length === 0 ? (
+            emptyRow
+          ) : (
+            groups.map((g) => {
+              const open = !collapsed.has(g.key);
+              return (
+                <Fragment key={`g-${g.key}`}>
+                  <tr className="bg-canvas/60">
+                    <td colSpan={colSpan} className="px-5 py-2.5">
+                      <button
+                        type="button"
+                        onClick={() => toggleCollapse(g.key)}
+                        className="flex items-center gap-2 text-sm font-semibold text-content"
+                      >
+                        <Icon name="chevronDown" className={cn("size-4 text-faint transition-transform", !open && "-rotate-90")} />
+                        {g.label}
+                        <span className="text-xs font-normal text-muted">({g.rows.length})</span>
+                      </button>
+                    </td>
+                  </tr>
+                  {open && g.rows.map(renderRow)}
+                </Fragment>
+              );
+            })
           )}
         </tbody>
       </table>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-5 py-3 text-sm text-muted">
-        <span>{filtered.length === 0 ? "0" : `${startIdx + 1}–${Math.min(startIdx + pageSize, filtered.length)}`} of {filtered.length}</span>
-        <div className="flex items-center gap-2">
-          <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={current <= 1} className="flex size-8 items-center justify-center rounded-lg ring-1 ring-inset ring-line-strong hover:bg-canvas disabled:opacity-40" aria-label="Previous page">
-            <Icon name="chevronLeft" className="size-4" />
-          </button>
-          <span className="tabular-nums">Page {current} / {pages}</span>
-          <button onClick={() => setPage((p) => Math.min(pages, p + 1))} disabled={current >= pages} className="flex size-8 items-center justify-center rounded-lg ring-1 ring-inset ring-line-strong hover:bg-canvas disabled:opacity-40" aria-label="Next page">
-            <Icon name="chevronRight" className="size-4" />
-          </button>
+      {!groupBy ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-5 py-3 text-sm text-muted">
+          <span>{filtered.length === 0 ? "0" : `${startIdx + 1}–${Math.min(startIdx + pageSize, filtered.length)}`} of {filtered.length}</span>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={current <= 1} className="flex size-8 items-center justify-center rounded-lg ring-1 ring-inset ring-line-strong hover:bg-canvas disabled:opacity-40" aria-label="Previous page">
+              <Icon name="chevronLeft" className="size-4" />
+            </button>
+            <span className="tabular-nums">Page {current} / {pages}</span>
+            <button onClick={() => setPage((p) => Math.min(pages, p + 1))} disabled={current >= pages} className="flex size-8 items-center justify-center rounded-lg ring-1 ring-inset ring-line-strong hover:bg-canvas disabled:opacity-40" aria-label="Next page">
+              <Icon name="chevronRight" className="size-4" />
+            </button>
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="border-t border-line px-5 py-3 text-sm text-muted">
+          {filtered.length} task{filtered.length === 1 ? "" : "s"} in {groups.length} group{groups.length === 1 ? "" : "s"}
+        </div>
+      )}
     </div>
   );
 }
