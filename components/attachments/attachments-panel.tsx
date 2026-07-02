@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
 import { confirmDialog } from "@/components/ui/confirm";
+import { AttachmentLightbox, isPreviewable, type LightboxItem } from "@/components/attachments/attachment-lightbox";
 import { safeHref } from "@/lib/url";
 import { cn } from "@/lib/cn";
 
@@ -48,6 +49,7 @@ export function AttachmentsPanel({
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [pending, start] = useTransition();
+  const [preview, setPreview] = useState<LightboxItem | null>(null);
   const [mode, setMode] = useState<"file" | "link">("file");
   const [title, setTitle] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
@@ -136,22 +138,38 @@ export function AttachmentsPanel({
             const isLink = !!a.url;
             const isImage = !isLink && !!a.mimeType?.startsWith("image/");
             const href = a.url ? safeHref(a.url) : `/api/files/${a.id}`;
+            const canPreview = isPreviewable(a.mimeType, isLink);
+            const inner = (
+              <>
+                <div className="flex aspect-[4/3] items-center justify-center bg-canvas">
+                  {isImage ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={href} alt={label} className="h-full w-full object-cover" />
+                  ) : (
+                    <Icon name={isLink ? "externalLink" : "folder"} className="size-8 text-faint" />
+                  )}
+                </div>
+                <div className="px-2.5 py-2">
+                  <p className="truncate text-xs font-medium text-content">{label}</p>
+                  <p className="text-[10px] text-faint">{isLink ? "Link" : fmtBytes(a.sizeBytes)}</p>
+                </div>
+              </>
+            );
             return (
               <div key={a.id} className="group relative overflow-hidden rounded-xl ring-1 ring-inset ring-line">
-                <a href={href} target="_blank" rel="noopener noreferrer" className="block">
-                  <div className="flex aspect-[4/3] items-center justify-center bg-canvas">
-                    {isImage ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={href} alt={label} className="h-full w-full object-cover" />
-                    ) : (
-                      <Icon name={isLink ? "externalLink" : "folder"} className="size-8 text-faint" />
-                    )}
-                  </div>
-                  <div className="px-2.5 py-2">
-                    <p className="truncate text-xs font-medium text-content">{label}</p>
-                    <p className="text-[10px] text-faint">{isLink ? "Link" : fmtBytes(a.sizeBytes)}</p>
-                  </div>
-                </a>
+                {canPreview ? (
+                  <button
+                    type="button"
+                    onClick={() => setPreview({ fileName: a.fileName, mimeType: a.mimeType, href, title: a.title })}
+                    className="block w-full text-left"
+                  >
+                    {inner}
+                  </button>
+                ) : (
+                  <a href={href} target="_blank" rel="noopener noreferrer" className="block">
+                    {inner}
+                  </a>
+                )}
                 {canEdit && (
                   <button
                     type="button"
@@ -225,6 +243,8 @@ export function AttachmentsPanel({
           <input type="file" multiple className="hidden" disabled={busy} onChange={onFilesPicked} />
         </label>
       )}
+
+      {preview && <AttachmentLightbox item={preview} onClose={() => setPreview(null)} />}
     </div>
   );
 }

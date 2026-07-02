@@ -691,6 +691,38 @@ export async function addComment(taskId: string, body: string): Promise<ProjectS
   return { ok: true };
 }
 
+/** Edit a comment — only the author can. */
+export async function editComment(commentId: string, text: string): Promise<ProjectState> {
+  const session = await getSession();
+  if (!session) return { error: "Not authenticated" };
+  const body = text.trim();
+  if (!body) return { error: "Comment can't be empty." };
+  const c = await prisma.comment.findFirst({
+    where: { id: commentId, task: { project: { companyId: session.companyId } } },
+    select: { authorId: true, taskId: true },
+  });
+  if (!c) return { error: "Comment not found" };
+  if (c.authorId !== session.userId) return { error: "You can only edit your own comments." };
+  await prisma.comment.update({ where: { id: commentId }, data: { body } });
+  revalidatePath(`/tasks/${c.taskId}`);
+  return { ok: true };
+}
+
+/** Delete a comment — only the author can. */
+export async function deleteComment(commentId: string): Promise<ProjectState> {
+  const session = await getSession();
+  if (!session) return { error: "Not authenticated" };
+  const c = await prisma.comment.findFirst({
+    where: { id: commentId, task: { project: { companyId: session.companyId } } },
+    select: { authorId: true, taskId: true },
+  });
+  if (!c) return { error: "Comment not found" };
+  if (c.authorId !== session.userId) return { error: "You can only delete your own comments." };
+  await prisma.comment.delete({ where: { id: commentId } });
+  revalidatePath(`/tasks/${c.taskId}`);
+  return { ok: true };
+}
+
 // ---- Task checklist (creator/assignee or manager) -------------------------
 // The access check (canEditTask) and toggle (toggleChecklistItemFor) live in
 // lib/projects/task-access.ts so the extension API can reuse them; the Server

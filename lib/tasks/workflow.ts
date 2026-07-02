@@ -137,3 +137,41 @@ export async function approveComplete(taskId: string): Promise<WorkflowState> {
   revalidatePath("/tasks");
   return { ok: true };
 }
+
+/** Worker pulls their submission back out of review to keep working. Clears the
+ *  submitted link and returns the task to In progress. */
+export async function withdrawSubmission(taskId: string): Promise<WorkflowState> {
+  const session = await getSession();
+  if (!session) return { error: "Not authenticated" };
+  const task = await loadTask(session, taskId);
+  if (!task) return { error: "Task not found" };
+  const { isElevated, isAssignee } = await ctx(session, task);
+
+  if (!isAssignee && !isElevated) return { error: "Only an assignee can resume this task." };
+  if (task.status !== "REVIEW") {
+    return { error: "Only a task waiting for review can be pulled back." };
+  }
+
+  await prisma.task.update({
+    where: { id: taskId },
+    data: { status: "IN_PROGRESS", finalLink: null },
+  });
+
+  const actor = await actorLabel(session.userId);
+  await logTaskActivity(
+    session,
+    taskId,
+    task.finalLink ? `resumed the task (withdrew submission: ${task.finalLink})` : "resumed the task",
+  );
+  // Let the reviewer (and other assignees) know it's back in progress.
+  await notify(
+    [task.createdById, ...assigneeUserIds(task)].filter((x): x is string => !!x),
+    "Task resumed",
+    `${actor} pulled “${task.name}” back from review to keep working`,
+    taskId,
+    session.userId,
+  );
+  revalidatePath(`/tasks/${taskId}`);
+  revalidatePath("/tasks");
+  return { ok: true };
+}

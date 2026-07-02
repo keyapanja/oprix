@@ -20,9 +20,11 @@ import { TaskDuplicate } from "@/components/tasks/task-duplicate";
 import { TaskStatusEditor } from "@/components/tasks/task-status-editor";
 import { TaskWorkflow } from "@/components/tasks/task-workflow";
 import { CommentForm } from "@/components/tasks/comment-form";
+import { CommentItem } from "@/components/tasks/comment-item";
 import { TaskTimerControl } from "@/components/timer/task-timer-control";
+import { TaskLiveTimers } from "@/components/timer/task-live-timers";
 import { LiveRefresh } from "@/components/timer/live-refresh";
-import { getMyTaskTimer, taskTrackedSeconds } from "@/lib/timer/data";
+import { getMyTaskTimer, taskTrackedSeconds, getTaskRunningTimers } from "@/lib/timer/data";
 import { canUseTimer } from "@/lib/timer/finalize";
 import { fmtHm } from "@/lib/timer/shared";
 
@@ -128,8 +130,11 @@ export default async function TaskDetailPage({
     }),
   ]);
 
-  const myTimer = await getMyTaskTimer(session.userId, id);
-  const trackedSeconds = await taskTrackedSeconds(id);
+  const [myTimer, trackedSeconds, runners] = await Promise.all([
+    getMyTaskTimer(session.userId, id),
+    taskTrackedSeconds(id),
+    getTaskRunningTimers(id),
+  ]);
 
   // Knowledge Base guides for this task — this project's SOP for the service
   // (SOPs differ per project), plus any general guide for the service. So a
@@ -172,37 +177,18 @@ export default async function TaskDetailPage({
         <BackLink href="/tasks">Back</BackLink>
       </div>
 
-      {/* Compact header */}
-      <Card className="mb-5 p-5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
+      {/* Task header */}
+      <Card className="mb-5 overflow-hidden">
+        <div className="flex flex-wrap items-start justify-between gap-3 p-5">
           <div className="min-w-0">
-            <h1 className="text-xl font-semibold tracking-tight text-content">{task.name}</h1>
-            <div className="mt-1.5 flex flex-wrap items-center gap-2">
-              <Badge tone={PRIORITY_TONE[task.priority]}>{humanizeEnum(task.priority)}</Badge>
-              {task.service && (
-                <span className="rounded bg-accent-soft px-2 py-0.5 text-xs font-medium text-accent-strong">
-                  {task.service.name}
-                </span>
-              )}
-              {task.dueDate && (
-                <span className="inline-flex items-center text-xs text-faint">
-                  Due {formatDate(task.dueDate)}
-                  {task.status !== "HOLD" && (
-                    <BackdateBadge
-                      date={(task.clientDeadline ?? task.dueDate).toISOString()}
-                      assignedDate={task.createdAt.toISOString()}
-                    />
-                  )}
-                </span>
-              )}
-              {task.clientDeadline && (
-                <span className="inline-flex items-center text-xs text-faint">
-                  Client deadline {formatDate(task.clientDeadline)}
-                </span>
-              )}
+            <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-faint">
+              <Link href={`/projects/${task.project.id}`} className="truncate hover:text-accent-strong hover:underline">
+                {task.project.name}
+              </Link>
             </div>
+            <h1 className="text-2xl font-semibold leading-tight tracking-tight text-content">{task.name}</h1>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {canEdit ? (
               <TaskStatusEditor taskId={task.id} status={task.status} />
             ) : (
@@ -227,8 +213,46 @@ export default async function TaskDetailPage({
             )}
           </div>
         </div>
+
+        {/* Meta strip — labelled facts for quick scanning */}
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-2.5 border-t border-line bg-canvas/40 px-5 py-3 text-sm">
+          <span className="inline-flex items-center gap-2">
+            <span className="text-xs uppercase tracking-wide text-faint">Priority</span>
+            <Badge tone={PRIORITY_TONE[task.priority]}>{humanizeEnum(task.priority)}</Badge>
+          </span>
+          {task.service && (
+            <span className="inline-flex items-center gap-1.5">
+              <Icon name="folder" className="size-4 text-faint" />
+              <span className="font-medium text-content">{task.service.name}</span>
+            </span>
+          )}
+          {task.dueDate && (
+            <span className="inline-flex items-center gap-1.5">
+              <Icon name="calendar" className="size-4 text-faint" />
+              <span className="text-faint">Due</span>
+              <span className="font-medium text-content">{formatDate(task.dueDate)}</span>
+              {task.status !== "HOLD" && (
+                <BackdateBadge
+                  date={(task.clientDeadline ?? task.dueDate).toISOString()}
+                  assignedDate={task.createdAt.toISOString()}
+                />
+              )}
+            </span>
+          )}
+          {task.clientDeadline && (
+            <span className="inline-flex items-center gap-1.5">
+              <Icon name="calendarDays" className="size-4 text-faint" />
+              <span className="text-faint">Client deadline</span>
+              <span className="font-medium text-content">{formatDate(task.clientDeadline)}</span>
+            </span>
+          )}
+        </div>
+
         {task.description && (
-          <LinkifiedText text={task.description} className="mt-3 border-t border-line pt-3 text-sm text-muted" />
+          <div className="border-t border-line p-5">
+            <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-faint">Description</p>
+            <LinkifiedText text={task.description} className="text-sm leading-relaxed text-content" />
+          </div>
         )}
       </Card>
 
@@ -289,22 +313,15 @@ export default async function TaskDetailPage({
               ) : (
                 <ul className="space-y-4 border-t border-line pt-4">
                   {[...task.comments].reverse().map((c) => (
-                    <li key={c.id} className="flex gap-3">
-                      <span className="gradient-brand mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white">
-                        {authorName(c.authorId).slice(0, 2).toUpperCase()}
-                      </span>
-                      <div className="min-w-0">
-                        <p className="text-sm">
-                          {authorEmpId(c.authorId) ? (
-                            <Link href={`/people/${authorEmpId(c.authorId)}`} className="font-medium text-content hover:text-accent-strong hover:underline">{authorName(c.authorId)}</Link>
-                          ) : (
-                            <span className="font-medium text-content">{authorName(c.authorId)}</span>
-                          )}{" "}
-                          <span className="text-xs text-faint">{formatDateTime(c.createdAt)}</span>
-                        </p>
-                        <p className="mt-0.5 whitespace-pre-wrap text-sm text-muted">{c.body}</p>
-                      </div>
-                    </li>
+                    <CommentItem
+                      key={c.id}
+                      id={c.id}
+                      authorName={authorName(c.authorId)}
+                      authorEmpId={authorEmpId(c.authorId)}
+                      body={c.body}
+                      time={formatDateTime(c.createdAt)}
+                      isMine={c.authorId === session.userId}
+                    />
                   ))}
                 </ul>
               )}
@@ -390,6 +407,8 @@ export default async function TaskDetailPage({
                 locked={!canTime}
                 lockedReason={lockedReason}
               />
+              {/* Live "who else is working" — visible to every viewer. */}
+              <TaskLiveTimers runners={runners.filter((r) => r.userId !== session.userId)} />
             </div>
 
             <div className="mt-4 space-y-1.5 border-t border-line pt-4 text-sm">

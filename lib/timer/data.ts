@@ -118,3 +118,42 @@ export async function taskTrackedSeconds(taskId: string): Promise<number> {
   );
   return Math.round(logged + live);
 }
+
+export type TaskRunner = {
+  userId: string;
+  name: string;
+  baseSeconds: number;
+  runStartedAtMs: number;
+};
+
+/**
+ * Everyone currently running a live timer on this task — so ALL viewers (not
+ * just the owner) can see who's actively working and for how long. The client
+ * ticks the elapsed time from runStartedAtMs.
+ */
+export async function getTaskRunningTimers(taskId: string): Promise<TaskRunner[]> {
+  const rows = await prisma.taskTimer.findMany({
+    where: { taskId, status: "RUNNING" },
+    orderBy: { runStartedAt: "asc" },
+    select: { userId: true, accumulatedSeconds: true, runStartedAt: true },
+  });
+  const running = rows.filter((r): r is typeof r & { runStartedAt: Date } => !!r.runStartedAt);
+  if (running.length === 0) return [];
+
+  // TaskTimer has no user relation — resolve names in one lookup.
+  const users = await prisma.user.findMany({
+    where: { id: { in: running.map((r) => r.userId) } },
+    select: { id: true, email: true, employee: { select: { fullName: true } } },
+  });
+  const nameOf = (uid: string) => {
+    const u = users.find((x) => x.id === uid);
+    return u?.employee?.fullName ?? u?.email ?? "Someone";
+  };
+
+  return running.map((r) => ({
+    userId: r.userId,
+    name: nameOf(r.userId),
+    baseSeconds: r.accumulatedSeconds,
+    runStartedAtMs: r.runStartedAt.getTime(),
+  }));
+}

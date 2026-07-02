@@ -10,6 +10,7 @@ import {
   requestChanges,
   sendToClientReview,
   approveComplete,
+  withdrawSubmission,
 } from "@/lib/tasks/workflow";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -106,6 +107,25 @@ export function TaskWorkflow({
         </div>
       )}
       {inReview && !canReview && <p className="text-sm text-muted">Submitted — waiting for review.</p>}
+
+      {/* Worker can pull the submission back to keep working */}
+      {inReview && canSubmit && (
+        <div className="border-t border-line pt-3">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => run(() => withdrawSubmission(taskId))}
+            disabled={pending}
+          >
+            <Icon name="arrowLeft" className="size-4" />
+            Resume working
+          </Button>
+          <p className="mt-1.5 text-xs text-muted">
+            Still something to finish? Pull this out of review — the submitted link is cleared and the
+            task returns to In progress so you can continue.
+          </p>
+        </div>
+      )}
 
       {clientReview && canReview && (
         <div className="flex flex-wrap gap-2">
