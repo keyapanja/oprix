@@ -252,10 +252,10 @@ export function TasksTable({
   const renderRow = (r: TaskRow) => (
     <tr
       key={r.id}
-      className={cn("cursor-pointer hover:bg-canvas", selected.has(r.id) && "bg-accent-soft hover:bg-accent-soft")}
+      className={cn("cursor-pointer border-b border-line hover:bg-canvas", selected.has(r.id) && "bg-accent-soft hover:bg-accent-soft")}
       onClick={() => router.push(`/tasks/${r.id}`)}
     >
-      <td className="px-5 py-3" onClick={(e) => e.stopPropagation()}>
+      <td className="px-4 py-2" onClick={(e) => e.stopPropagation()}>
         <input
           type="checkbox"
           checked={selected.has(r.id)}
@@ -264,35 +264,35 @@ export function TasksTable({
           aria-label={`Select ${r.name}`}
         />
       </td>
-      <td className="px-5 py-3 font-medium text-content">{r.name}</td>
-      <td className="px-5 py-3 text-muted">{r.projectName}</td>
-      <td className="px-5 py-3 text-muted">{r.serviceName ?? "—"}</td>
-      <td className="px-5 py-3"><Badge tone={TASK_STATUS_TONE[r.status]}>{humanizeEnum(r.status)}</Badge></td>
-      <td className="px-5 py-3"><Badge tone={PRIORITY_TONE[r.priority]}>{humanizeEnum(r.priority)}</Badge></td>
-      <td className="px-5 py-3 text-muted">
+      <td className="px-4 py-2 font-medium text-content">{r.name}</td>
+      <td className="px-4 py-2 text-muted">{r.projectName}</td>
+      <td className="px-4 py-2 text-muted">{r.serviceName ?? "—"}</td>
+      <td className="px-4 py-2"><Badge tone={TASK_STATUS_TONE[r.status]}>{humanizeEnum(r.status)}</Badge></td>
+      <td className="px-4 py-2"><Badge tone={PRIORITY_TONE[r.priority]}>{humanizeEnum(r.priority)}</Badge></td>
+      <td className="px-4 py-2 text-muted">
         {r.dueDate ? (
           <span className="inline-flex items-center">{formatDate(r.dueDate)}{r.status !== "HOLD" && <BackdateBadge date={r.clientDeadline ?? r.dueDate} assignedDate={r.assignedDate} />}</span>
         ) : (
           "—"
         )}
       </td>
-      <td className="px-5 py-3 text-muted">{r.assigneeNames.length ? r.assigneeNames.join(", ") : "—"}</td>
+      <td className="px-4 py-2 text-muted">{r.assigneeNames.length ? r.assigneeNames.join(", ") : "—"}</td>
       {canTrack && (
-        <td className="px-5 py-3">
+        <td className="px-4 py-2">
           <div className="flex justify-end">
             <InlineTimer taskId={r.id} status={r.timer.status} baseSeconds={r.timer.baseSeconds} runStartedAtMs={r.timer.runStartedAtMs} locked={r.timer.locked} />
           </div>
         </td>
       )}
-      <td className="px-5 py-3">
+      <td className="px-4 py-2">
         <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
-          <button type="button" onClick={(e) => onEdit(e, r.id)} title="Edit task" aria-label="Edit task" className="flex size-8 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface hover:text-content">
+          <button type="button" onClick={(e) => onEdit(e, r.id)} title="Edit task" aria-label="Edit task" className="flex size-7 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface hover:text-content">
             <Icon name="pencil" className="size-4" />
           </button>
-          <button type="button" onClick={(e) => onDuplicate(e, r.id)} disabled={duplicatingId === r.id} title="Duplicate task" aria-label="Duplicate task" className="flex size-8 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface hover:text-content disabled:opacity-40">
+          <button type="button" onClick={(e) => onDuplicate(e, r.id)} disabled={duplicatingId === r.id} title="Duplicate task" aria-label="Duplicate task" className="flex size-7 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface hover:text-content disabled:opacity-40">
             <Icon name="copy" className="size-4" />
           </button>
-          <button type="button" onClick={(e) => onDelete(e, r.id)} disabled={deletingId === r.id} title="Delete task" aria-label="Delete task" className="flex size-8 items-center justify-center rounded-lg text-muted transition-colors hover:bg-red-500/10 hover:text-red-600 disabled:opacity-40 dark:hover:text-red-400">
+          <button type="button" onClick={(e) => onDelete(e, r.id)} disabled={deletingId === r.id} title="Delete task" aria-label="Delete task" className="flex size-7 items-center justify-center rounded-lg text-muted transition-colors hover:bg-red-500/10 hover:text-red-600 disabled:opacity-40 dark:hover:text-red-400">
             <Icon name="trash" className="size-4" />
           </button>
         </div>
@@ -400,18 +400,18 @@ export function TasksTable({
                 aria-label="Select all on page"
               />
             </th>
-            <th className="px-5 py-3">Task</th>
-            <th className="px-5 py-3">Project</th>
-            <th className="px-5 py-3">Service</th>
-            <th className="px-5 py-3">Status</th>
-            <th className="px-5 py-3">Priority</th>
-            <th className="px-5 py-3">Due</th>
-            <th className="px-5 py-3">Assignees</th>
-            {canTrack && <th className="px-5 py-3 text-right">Timer</th>}
-            <th className="px-5 py-3 text-right">Actions</th>
+            <th className="px-4 py-2">Task</th>
+            <th className="px-4 py-2">Project</th>
+            <th className="px-4 py-2">Service</th>
+            <th className="px-4 py-2">Status</th>
+            <th className="px-4 py-2">Priority</th>
+            <th className="px-4 py-2">Due</th>
+            <th className="px-4 py-2">Assignees</th>
+            {canTrack && <th className="px-4 py-2 text-right">Timer</th>}
+            <th className="px-4 py-2 text-right">Actions</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-line">
+        <tbody>
           {!groupBy ? (
             <>
               {pageRows.map(renderRow)}
@@ -420,20 +420,28 @@ export function TasksTable({
           ) : groups.length === 0 ? (
             emptyRow
           ) : (
-            groups.map((g) => {
+            groups.map((g, gi) => {
               const open = !collapsed.has(g.key);
               return (
                 <Fragment key={`g-${g.key}`}>
-                  <tr className="bg-canvas/60">
-                    <td colSpan={colSpan} className="px-5 py-2.5">
+                  {/* Whitespace gap so each group reads as a separate block */}
+                  {gi > 0 && (
+                    <tr aria-hidden="true">
+                      <td colSpan={colSpan} className="h-3 bg-surface p-0" />
+                    </tr>
+                  )}
+                  <tr>
+                    <td colSpan={colSpan} className="border-y border-line-strong bg-canvas px-4 py-2.5">
                       <button
                         type="button"
                         onClick={() => toggleCollapse(g.key)}
-                        className="flex items-center gap-2 text-sm font-semibold text-content"
+                        className="flex w-full items-center gap-2 text-left"
                       >
                         <Icon name="chevronDown" className={cn("size-4 text-faint transition-transform", !open && "-rotate-90")} />
-                        {g.label}
-                        <span className="text-xs font-normal text-muted">({g.rows.length})</span>
+                        <span className="text-xs font-semibold uppercase tracking-wider text-content">{g.label}</span>
+                        <span className="rounded-full bg-surface px-2 py-0.5 text-xs font-semibold text-muted ring-1 ring-inset ring-line">
+                          {g.rows.length}
+                        </span>
                       </button>
                     </td>
                   </tr>

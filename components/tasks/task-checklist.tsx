@@ -67,8 +67,8 @@ export function TaskChecklist({
   return (
     <div>
       {items.length > 0 && (
-        <div className="mb-3 flex items-center gap-3">
-          <div className="h-2 flex-1 overflow-hidden rounded-full bg-canvas">
+        <div className="mb-2.5 flex items-center gap-3">
+          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-canvas">
             <div className="gradient-brand h-full rounded-full" style={{ width: `${pct}%` }} />
           </div>
           <span className="text-xs font-medium text-muted">{done}/{items.length}</span>
@@ -78,9 +78,9 @@ export function TaskChecklist({
       {items.length === 0 ? (
         <p className="text-sm text-muted">No checklist items.</p>
       ) : (
-        <ul className="space-y-1">
+        <ul className="space-y-0.5">
           {items.map((it) => (
-            <li key={it.id} className="group flex items-center gap-2.5 rounded-lg px-1 py-1.5 hover:bg-canvas">
+            <li key={it.id} className="group flex items-center gap-2.5 rounded-lg px-1 py-1 hover:bg-canvas">
               <input
                 type="checkbox"
                 checked={it.isDone}
@@ -106,7 +106,7 @@ export function TaskChecklist({
       )}
 
       {canEdit && (
-        <div className="mt-3 flex gap-2">
+        <div className="mt-2.5 flex gap-2">
           <Input
             value={text}
             onChange={(e) => setText(e.target.value)}
