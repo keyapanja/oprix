@@ -57,11 +57,6 @@ export function LeaveTabs({ leaveTypes, employees }: { leaveTypes: LType[]; empl
 
       {tab === "Requests" && (
         <div className="space-y-5">
-          <Card className="p-5">
-            <h3 className="mb-4 text-sm font-semibold text-content">Raise a request for an employee</h3>
-            <RequestForm employees={employees} leaveTypes={typeOpts} />
-          </Card>
-
           <Card className="flex flex-wrap items-center justify-between gap-3 p-5">
             <div>
               <h3 className="text-sm font-semibold text-content">All leave requests</h3>
@@ -73,6 +68,11 @@ export function LeaveTabs({ leaveTypes, employees }: { leaveTypes: LType[]; empl
                 <Icon name="chevronRight" className="size-4" />
               </Button>
             </Link>
+          </Card>
+
+          <Card className="p-5">
+            <h3 className="mb-4 text-sm font-semibold text-content">Raise a request for an employee</h3>
+            <RequestForm employees={employees} leaveTypes={typeOpts} />
           </Card>
         </div>
       )}

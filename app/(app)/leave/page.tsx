@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icons";
 import { MyRequests } from "@/components/leave/my-requests";
 import { LeaveTabs } from "@/components/leave/leave-tabs";
+import { LeaveBalances } from "@/components/leave/leave-balances";
+import { computeBalances } from "@/lib/leave/balance";
 import { type LeaveDetail } from "@/components/leave/leave-detail-modal";
 
 export const metadata: Metadata = { title: "Leave · Oprix" };
@@ -46,8 +48,9 @@ export default async function LeavePage() {
       })
     : [];
 
-  // Manager data (the full request list lives on /leave/requests).
-  const [leaveTypes, employees] = await Promise.all([
+  // Manager data (the full request list lives on /leave/requests) + the
+  // employee's own per-type balances (taken / left this period).
+  const [leaveTypes, employees, balances] = await Promise.all([
     isManager
       ? prisma.leaveType.findMany({
           where: { companyId },
@@ -64,6 +67,9 @@ export default async function LeavePage() {
           orderBy: { fullName: "asc" },
           select: { id: true, fullName: true },
         })
+      : Promise.resolve([]),
+    session.employeeId
+      ? computeBalances(companyId, session.employeeId)
       : Promise.resolve([]),
   ]);
 
@@ -119,12 +125,26 @@ export default async function LeavePage() {
       />
 
       {session.employeeId && (
-        <Card className="mb-8 overflow-hidden">
-          <div className="border-b border-line px-5 py-4">
-            <h3 className="text-sm font-semibold text-content">My requests</h3>
-          </div>
-          <MyRequests requests={myDetails} leaveTypes={leaveTypeOpts} />
-        </Card>
+        <>
+          <LeaveBalances
+            balances={balances.map((b) => ({
+              typeId: b.typeId,
+              name: b.name,
+              allowance: b.allowance,
+              used: b.used,
+              remaining: b.remaining,
+              period: b.period,
+              unlimited: b.unlimited,
+            }))}
+          />
+
+          <Card className="mb-8 overflow-hidden">
+            <div className="border-b border-line px-5 py-4">
+              <h3 className="text-sm font-semibold text-content">My requests</h3>
+            </div>
+            <MyRequests requests={myDetails} leaveTypes={leaveTypeOpts} />
+          </Card>
+        </>
       )}
 
       {isManager && (
