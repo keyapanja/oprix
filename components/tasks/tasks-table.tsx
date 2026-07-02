@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Icon } from "@/components/ui/icons";
 import { Combobox } from "@/components/ui/combobox";
 import { humanizeEnum, formatDate } from "@/lib/format";
+import { safeHref, isHttpUrl } from "@/lib/url";
 import { BackdateBadge } from "@/components/ui/backdate-badge";
 import { InlineTimer } from "@/components/timer/inline-timer";
 import type { TimerStatusUI } from "@/lib/timer/shared";
@@ -30,10 +31,28 @@ export type TaskRow = {
   clientDeadline: string | null;
   /** Date the task was created/assigned (YYYY-MM-DD) — calendar spans from here to dueDate. */
   assignedDate: string | null;
+  createdByName: string | null;
+  finalLink: string | null;
+  /** Date the work was submitted/delivered (YYYY-MM-DD), or null if not yet. */
+  deliveredOnISO: string | null;
   mine: boolean;
   createdByMe: boolean;
   timer: { status: TimerStatusUI; baseSeconds: number; runStartedAtMs: number | null; locked: boolean };
 };
+
+/** On-time / delayed verdict for a row, plus how many days late (if any). */
+function deliveryInfo(r: TaskRow, todayISO: string): { verdict: "ontime" | "delayed" | null; delayedDays: number } {
+  if (!r.dueDate) return { verdict: null, delayedDays: 0 };
+  const diff = (a: string, b: string) => Math.round((Date.parse(b) - Date.parse(a)) / 86_400_000);
+  if (r.deliveredOnISO) {
+    return r.deliveredOnISO <= r.dueDate
+      ? { verdict: "ontime", delayedDays: 0 }
+      : { verdict: "delayed", delayedDays: diff(r.dueDate, r.deliveredOnISO) };
+  }
+  const active = r.status === "TODO" || r.status === "IN_PROGRESS" || r.status === "REDO";
+  if (active && todayISO > r.dueDate) return { verdict: "delayed", delayedDays: diff(r.dueDate, todayISO) };
+  return { verdict: null, delayedDays: 0 };
+}
 
 type View = "all" | "mine" | "created";
 
@@ -67,11 +86,13 @@ export function TasksTable({
   canTrack,
   initialView = "all",
   showAdvancedFilters = false,
+  today,
 }: {
   rows: TaskRow[];
   canTrack: boolean;
   initialView?: View;
   showAdvancedFilters?: boolean;
+  today: string;
 }) {
   const router = useRouter();
   const [search, setSearch] = useState("");
@@ -159,7 +180,7 @@ export function TasksTable({
   const startIdx = (current - 1) * pageSize;
   const pageRows = filtered.slice(startIdx, startIdx + pageSize);
 
-  const colSpan = canTrack ? 10 : 9;
+  const colSpan = canTrack ? 17 : 16;
   const groups = useMemo(() => {
     if (!groupBy) return [] as { key: string; label: string; rows: TaskRow[] }[];
     const m = new Map<string, TaskRow[]>();
@@ -249,7 +270,9 @@ export function TasksTable({
     });
   }
 
-  const renderRow = (r: TaskRow) => (
+  const renderRow = (r: TaskRow) => {
+    const di = deliveryInfo(r, today);
+    return (
     <tr
       key={r.id}
       className={cn("cursor-pointer border-b border-line hover:bg-canvas", selected.has(r.id) && "bg-accent-soft hover:bg-accent-soft")}
@@ -264,19 +287,50 @@ export function TasksTable({
           aria-label={`Select ${r.name}`}
         />
       </td>
-      <td className="px-4 py-2 font-medium text-content">{r.name}</td>
-      <td className="px-4 py-2 text-muted">{r.projectName}</td>
-      <td className="px-4 py-2 text-muted">{r.serviceName ?? "—"}</td>
+      <td className="px-4 py-2 font-medium text-content"><span className="block max-w-[16rem] truncate" title={r.name}>{r.name}</span></td>
+      <td className="whitespace-nowrap px-4 py-2 text-muted"><span className="block max-w-[10rem] truncate" title={r.projectName}>{r.projectName}</span></td>
+      <td className="whitespace-nowrap px-4 py-2 text-muted">{r.departmentName ?? "—"}</td>
+      <td className="whitespace-nowrap px-4 py-2 text-muted"><span className="block max-w-[10rem] truncate" title={r.serviceName ?? ""}>{r.serviceName ?? "—"}</span></td>
+      <td className="whitespace-nowrap px-4 py-2 text-muted">{r.createdByName ?? "—"}</td>
+      <td className="px-4 py-2 text-muted"><span className="block max-w-[12rem] truncate" title={r.assigneeNames.join(", ")}>{r.assigneeNames.length ? r.assigneeNames.join(", ") : "—"}</span></td>
       <td className="px-4 py-2"><Badge tone={TASK_STATUS_TONE[r.status]}>{humanizeEnum(r.status)}</Badge></td>
       <td className="px-4 py-2"><Badge tone={PRIORITY_TONE[r.priority]}>{humanizeEnum(r.priority)}</Badge></td>
-      <td className="px-4 py-2 text-muted">
+      <td className="px-4 py-2">
+        {di.verdict === "ontime" ? (
+          <Badge tone="green">On time</Badge>
+        ) : di.verdict === "delayed" ? (
+          <Badge tone="red">Delayed</Badge>
+        ) : (
+          <span className="text-faint">—</span>
+        )}
+      </td>
+      <td className="whitespace-nowrap px-4 py-2">
+        {di.delayedDays > 0 ? (
+          <span className="font-medium text-red-600 dark:text-red-400">{di.delayedDays} day{di.delayedDays === 1 ? "" : "s"}</span>
+        ) : (
+          <span className="text-faint">—</span>
+        )}
+      </td>
+      <td className="whitespace-nowrap px-4 py-2 text-muted">
         {r.dueDate ? (
           <span className="inline-flex items-center">{formatDate(r.dueDate)}{r.status !== "HOLD" && <BackdateBadge date={r.clientDeadline ?? r.dueDate} assignedDate={r.assignedDate} />}</span>
         ) : (
           "—"
         )}
       </td>
-      <td className="px-4 py-2 text-muted">{r.assigneeNames.length ? r.assigneeNames.join(", ") : "—"}</td>
+      <td className="whitespace-nowrap px-4 py-2 text-muted">{r.clientDeadline ? formatDate(r.clientDeadline) : "—"}</td>
+      <td className="whitespace-nowrap px-4 py-2 text-muted">{r.deliveredOnISO ? formatDate(r.deliveredOnISO) : "—"}</td>
+      <td className="px-4 py-2" onClick={(e) => e.stopPropagation()}>
+        {r.finalLink ? (
+          isHttpUrl(r.finalLink) ? (
+            <a href={safeHref(r.finalLink)} target="_blank" rel="noreferrer" className="block max-w-[12rem] truncate text-accent-strong hover:underline" title={r.finalLink}>{r.finalLink}</a>
+          ) : (
+            <span className="block max-w-[12rem] truncate text-content" title={r.finalLink}>{r.finalLink}</span>
+          )
+        ) : (
+          <span className="text-faint">—</span>
+        )}
+      </td>
       {canTrack && (
         <td className="px-4 py-2">
           <div className="flex justify-end">
@@ -298,7 +352,8 @@ export function TasksTable({
         </div>
       </td>
     </tr>
-  );
+    );
+  };
 
   const emptyRow = (
     <tr>
@@ -388,10 +443,11 @@ export function TasksTable({
         </div>
       </div>
 
+      <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wider text-faint">
-            <th className="w-10 px-5 py-3">
+            <th className="w-10 px-4 py-2">
               <input
                 type="checkbox"
                 checked={pageAllSelected}
@@ -401,13 +457,20 @@ export function TasksTable({
               />
             </th>
             <th className="px-4 py-2">Task</th>
-            <th className="px-4 py-2">Project</th>
-            <th className="px-4 py-2">Service</th>
+            <th className="whitespace-nowrap px-4 py-2">Project</th>
+            <th className="whitespace-nowrap px-4 py-2">Department</th>
+            <th className="whitespace-nowrap px-4 py-2">Service</th>
+            <th className="whitespace-nowrap px-4 py-2">Created by</th>
+            <th className="whitespace-nowrap px-4 py-2">Assigned to</th>
             <th className="px-4 py-2">Status</th>
             <th className="px-4 py-2">Priority</th>
-            <th className="px-4 py-2">Due</th>
-            <th className="px-4 py-2">Assignees</th>
-            {canTrack && <th className="px-4 py-2 text-right">Timer</th>}
+            <th className="whitespace-nowrap px-4 py-2">Delivery</th>
+            <th className="whitespace-nowrap px-4 py-2">Delayed by</th>
+            <th className="whitespace-nowrap px-4 py-2">Due</th>
+            <th className="whitespace-nowrap px-4 py-2">Client deadline</th>
+            <th className="whitespace-nowrap px-4 py-2">Delivered on</th>
+            <th className="whitespace-nowrap px-4 py-2">Final link</th>
+            {canTrack && <th className="whitespace-nowrap px-4 py-2 text-right">Timer</th>}
             <th className="px-4 py-2 text-right">Actions</th>
           </tr>
         </thead>
@@ -424,14 +487,14 @@ export function TasksTable({
               const open = !collapsed.has(g.key);
               return (
                 <Fragment key={`g-${g.key}`}>
-                  {/* Whitespace gap so each group reads as a separate block */}
-                  {gi > 0 && (
-                    <tr aria-hidden="true">
-                      <td colSpan={colSpan} className="h-3 bg-surface p-0" />
-                    </tr>
-                  )}
                   <tr>
-                    <td colSpan={colSpan} className="border-y border-line-strong bg-canvas px-4 py-2.5">
+                    <td
+                      colSpan={colSpan}
+                      className={cn(
+                        "border-b border-line-strong bg-canvas px-4 py-2.5",
+                        gi > 0 && "border-t-4",
+                      )}
+                    >
                       <button
                         type="button"
                         onClick={() => toggleCollapse(g.key)}
@@ -452,6 +515,7 @@ export function TasksTable({
           )}
         </tbody>
       </table>
+      </div>
 
       {!groupBy ? (
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-5 py-3 text-sm text-muted">

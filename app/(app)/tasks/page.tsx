@@ -48,11 +48,28 @@ export default async function TasksPage({
       clientDeadline: true,
       createdAt: true,
       createdById: true,
+      finalLink: true,
+      submittedAt: true,
+      completedAt: true,
       project: { select: { name: true } },
       service: { select: { name: true, department: { select: { name: true } } } },
       assignees: { select: { employeeId: true, employee: { select: { fullName: true } } } },
     },
   });
+
+  // Resolve creator names (createdById → employee name / email).
+  const creatorIds = [...new Set(tasks.map((t) => t.createdById).filter((x): x is string => !!x))];
+  const creators = creatorIds.length
+    ? await prisma.user.findMany({
+        where: { id: { in: creatorIds } },
+        select: { id: true, email: true, employee: { select: { fullName: true } } },
+      })
+    : [];
+  const creatorName = (uid: string | null): string | null => {
+    if (!uid) return null;
+    const u = creators.find((c) => c.id === uid);
+    return u?.employee?.fullName ?? u?.email ?? null;
+  };
 
   const timerStates: Map<string, TaskTimerState> = await getTaskTimerStates(
     session.userId,
@@ -76,6 +93,13 @@ export default async function TasksPage({
       dueDate: t.dueDate ? t.dueDate.toISOString().slice(0, 10) : null,
       clientDeadline: t.clientDeadline ? t.clientDeadline.toISOString().slice(0, 10) : null,
       assignedDate: t.createdAt.toISOString().slice(0, 10),
+      createdByName: creatorName(t.createdById),
+      finalLink: t.finalLink,
+      deliveredOnISO: t.submittedAt
+        ? t.submittedAt.toISOString().slice(0, 10)
+        : t.status === "COMPLETED" && t.completedAt
+          ? t.completedAt.toISOString().slice(0, 10)
+          : null,
       mine: isAssignee,
       createdByMe: isReviewer,
       timer: { ...state, locked: !canTime },

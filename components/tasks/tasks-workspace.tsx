@@ -47,7 +47,7 @@ export function TasksWorkspace({
       </div>
 
       {mode === "list" && (
-        <TasksTable rows={rows} canTrack={canTrack} initialView={initialView} showAdvancedFilters={showAdvancedFilters} />
+        <TasksTable rows={rows} canTrack={canTrack} initialView={initialView} showAdvancedFilters={showAdvancedFilters} today={today} />
       )}
       {mode === "calendar" && <TaskCalendar tasks={rows} today={today} />}
     </div>
