@@ -8,6 +8,14 @@ export type AwayEntry = {
   isHalfDay: boolean;
 };
 export type DayCell = { holiday?: string; away: AwayEntry[]; announcements: string[] };
+export type LeaveEntry = {
+  name: string;
+  kind: "LEAVE" | "WFH";
+  type: string | null;
+  isHalfDay: boolean;
+  startISO: string;
+  endISO: string;
+};
 export type MonthData = {
   byDay: Record<string, DayCell>;
   announcements: {
@@ -21,6 +29,7 @@ export type MonthData = {
     attachments: { id: string; fileName: string; mimeType: string | null }[];
   }[];
   holidays: { id: string; dateISO: string; name: string }[];
+  leaves: LeaveEntry[]; // flat per-person leave/WFH list overlapping the month
 };
 
 const iso = (d: Date) => d.toISOString().slice(0, 10);
@@ -114,5 +123,15 @@ export async function getMonthCalendar(
       attachments: a.attachments,
     })),
     holidays: holidays.map((h) => ({ id: h.id, dateISO: iso(h.date), name: h.name })),
+    leaves: away
+      .map((r) => ({
+        name: r.employee.fullName,
+        kind: r.kind,
+        type: r.leaveType?.name ?? null,
+        isHalfDay: r.isHalfDay,
+        startISO: iso(r.startDate),
+        endISO: iso(r.endDate),
+      }))
+      .sort((a, b) => a.startISO.localeCompare(b.startISO) || a.name.localeCompare(b.name)),
   };
 }

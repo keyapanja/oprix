@@ -9,6 +9,7 @@ import { DateActionModal } from "@/components/calendar/date-action-modal";
 import { AnnouncementActions } from "@/components/calendar/announcement-actions";
 import { HolidayActions } from "@/components/calendar/holiday-actions";
 import { CalendarDetailModal, type CalendarDetail } from "@/components/calendar/detail-modal";
+import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/cn";
 
 type Balance = {
@@ -173,15 +174,53 @@ export function CalendarView({
                   {cell && cell.announcements.length > 2 && (
                     <p className="px-1 text-[10px] text-faint">+{cell.announcements.length - 2} more</p>
                   )}
-                  {awayCount > 0 && (
-                    <p className="px-1 text-[10px] text-muted" title={cell!.away.map((a) => `${a.name} (${a.kind === "WFH" ? "WFH" : a.type ?? "Leave"}${a.isHalfDay ? ", half" : ""})`).join("\n")}>
-                      {awayCount} away
+                  {cell?.away.slice(0, 2).map((a, idx) => (
+                    <p
+                      key={idx}
+                      className="truncate rounded bg-blue-100 px-1 py-0.5 text-[10px] font-medium text-blue-700 dark:bg-blue-500/20 dark:text-blue-300"
+                      title={`${a.name} — ${a.kind === "WFH" ? "WFH" : a.type ?? "Leave"}${a.isHalfDay ? " (half day)" : ""}`}
+                    >
+                      {a.kind === "WFH" ? "🏠 " : ""}{a.name}{a.isHalfDay ? " ·½" : ""}
+                    </p>
+                  ))}
+                  {awayCount > 2 && (
+                    <p className="px-1 text-[10px] text-faint" title={cell!.away.slice(2).map((a) => a.name).join("\n")}>
+                      +{awayCount - 2} more away
                     </p>
                   )}
                 </div>
               </div>
             );
           })}
+        </div>
+      </Card>
+
+      <Card>
+        <div className="border-b border-line px-5 py-3">
+          <h3 className="text-sm font-semibold text-content">On leave this month</h3>
+        </div>
+        <div className="p-5">
+          {data.leaves.length === 0 ? (
+            <p className="text-sm text-muted">No one is away this month.</p>
+          ) : (
+            <ul className="space-y-2">
+              {data.leaves.map((l, i) => (
+                <li key={i} className="flex flex-wrap items-center gap-x-3 gap-y-0.5 rounded-lg px-1 py-0.5 text-sm">
+                  <span className={cn("size-2 shrink-0 rounded-full", l.kind === "WFH" ? "bg-sky-500" : "bg-blue-500")} />
+                  <span className="font-medium text-content">{l.name}</span>
+                  <span className="text-muted">
+                    {l.kind === "WFH" ? "Working from home" : l.type ?? "Leave"}
+                    {l.isHalfDay ? " · half day" : ""}
+                  </span>
+                  <span className="ml-auto text-xs text-faint">
+                    {l.startISO === l.endISO
+                      ? formatDate(l.startISO)
+                      : `${formatDate(l.startISO)} – ${formatDate(l.endISO)}`}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       </Card>
 
