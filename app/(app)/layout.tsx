@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { getActiveTimers } from "@/lib/timer/data";
 import { sendEventReminders } from "@/lib/calendar/reminders";
 import { sendFormReminders } from "@/lib/forms/notify-cron";
+import { runRecurringTasks } from "@/lib/tasks/recurring-cron";
 import { Sidebar } from "@/components/shell/sidebar";
 import { Topbar } from "@/components/shell/topbar";
 import { TimerBar } from "@/components/timer/timer-bar";
@@ -71,6 +72,13 @@ export default async function AppLayout({
   // Fire any due scheduled form-fill reminders (best-effort; atomic per day).
   try {
     await sendFormReminders({ companyId: session.companyId, tz: company?.timezone ?? "Asia/Kolkata" });
+  } catch {
+    /* never break the shell */
+  }
+
+  // Spawn any due recurring tasks (best-effort; each template claims its day atomically).
+  try {
+    await runRecurringTasks({ companyId: session.companyId, tz: company?.timezone ?? "Asia/Kolkata" });
   } catch {
     /* never break the shell */
   }

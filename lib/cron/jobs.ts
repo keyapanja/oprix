@@ -2,11 +2,13 @@ import "server-only";
 import { prisma } from "@/lib/db";
 import { sendEventReminders } from "@/lib/calendar/reminders";
 import { sendFormReminders } from "@/lib/forms/notify-cron";
+import { runRecurringTasks } from "@/lib/tasks/recurring-cron";
 
 export type CronSummary = {
   companies: number;
   remindersRun: number;
   formRemindersFired: number;
+  recurringTasksCreated: number;
   lateNotifiedCompanies: number;
   lateNamesTotal: number;
 };
@@ -25,6 +27,7 @@ export async function runDailyJobs(): Promise<CronSummary> {
 
   let remindersRun = 0;
   let formRemindersFired = 0;
+  let recurringTasksCreated = 0;
   // PUNCH MODULE paused: late-login notices are disabled (with punch removed,
   // no one clocks in, so they'd flag everyone daily). Kept at 0; see
   // docs/PUNCH-MODULE.md to restore.
@@ -48,7 +51,20 @@ export async function runDailyJobs(): Promise<CronSummary> {
     } catch (e) {
       console.error(`[cron] form reminders failed for ${c.id}:`, e);
     }
+
+    try {
+      recurringTasksCreated += await runRecurringTasks({ companyId: c.id, tz });
+    } catch (e) {
+      console.error(`[cron] recurring tasks failed for ${c.id}:`, e);
+    }
   }
 
-  return { companies: companies.length, remindersRun, formRemindersFired, lateNotifiedCompanies, lateNamesTotal };
+  return {
+    companies: companies.length,
+    remindersRun,
+    formRemindersFired,
+    recurringTasksCreated,
+    lateNotifiedCompanies,
+    lateNamesTotal,
+  };
 }

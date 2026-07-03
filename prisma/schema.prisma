@@ -624,6 +624,31 @@ model ProjectServiceChecklistItem {
   @@index([projectServiceId])
 }
 
+// Recurring task template — auto-creates a task on a schedule (same schedule
+// shape as the form reminders). Scalar FKs (no relations) to stay self-contained;
+// the cron/UI resolve project/service/assignee names on demand.
+model RecurringTask {
+  id                   String   @id @default(cuid())
+  companyId            String
+  projectId            String
+  serviceId            String? // sub-category the task is created under
+  name                 String
+  description          String?
+  priority             Priority @default(MEDIUM)
+  assigneeIds          Json     // string[] of employee ids
+  dueInDays            Int? // due date = occurrence date + this (null = no due date)
+  clientDeadlineInDays Int?
+  checklistEnabled     Boolean  @default(true)
+  schedule             Json     // { frequency, time, weekday?, monthday?, date? }
+  active               Boolean  @default(true)
+  lastRunKey           String? // idempotency: YYYY-MM-DD of the last fire
+  createdById          String? // becomes the created task's creator / reviewer
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([companyId])
+}
+
 // Many employees can work on one task.
 model TaskAssignee {
   id         String @id @default(cuid())
