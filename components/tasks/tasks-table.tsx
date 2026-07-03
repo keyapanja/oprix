@@ -455,7 +455,7 @@ export function TasksTable({
       </div>
 
       <div className="max-h-[70vh] overflow-auto">
-      <table className="w-full text-sm">
+      <table className="w-full text-sm [&_td]:border-r [&_td]:border-line [&_th]:border-r [&_th]:border-line">
         <thead>
           <tr className="text-left text-xs font-semibold uppercase tracking-wider text-faint">
             <th className="sticky left-0 top-0 z-30 w-12 border-b border-line bg-surface px-4 py-2">
