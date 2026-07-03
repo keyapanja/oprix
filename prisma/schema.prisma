@@ -445,6 +445,7 @@ model Employee {
   probationStatus ProbationStatus  @default(ON_PROBATION)
   probationMonths Int?
   workLocation    String?
+  lastAppraisalAt DateTime? // date of the person's most recent appraisal (HR-editable)
   deletedAt       DateTime?
   deletedById     String?   // userId who moved it to trash
   createdAt       DateTime         @default(now())

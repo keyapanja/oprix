@@ -14,9 +14,28 @@ import { EmergencyContactForm } from "@/components/employees/emergency-contact-f
 import { DeleteEmployeeButton } from "@/components/employees/delete-employee-button";
 import { ResendInvite } from "@/components/employees/resend-invite";
 import { EmployeeRole } from "@/components/employees/employee-role";
+import { AppraisalEdit } from "@/components/employees/appraisal-edit";
+import { computeBalances } from "@/lib/leave/balance";
 import { ROLE_LABELS } from "@/lib/auth/can";
+import { cn } from "@/lib/cn";
 
 export const metadata: Metadata = { title: "Employee · Oprix" };
+
+/** Compact stat tile — a Link when the viewer can open the target, else static. */
+function StatCard({ href, label, value, accent }: { href: string | null; label: string; value: number; accent?: string }) {
+  const inner = (
+    <>
+      <p className={cn("text-2xl font-semibold leading-none", accent ?? "text-content")}>{value}</p>
+      <p className="mt-1 text-xs text-muted">{label}</p>
+    </>
+  );
+  const cls = "block rounded-xl bg-canvas px-3 py-2.5 ring-1 ring-inset ring-line transition-colors";
+  return href ? (
+    <Link href={href} className={cn(cls, "hover:bg-surface hover:ring-brand-500/40")}>{inner}</Link>
+  ) : (
+    <div className={cls}>{inner}</div>
+  );
+}
 
 export default async function EmployeeDetailPage({
   params,
@@ -27,6 +46,9 @@ export default async function EmployeeDetailPage({
   const session = await requirePage("employee:read");
   const canManage = await hasPermission(session.companyId, session.role, "employee:manage");
   const canManageRoles = await hasPermission(session.companyId, session.role, "roles:manage");
+  const canViewTasks = await hasPermission(session.companyId, session.role, "task:manage");
+  const canViewProjects = await hasPermission(session.companyId, session.role, "project:manage");
+  const canManageLeave = await hasPermission(session.companyId, session.role, "leave:manage");
 
   const employee = await prisma.employee.findFirst({
     where: { id, companyId: session.companyId, deletedAt: null },
@@ -42,6 +64,59 @@ export default async function EmployeeDetailPage({
   });
 
   if (!employee) notFound();
+
+  // Work summary: tasks assigned to this person + their leave balances.
+  const [assignedTasks, balances] = await Promise.all([
+    prisma.task.findMany({
+      where: {
+        deletedAt: null,
+        project: { companyId: session.companyId, deletedAt: null },
+        assignees: { some: { employeeId: id } },
+      },
+      select: {
+        status: true,
+        dueDate: true,
+        submittedAt: true,
+        completedAt: true,
+        project: { select: { id: true, name: true } },
+      },
+    }),
+    computeBalances(session.companyId, id),
+  ]);
+
+  const isoDate = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : null);
+  const stat = { total: assignedTasks.length, todo: 0, inProgress: 0, inReview: 0, delivered: 0, onTime: 0, delayed: 0 };
+  const projMap = new Map<string, string>();
+  for (const t of assignedTasks) {
+    projMap.set(t.project.id, t.project.name);
+    switch (t.status) {
+      case "TODO":
+      case "HOLD":
+        stat.todo++;
+        break;
+      case "IN_PROGRESS":
+      case "REDO":
+        stat.inProgress++;
+        break;
+      case "REVIEW":
+      case "CLIENT_REVIEW":
+        stat.inReview++;
+        break;
+      case "COMPLETED": {
+        stat.delivered++;
+        const due = isoDate(t.dueDate);
+        const del = isoDate(t.submittedAt) ?? isoDate(t.completedAt);
+        if (due && del) {
+          if (del <= due) stat.onTime++;
+          else stat.delayed++;
+        }
+        break;
+      }
+    }
+  }
+  const projects = [...projMap]
+    .map(([pid, name]) => ({ id: pid, name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   const account: "active" | "pending" | "none" = !employee.user
     ? "none"
@@ -145,6 +220,89 @@ export default async function EmployeeDetailPage({
         </div>
       </Card>
 
+      {/* Tasks summary */}
+      <Card className="mb-6">
+        <CardHeader
+          title="Tasks"
+          description={`${stat.total} assigned in total`}
+          action={canViewTasks ? <Link href={`/tasks?assignee=${employee.id}`} className="text-sm font-medium text-accent-strong hover:underline">View all</Link> : undefined}
+        />
+        <CardBody>
+          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+            <StatCard href={canViewTasks ? `/tasks?assignee=${employee.id}&status=TODO` : null} label="To do" value={stat.todo} />
+            <StatCard href={canViewTasks ? `/tasks?assignee=${employee.id}&status=IN_PROGRESS` : null} label="In progress" value={stat.inProgress} accent="text-blue-600 dark:text-blue-400" />
+            <StatCard href={canViewTasks ? `/tasks?assignee=${employee.id}&status=REVIEW` : null} label="In review" value={stat.inReview} accent="text-amber-600 dark:text-amber-400" />
+            <StatCard href={canViewTasks ? `/tasks?assignee=${employee.id}&status=COMPLETED` : null} label="Delivered" value={stat.delivered} accent="text-emerald-600 dark:text-emerald-400" />
+          </div>
+          {stat.delivered > 0 && (
+            <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1 border-t border-line pt-3 text-xs">
+              <span className="inline-flex items-center gap-1.5">
+                <span className="size-2 rounded-full bg-emerald-500" />
+                <span className="text-muted">On time <span className="font-semibold text-content">{stat.onTime}</span></span>
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="size-2 rounded-full bg-red-500" />
+                <span className="text-muted">Delayed <span className="font-semibold text-content">{stat.delayed}</span></span>
+              </span>
+            </div>
+          )}
+        </CardBody>
+      </Card>
+
+      {/* Projects + Leave */}
+      <div className="mb-6 grid gap-6 lg:grid-cols-2">
+        <Card>
+          <CardHeader title="Projects" description={`${projects.length} ${projects.length === 1 ? "project" : "projects"}`} />
+          <CardBody>
+            {projects.length === 0 ? (
+              <p className="text-sm text-muted">Not on any projects yet.</p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {projects.map((p) =>
+                  canViewProjects ? (
+                    <Link
+                      key={p.id}
+                      href={`/projects/${p.id}`}
+                      className="rounded-lg bg-canvas px-2.5 py-1.5 text-sm font-medium text-content ring-1 ring-inset ring-line transition-colors hover:bg-surface hover:text-accent-strong"
+                    >
+                      {p.name}
+                    </Link>
+                  ) : (
+                    <span key={p.id} className="rounded-lg bg-canvas px-2.5 py-1.5 text-sm font-medium text-content ring-1 ring-inset ring-line">
+                      {p.name}
+                    </span>
+                  ),
+                )}
+              </div>
+            )}
+          </CardBody>
+        </Card>
+
+        <Card>
+          <CardHeader
+            title="Leave"
+            action={canManageLeave ? <Link href="/leave/requests" className="text-sm font-medium text-accent-strong hover:underline">View requests</Link> : undefined}
+          />
+          <CardBody>
+            {balances.length === 0 ? (
+              <p className="text-sm text-muted">No leave types configured.</p>
+            ) : (
+              <ul className="divide-y divide-line">
+                {balances.map((b) => (
+                  <li key={b.typeId} className="flex items-center justify-between gap-3 py-2 text-sm">
+                    <span className="text-content">{b.name}</span>
+                    <span className="text-muted">
+                      <span className="font-medium text-content">{b.used}</span> taken
+                      {b.unlimited ? " · no limit" : <> · <span className="font-medium text-content">{b.remaining}</span> left</>}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardBody>
+        </Card>
+      </div>
+
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Details */}
         <Card>
@@ -160,6 +318,12 @@ export default async function EmployeeDetailPage({
                 </div>
               ))}
             </dl>
+            <div className="mt-4 border-t border-line pt-4">
+              <p className="text-xs font-medium uppercase tracking-wide text-faint">Last appraisal</p>
+              <div className="mt-1">
+                <AppraisalEdit employeeId={employee.id} initial={isoDate(employee.lastAppraisalAt)} canEdit={canManage} />
+              </div>
+            </div>
           </CardBody>
         </Card>
 

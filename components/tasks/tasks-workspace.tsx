@@ -16,6 +16,7 @@ export function TasksWorkspace({
   rows,
   canTrack,
   initialView,
+  initialStatus,
   showAdvancedFilters,
   today,
   isSuperAdmin,
@@ -23,6 +24,7 @@ export function TasksWorkspace({
   rows: TaskRow[];
   canTrack: boolean;
   initialView?: "all" | "mine" | "created";
+  initialStatus?: string;
   showAdvancedFilters?: boolean;
   today: string;
   isSuperAdmin: boolean;
@@ -49,7 +51,7 @@ export function TasksWorkspace({
       </div>
 
       {mode === "list" && (
-        <TasksTable rows={rows} canTrack={canTrack} initialView={initialView} showAdvancedFilters={showAdvancedFilters} today={today} />
+        <TasksTable rows={rows} canTrack={canTrack} initialView={initialView} initialStatus={initialStatus} showAdvancedFilters={showAdvancedFilters} today={today} />
       )}
       {mode === "calendar" && <TaskCalendar tasks={rows} today={today} isSuperAdmin={isSuperAdmin} />}
     </div>

@@ -103,18 +103,20 @@ export function TasksTable({
   rows,
   canTrack,
   initialView = "all",
+  initialStatus = "ALL",
   showAdvancedFilters = false,
   today,
 }: {
   rows: TaskRow[];
   canTrack: boolean;
   initialView?: View;
+  initialStatus?: string;
   showAdvancedFilters?: boolean;
   today: string;
 }) {
   const router = useRouter();
   const [search, setSearch] = useState("");
-  const [status, setStatus] = useState("ALL");
+  const [status, setStatus] = useState(initialStatus);
   const [view, setView] = useState<View>(initialView);
   const [dept, setDept] = useState("ALL");
   const [service, setService] = useState("ALL");

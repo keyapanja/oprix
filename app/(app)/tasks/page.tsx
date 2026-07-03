@@ -18,11 +18,14 @@ export const metadata: Metadata = { title: "Tasks · Oprix" };
 export default async function TasksPage({
   searchParams,
 }: {
-  searchParams: Promise<{ view?: string }>;
+  searchParams: Promise<{ view?: string; assignee?: string; status?: string }>;
 }) {
   const session = await requirePage("task:manage");
   const sp = await searchParams;
   const initialView = sp.view === "mine" ? "mine" : sp.view === "created" ? "created" : "all";
+  const assigneeId = typeof sp.assignee === "string" && sp.assignee ? sp.assignee : null;
+  const VALID_STATUS = ["TODO", "IN_PROGRESS", "REVIEW", "REDO", "CLIENT_REVIEW", "COMPLETED"];
+  const initialStatus = sp.status && VALID_STATUS.includes(sp.status) ? sp.status : "ALL";
 
   // Enforce the role's task-visibility scope at the query level.
   const scope = await resolveTaskScope(session.companyId, session.role);
@@ -37,7 +40,14 @@ export default async function TasksPage({
   const scopeWhere = taskScopeWhere(scope, session, departmentId);
 
   const tasks = await prisma.task.findMany({
-    where: { deletedAt: null, AND: [{ project: { companyId: session.companyId, deletedAt: null } }, scopeWhere] },
+    where: {
+      deletedAt: null,
+      AND: [
+        { project: { companyId: session.companyId, deletedAt: null } },
+        scopeWhere,
+        ...(assigneeId ? [{ assignees: { some: { employeeId: assigneeId } } }] : []),
+      ],
+    },
     orderBy: { createdAt: "desc" },
     select: {
       id: true,
@@ -159,7 +169,7 @@ export default async function TasksPage({
           </Link>
         }
       />
-      <TasksWorkspace rows={rows} canTrack initialView={initialView} showAdvancedFilters={showAdvancedFilters} today={today} isSuperAdmin={session.role === "SUPER_ADMIN"} />
+      <TasksWorkspace rows={rows} canTrack initialView={initialView} initialStatus={initialStatus} showAdvancedFilters={showAdvancedFilters} today={today} isSuperAdmin={session.role === "SUPER_ADMIN"} />
     </>
   );
 }

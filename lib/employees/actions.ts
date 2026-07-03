@@ -249,6 +249,28 @@ export async function setEmployeeRole(employeeId: string, role: Role): Promise<E
   return { ok: true };
 }
 
+/** Set (or clear) an employee's last-appraisal date. HR / Super Admin only. */
+export async function setLastAppraisal(
+  employeeId: string,
+  dateISO: string | null,
+): Promise<EmployeeFormState> {
+  const session = await requireCapability("employee:manage");
+  const emp = await prisma.employee.findFirst({
+    where: { id: employeeId, companyId: session.companyId, deletedAt: null },
+    select: { id: true },
+  });
+  if (!emp) return { error: "Employee not found" };
+
+  let date: Date | null = null;
+  if (dateISO) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateISO)) return { error: "Invalid date" };
+    date = new Date(`${dateISO}T00:00:00Z`);
+  }
+  await prisma.employee.update({ where: { id: employeeId }, data: { lastAppraisalAt: date } });
+  revalidatePath(`/employees/${employeeId}`);
+  return { ok: true };
+}
+
 /** Creates an EMPLOYEE-role login (no password yet) and emails a setup link. */
 async function inviteEmployeeUser(opts: {
   companyId: string;
