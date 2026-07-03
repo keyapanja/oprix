@@ -6,6 +6,8 @@ import type { TaskRow } from "./tasks-table";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icons";
+import { Modal } from "@/components/ui/modal";
+import { humanizeEnum } from "@/lib/format";
 import { cn } from "@/lib/cn";
 
 const WD = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -36,12 +38,24 @@ type Seg = {
   lane: number;
 };
 
-export function TaskCalendar({ tasks, today }: { tasks: TaskRow[]; today: string }) {
+export function TaskCalendar({
+  tasks,
+  today,
+  isSuperAdmin,
+}: {
+  tasks: TaskRow[];
+  today: string;
+  isSuperAdmin: boolean;
+}) {
   const router = useRouter();
   const [ym, setYm] = useState(() => ({ y: Number(today.slice(0, 4)), m: Number(today.slice(5, 7)) }));
+  const [openDay, setOpenDay] = useState<string | null>(null);
   const { y, m } = ym;
 
-  const { weeks, segsByWeek, moreByIso, noDate } = useMemo(() => {
+  // Non-super-admins only see tasks assigned to them in the calendar.
+  const shownTasks = useMemo(() => (isSuperAdmin ? tasks : tasks.filter((t) => t.mine)), [tasks, isSuperAdmin]);
+
+  const { weeks, segsByWeek, moreByIso, noDate, ranges } = useMemo(() => {
     const first = new Date(Date.UTC(y, m - 1, 1));
     const dim = new Date(Date.UTC(y, m, 0)).getUTCDate();
     const startOffset = (first.getUTCDay() + 6) % 7; // grid begins on Monday
@@ -55,7 +69,7 @@ export function TaskCalendar({ tasks, today }: { tasks: TaskRow[]; today: string
     // Each task occupies the range [assigned date, due date].
     let noDate = 0;
     const ranges: { task: TaskRow; start: string; end: string }[] = [];
-    for (const t of tasks) {
+    for (const t of shownTasks) {
       if (!t.dueDate) { noDate++; continue; }
       const start = t.assignedDate && t.assignedDate < t.dueDate ? t.assignedDate : t.dueDate;
       ranges.push({ task: t, start, end: t.dueDate });
@@ -108,8 +122,25 @@ export function TaskCalendar({ tasks, today }: { tasks: TaskRow[]; today: string
       return segs.filter((s) => s.lane < MAX_LANES);
     });
 
-    return { weeks, segsByWeek, moreByIso, noDate };
-  }, [tasks, y, m]);
+    return { weeks, segsByWeek, moreByIso, noDate, ranges };
+  }, [shownTasks, y, m]);
+
+  // Tasks covering the day whose "+N more" (or number) was clicked.
+  const dayTasks = openDay
+    ? ranges
+        .filter((r) => r.start <= openDay && openDay <= r.end)
+        .map((r) => r.task)
+        .sort((a, b) => a.name.localeCompare(b.name))
+    : [];
+  const dayLabel = openDay
+    ? new Date(`${openDay}T00:00:00Z`).toLocaleDateString("en-IN", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+        timeZone: "UTC",
+      })
+    : "";
 
   const monthLabel = new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString("en-IN", { month: "long", year: "numeric", timeZone: "UTC" });
   const prev = () => setYm((s) => (s.m === 1 ? { y: s.y - 1, m: 12 } : { y: s.y, m: s.m - 1 }));
@@ -153,7 +184,13 @@ export function TaskCalendar({ tasks, today }: { tasks: TaskRow[]; today: string
                     </div>
                   )}
                   {c && (moreByIso.get(c.iso) ?? 0) > 0 && (
-                    <span className="absolute bottom-1 left-1.5 text-[10px] text-faint">+{moreByIso.get(c.iso)} more</span>
+                    <button
+                      type="button"
+                      onClick={() => setOpenDay(c.iso)}
+                      className="absolute bottom-1 left-1.5 z-10 rounded px-1 text-[10px] font-medium text-accent-strong hover:bg-canvas hover:underline"
+                    >
+                      +{moreByIso.get(c.iso)} more
+                    </button>
                   )}
                 </div>
               ))}
@@ -195,6 +232,38 @@ export function TaskCalendar({ tasks, today }: { tasks: TaskRow[]; today: string
       </div>
 
       {noDate > 0 && <p className="mt-3 text-xs text-muted">{noDate} task{noDate > 1 ? "s" : ""} with no due date (not shown).</p>}
+
+      {openDay && (
+        <Modal onClose={() => setOpenDay(null)} title={dayLabel}>
+          {dayTasks.length === 0 ? (
+            <p className="text-sm text-muted">No tasks on this day.</p>
+          ) : (
+            <ul className="space-y-1">
+              {dayTasks.map((t) => (
+                <li key={t.id}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOpenDay(null);
+                      router.push(`/tasks/${t.id}`);
+                    }}
+                    className="flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left hover:bg-canvas"
+                  >
+                    <span className={cn("size-2 shrink-0 rounded-full", STATUS_DOT[t.status] ?? "bg-slate-400")} />
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium text-content">{t.name}</span>
+                    <span className="shrink-0 text-xs text-muted">{humanizeEnum(t.status)}</span>
+                    {t.dueDate === openDay && (
+                      <span className="shrink-0 rounded bg-brand-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-brand-600 dark:text-brand-300">
+                        Due
+                      </span>
+                    )}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Modal>
+      )}
     </Card>
   );
 }

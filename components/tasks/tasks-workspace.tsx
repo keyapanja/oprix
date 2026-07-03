@@ -18,12 +18,14 @@ export function TasksWorkspace({
   initialView,
   showAdvancedFilters,
   today,
+  isSuperAdmin,
 }: {
   rows: TaskRow[];
   canTrack: boolean;
   initialView?: "all" | "mine" | "created";
   showAdvancedFilters?: boolean;
   today: string;
+  isSuperAdmin: boolean;
 }) {
   const [mode, setMode] = useState<Mode>("list");
 
@@ -49,7 +51,7 @@ export function TasksWorkspace({
       {mode === "list" && (
         <TasksTable rows={rows} canTrack={canTrack} initialView={initialView} showAdvancedFilters={showAdvancedFilters} today={today} />
       )}
-      {mode === "calendar" && <TaskCalendar tasks={rows} today={today} />}
+      {mode === "calendar" && <TaskCalendar tasks={rows} today={today} isSuperAdmin={isSuperAdmin} />}
     </div>
   );
 }
