@@ -29,7 +29,9 @@ export async function getActiveTasksFor(session: SessionUser): Promise<ExtActive
       status: { in: [...WORK_STATES] },
       assignees: { some: { employeeId: session.employeeId } },
     },
-    orderBy: [{ status: "asc" }, { updatedAt: "desc" }],
+    // Stable order (creation time). Deliberately NOT by status or timer state, so
+    // pausing/resuming or a status change never reshuffles the dock list.
+    orderBy: { createdAt: "asc" },
     take: 100,
     select: {
       id: true,
@@ -98,10 +100,7 @@ export async function getActiveTasksFor(session: SessionUser): Promise<ExtActive
     };
   });
 
-  // Running timers first, then the rest in query order.
-  tasks.sort(
-    (a, b) => Number(b.timer.status === "RUNNING") - Number(a.timer.status === "RUNNING"),
-  );
-
+  // Kept in the stable query order (creation time) — no status/running re-sort,
+  // so a task stays put when you pause, resume, or change its status.
   return { tasks, serverTimeMs: Date.now() };
 }

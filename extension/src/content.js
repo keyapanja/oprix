@@ -210,6 +210,7 @@
 
     if (state.prefs.collapsed) {
       panel.append(renderCollapsed());
+      updateTimers(); // fill the pill's time now — avoids a ~1s blank flash on re-render
       return;
     }
     panel.append(renderHeader());
