@@ -268,6 +268,16 @@ function toKanban(t: {
   };
 }
 
+/** Atomically reserve the next per-company task number (for the human Task ID). */
+async function nextTaskNumber(companyId: string): Promise<number> {
+  const c = await prisma.company.update({
+    where: { id: companyId },
+    data: { taskSeq: { increment: 1 } },
+    select: { taskSeq: true },
+  });
+  return c.taskSeq;
+}
+
 export async function createTask(input: {
   projectId: string;
   name: string;
@@ -301,12 +311,14 @@ export async function createTask(input: {
     assigneeIds = valid.map((e) => e.id);
   }
 
+  const taskNumber = await nextTaskNumber(session.companyId);
   const task = await prisma.task.create({
     data: {
       projectId: input.projectId,
       name,
       description: input.description?.trim() || null,
       serviceId: input.serviceId || null,
+      taskNumber,
       createdById: session.userId, // creator acts as the reviewer in the review flow
       status: input.status ?? "TODO",
       priority: input.priority ?? "MEDIUM",
@@ -616,6 +628,7 @@ export async function duplicateTask(
       name: `${src.name} (copy)`,
       description: src.description,
       serviceId: src.serviceId,
+      taskNumber: await nextTaskNumber(session.companyId),
       createdById: session.userId,
       status: "TODO",
       priority: src.priority,

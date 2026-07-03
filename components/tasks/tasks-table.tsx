@@ -17,6 +17,7 @@ import { cn } from "@/lib/cn";
 
 export type TaskRow = {
   id: string;
+  taskNumber: number | null;
   name: string;
   projectName: string;
   serviceName: string | null;
@@ -42,6 +43,26 @@ export type TaskRow = {
   createdByMe: boolean;
   timer: { status: TimerStatusUI; baseSeconds: number; runStartedAtMs: number | null; locked: boolean };
 };
+
+/** Human-readable Task ID: "Dept - 1234", or the short id fallback for legacy rows. */
+function taskCode(r: TaskRow): string {
+  const num = r.taskNumber != null ? String(r.taskNumber) : r.id.slice(-6).toUpperCase();
+  return r.departmentName ? `${r.departmentName} - ${num}` : num;
+}
+
+/** On-time / delayed verdict for a row, plus how many days late (if any). */
+function deliveryInfo(r: TaskRow, todayISO: string): { verdict: "ontime" | "delayed" | null; delayedDays: number } {
+  if (!r.dueDate) return { verdict: null, delayedDays: 0 };
+  const diff = (a: string, b: string) => Math.round((Date.parse(b) - Date.parse(a)) / 86_400_000);
+  if (r.deliveredOnISO) {
+    return r.deliveredOnISO <= r.dueDate
+      ? { verdict: "ontime", delayedDays: 0 }
+      : { verdict: "delayed", delayedDays: diff(r.dueDate, r.deliveredOnISO) };
+  }
+  const active = r.status === "TODO" || r.status === "IN_PROGRESS" || r.status === "REDO";
+  if (active && todayISO > r.dueDate) return { verdict: "delayed", delayedDays: diff(r.dueDate, todayISO) };
+  return { verdict: null, delayedDays: 0 };
+}
 
 type View = "all" | "mine" | "created";
 
@@ -169,7 +190,7 @@ export function TasksTable({
   const startIdx = (current - 1) * pageSize;
   const pageRows = filtered.slice(startIdx, startIdx + pageSize);
 
-  const colSpan = 17;
+  const colSpan = 19;
   const groups = useMemo(() => {
     if (!groupBy) return [] as { key: string; label: string; rows: TaskRow[] }[];
     const m = new Map<string, TaskRow[]>();
@@ -263,6 +284,7 @@ export function TasksTable({
     const rowSel = selected.has(r.id);
     // Frozen columns need an opaque bg that tracks the row's hover/selected state.
     const stickyBg = rowSel ? "bg-accent-soft" : "bg-surface group-hover:bg-canvas";
+    const di = deliveryInfo(r, today);
     return (
     <tr
       key={r.id}
@@ -278,7 +300,7 @@ export function TasksTable({
           aria-label={`Select ${r.name}`}
         />
       </td>
-      <td className={cn("sticky left-12 z-[1] whitespace-nowrap border-r border-line px-4 py-2 font-mono text-xs text-muted", stickyBg)}>{r.id.slice(-6).toUpperCase()}</td>
+      <td className={cn("sticky left-12 z-[1] whitespace-nowrap border-r border-line px-4 py-2 text-xs font-medium text-muted", stickyBg)}>{taskCode(r)}</td>
       <td className="px-4 py-2 font-medium text-content"><span className="block max-w-[16rem] truncate" title={r.name}>{r.name}</span></td>
       <td className="whitespace-nowrap px-4 py-2 text-muted"><span className="block max-w-[11rem] truncate" title={r.serviceName ?? ""}>{r.serviceName ?? "—"}</span></td>
       <td className="whitespace-nowrap px-4 py-2 text-muted"><span className="block max-w-[11rem] truncate" title={r.projectName}>{r.projectName}</span></td>
@@ -302,6 +324,22 @@ export function TasksTable({
         )}
       </td>
       <td className="whitespace-nowrap px-4 py-2 text-muted">{r.deliveredAtISO ? formatDateTime(r.deliveredAtISO) : "—"}</td>
+      <td className="whitespace-nowrap px-4 py-2">
+        {di.verdict === "ontime" ? (
+          <Badge tone="green" className="whitespace-nowrap">On time</Badge>
+        ) : di.verdict === "delayed" ? (
+          <Badge tone="red" className="whitespace-nowrap">Delayed</Badge>
+        ) : (
+          <span className="text-faint">—</span>
+        )}
+      </td>
+      <td className="whitespace-nowrap px-4 py-2">
+        {di.delayedDays > 0 ? (
+          <span className="font-medium text-red-600 dark:text-red-400">{di.delayedDays} day{di.delayedDays === 1 ? "" : "s"}</span>
+        ) : (
+          <span className="text-faint">—</span>
+        )}
+      </td>
       <td className="whitespace-nowrap px-4 py-2 tabular-nums text-muted">{r.totalSeconds > 0 ? fmtHm(r.totalSeconds) : "—"}</td>
       <td className={cn("sticky right-0 z-[1] border-l border-line px-4 py-2", stickyBg)}>
         <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
@@ -435,6 +473,8 @@ export function TasksTable({
             <th className="sticky top-0 z-20 whitespace-nowrap border-b border-line bg-surface px-4 py-2">Department</th>
             <th className="sticky top-0 z-20 whitespace-nowrap border-b border-line bg-surface px-4 py-2">Final link</th>
             <th className="sticky top-0 z-20 whitespace-nowrap border-b border-line bg-surface px-4 py-2">Delivered on</th>
+            <th className="sticky top-0 z-20 whitespace-nowrap border-b border-line bg-surface px-4 py-2">Delivery status</th>
+            <th className="sticky top-0 z-20 whitespace-nowrap border-b border-line bg-surface px-4 py-2">Delayed by</th>
             <th className="sticky top-0 z-20 whitespace-nowrap border-b border-line bg-surface px-4 py-2">Total time</th>
             <th className="sticky right-0 top-0 z-30 whitespace-nowrap border-b border-l border-line bg-surface px-4 py-2 text-right">Actions</th>
           </tr>

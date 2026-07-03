@@ -41,6 +41,7 @@ export default async function TasksPage({
     orderBy: { createdAt: "desc" },
     select: {
       id: true,
+      taskNumber: true,
       name: true,
       description: true,
       status: true,
@@ -85,6 +86,7 @@ export default async function TasksPage({
     const state = timerStates.get(t.id) ?? { status: "NONE" as const, baseSeconds: 0, runStartedAtMs: null };
     return {
       id: t.id,
+      taskNumber: t.taskNumber,
       name: t.name,
       projectName: t.project.name,
       serviceName: t.service?.name ?? null,

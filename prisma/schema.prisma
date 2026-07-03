@@ -147,6 +147,7 @@ model Company {
   email              String?
   phone              String?
   employeeCodePrefix String   @default("EMP")
+  taskSeq            Int      @default(0) // per-company running counter for human task numbers
   multiLocation      Boolean  @default(false)
   // Working-days config used for leave-day counting: { workingWeekdays:[0..6],
   // saturdayOffWeeks:[1..5] }. null = default (Mon–Sat working, Sunday off).
@@ -558,6 +559,7 @@ model Task {
   description  String?
   assigneeId   String? // deprecated; use assignees (TaskAssignee)
   serviceId    String?
+  taskNumber   Int?    // per-company sequential number for a human-readable Task ID
   createdById  String? // userId of the creator — acts as the reviewer (A) in the review flow
   finalLink    String? // worker's submitted output / preview link (current submission)
   dueDate      DateTime?
