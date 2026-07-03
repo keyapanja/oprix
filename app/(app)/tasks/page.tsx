@@ -59,6 +59,28 @@ export default async function TasksPage({
     },
   });
 
+  // Self-healing: give any visible task without a human number one now, in
+  // creation order, so the list shows real "Dept - N" ids with no manual
+  // backfill. New tasks are numbered at creation; this covers legacy rows.
+  const unnumbered = tasks.filter((t) => t.taskNumber == null);
+  if (unnumbered.length) {
+    const asc = [...unnumbered].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+    const bumped = await prisma.company.update({
+      where: { id: session.companyId },
+      data: { taskSeq: { increment: asc.length } },
+      select: { taskSeq: true },
+    });
+    let n = bumped.taskSeq - asc.length;
+    await Promise.all(
+      asc.map((t) => {
+        n += 1;
+        const num = n;
+        t.taskNumber = num; // reflect immediately in this render
+        return prisma.task.updateMany({ where: { id: t.id, taskNumber: null }, data: { taskNumber: num } });
+      }),
+    );
+  }
+
   // Resolve creator names (createdById → employee name / email).
   const creatorIds = [...new Set(tasks.map((t) => t.createdById).filter((x): x is string => !!x))];
   const creators = creatorIds.length

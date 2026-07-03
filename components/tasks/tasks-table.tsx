@@ -44,10 +44,18 @@ export type TaskRow = {
   timer: { status: TimerStatusUI; baseSeconds: number; runStartedAtMs: number | null; locked: boolean };
 };
 
-/** Human-readable Task ID: "Dept - 1234", or the short id fallback for legacy rows. */
+/** Multi-word department → initials (Business Manager → "BM"); single word kept as-is. */
+function deptAbbrev(name: string | null): string | null {
+  if (!name) return null;
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  return words.length > 1 ? words.map((w) => w[0]!.toUpperCase()).join("") : words[0];
+}
+
+/** Human-readable Task ID: "Dept - 1234" (number). Short-id only as a last resort. */
 function taskCode(r: TaskRow): string {
   const num = r.taskNumber != null ? String(r.taskNumber) : r.id.slice(-6).toUpperCase();
-  return r.departmentName ? `${r.departmentName} - ${num}` : num;
+  const prefix = deptAbbrev(r.departmentName);
+  return prefix ? `${prefix} - ${num}` : num;
 }
 
 /** On-time / delayed verdict for a row, plus how many days late (if any). */
