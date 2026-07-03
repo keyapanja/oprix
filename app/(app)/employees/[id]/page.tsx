@@ -66,29 +66,27 @@ export default async function EmployeeDetailPage({
   if (!employee) notFound();
 
   // Work summary: tasks assigned to this person + their leave balances.
-  const [assignedTasks, balances] = await Promise.all([
+  const [assignedTasks, balances, primaryServices] = await Promise.all([
     prisma.task.findMany({
       where: {
         deletedAt: null,
         project: { companyId: session.companyId, deletedAt: null },
         assignees: { some: { employeeId: id } },
       },
-      select: {
-        status: true,
-        dueDate: true,
-        submittedAt: true,
-        completedAt: true,
-        project: { select: { id: true, name: true } },
-      },
+      select: { status: true, dueDate: true, submittedAt: true, completedAt: true },
     }),
     computeBalances(session.companyId, id),
+    // Projects where this person is the PRIMARY assignee (not just a collaborator
+    // on a few tasks) — one row per project-service they lead.
+    prisma.projectService.findMany({
+      where: { primaryAssigneeId: id, project: { companyId: session.companyId, deletedAt: null } },
+      select: { project: { select: { id: true, name: true } } },
+    }),
   ]);
 
   const isoDate = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : null);
   const stat = { total: assignedTasks.length, todo: 0, inProgress: 0, inReview: 0, delivered: 0, onTime: 0, delayed: 0 };
-  const projMap = new Map<string, string>();
   for (const t of assignedTasks) {
-    projMap.set(t.project.id, t.project.name);
     switch (t.status) {
       case "TODO":
       case "HOLD":
@@ -114,6 +112,8 @@ export default async function EmployeeDetailPage({
       }
     }
   }
+  const projMap = new Map<string, string>();
+  for (const ps of primaryServices) projMap.set(ps.project.id, ps.project.name);
   const projects = [...projMap]
     .map(([pid, name]) => ({ id: pid, name }))
     .sort((a, b) => a.name.localeCompare(b.name));
