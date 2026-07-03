@@ -10,11 +10,9 @@ import { TASK_STATUS_TONE, PRIORITY_TONE } from "@/lib/status";
 import { Badge } from "@/components/ui/badge";
 import { Icon } from "@/components/ui/icons";
 import { Combobox } from "@/components/ui/combobox";
-import { humanizeEnum, formatDate } from "@/lib/format";
+import { humanizeEnum, formatDate, formatDateTime } from "@/lib/format";
 import { safeHref, isHttpUrl } from "@/lib/url";
-import { BackdateBadge } from "@/components/ui/backdate-badge";
-import { InlineTimer } from "@/components/timer/inline-timer";
-import type { TimerStatusUI } from "@/lib/timer/shared";
+import { fmtHm, type TimerStatusUI } from "@/lib/timer/shared";
 import { cn } from "@/lib/cn";
 
 export type TaskRow = {
@@ -32,27 +30,18 @@ export type TaskRow = {
   /** Date the task was created/assigned (YYYY-MM-DD) — calendar spans from here to dueDate. */
   assignedDate: string | null;
   createdByName: string | null;
+  description: string | null;
   finalLink: string | null;
   /** Date the work was submitted/delivered (YYYY-MM-DD), or null if not yet. */
   deliveredOnISO: string | null;
+  /** Full ISO datetime the task was assigned (created) and delivered (submitted). */
+  assignedAtISO: string | null;
+  deliveredAtISO: string | null;
+  totalSeconds: number;
   mine: boolean;
   createdByMe: boolean;
   timer: { status: TimerStatusUI; baseSeconds: number; runStartedAtMs: number | null; locked: boolean };
 };
-
-/** On-time / delayed verdict for a row, plus how many days late (if any). */
-function deliveryInfo(r: TaskRow, todayISO: string): { verdict: "ontime" | "delayed" | null; delayedDays: number } {
-  if (!r.dueDate) return { verdict: null, delayedDays: 0 };
-  const diff = (a: string, b: string) => Math.round((Date.parse(b) - Date.parse(a)) / 86_400_000);
-  if (r.deliveredOnISO) {
-    return r.deliveredOnISO <= r.dueDate
-      ? { verdict: "ontime", delayedDays: 0 }
-      : { verdict: "delayed", delayedDays: diff(r.dueDate, r.deliveredOnISO) };
-  }
-  const active = r.status === "TODO" || r.status === "IN_PROGRESS" || r.status === "REDO";
-  if (active && todayISO > r.dueDate) return { verdict: "delayed", delayedDays: diff(r.dueDate, todayISO) };
-  return { verdict: null, delayedDays: 0 };
-}
 
 type View = "all" | "mine" | "created";
 
@@ -180,7 +169,7 @@ export function TasksTable({
   const startIdx = (current - 1) * pageSize;
   const pageRows = filtered.slice(startIdx, startIdx + pageSize);
 
-  const colSpan = canTrack ? 17 : 16;
+  const colSpan = 17;
   const groups = useMemo(() => {
     if (!groupBy) return [] as { key: string; label: string; rows: TaskRow[] }[];
     const m = new Map<string, TaskRow[]>();
@@ -271,55 +260,36 @@ export function TasksTable({
   }
 
   const renderRow = (r: TaskRow) => {
-    const di = deliveryInfo(r, today);
+    const rowSel = selected.has(r.id);
+    // Frozen columns need an opaque bg that tracks the row's hover/selected state.
+    const stickyBg = rowSel ? "bg-accent-soft" : "bg-surface group-hover:bg-canvas";
     return (
     <tr
       key={r.id}
-      className={cn("cursor-pointer border-b border-line hover:bg-canvas", selected.has(r.id) && "bg-accent-soft hover:bg-accent-soft")}
+      className={cn("group cursor-pointer border-b border-line", rowSel ? "bg-accent-soft" : "hover:bg-canvas")}
       onClick={() => router.push(`/tasks/${r.id}`)}
     >
-      <td className="px-4 py-2" onClick={(e) => e.stopPropagation()}>
+      <td className={cn("sticky left-0 z-[1] w-12 px-4 py-2", stickyBg)} onClick={(e) => e.stopPropagation()}>
         <input
           type="checkbox"
-          checked={selected.has(r.id)}
+          checked={rowSel}
           onChange={() => toggleSelect(r.id)}
           className="size-4 rounded border-line-strong text-brand-600 focus:ring-brand-500"
           aria-label={`Select ${r.name}`}
         />
       </td>
+      <td className={cn("sticky left-12 z-[1] whitespace-nowrap border-r border-line px-4 py-2 font-mono text-xs text-muted", stickyBg)}>{r.id.slice(-6).toUpperCase()}</td>
       <td className="px-4 py-2 font-medium text-content"><span className="block max-w-[16rem] truncate" title={r.name}>{r.name}</span></td>
-      <td className="whitespace-nowrap px-4 py-2 text-muted"><span className="block max-w-[10rem] truncate" title={r.projectName}>{r.projectName}</span></td>
-      <td className="whitespace-nowrap px-4 py-2 text-muted">{r.departmentName ?? "—"}</td>
-      <td className="whitespace-nowrap px-4 py-2 text-muted"><span className="block max-w-[10rem] truncate" title={r.serviceName ?? ""}>{r.serviceName ?? "—"}</span></td>
-      <td className="whitespace-nowrap px-4 py-2 text-muted">{r.createdByName ?? "—"}</td>
+      <td className="whitespace-nowrap px-4 py-2 text-muted"><span className="block max-w-[11rem] truncate" title={r.serviceName ?? ""}>{r.serviceName ?? "—"}</span></td>
+      <td className="whitespace-nowrap px-4 py-2 text-muted"><span className="block max-w-[11rem] truncate" title={r.projectName}>{r.projectName}</span></td>
+      <td className="px-4 py-2 text-muted"><span className="block max-w-[18rem] truncate" title={r.description ?? ""}>{r.description || "—"}</span></td>
       <td className="px-4 py-2 text-muted"><span className="block max-w-[12rem] truncate" title={r.assigneeNames.join(", ")}>{r.assigneeNames.length ? r.assigneeNames.join(", ") : "—"}</span></td>
-      <td className="px-4 py-2"><Badge tone={TASK_STATUS_TONE[r.status]}>{humanizeEnum(r.status)}</Badge></td>
-      <td className="px-4 py-2"><Badge tone={PRIORITY_TONE[r.priority]}>{humanizeEnum(r.priority)}</Badge></td>
-      <td className="px-4 py-2">
-        {di.verdict === "ontime" ? (
-          <Badge tone="green">On time</Badge>
-        ) : di.verdict === "delayed" ? (
-          <Badge tone="red">Delayed</Badge>
-        ) : (
-          <span className="text-faint">—</span>
-        )}
-      </td>
-      <td className="whitespace-nowrap px-4 py-2">
-        {di.delayedDays > 0 ? (
-          <span className="font-medium text-red-600 dark:text-red-400">{di.delayedDays} day{di.delayedDays === 1 ? "" : "s"}</span>
-        ) : (
-          <span className="text-faint">—</span>
-        )}
-      </td>
-      <td className="whitespace-nowrap px-4 py-2 text-muted">
-        {r.dueDate ? (
-          <span className="inline-flex items-center">{formatDate(r.dueDate)}{r.status !== "HOLD" && <BackdateBadge date={r.clientDeadline ?? r.dueDate} assignedDate={r.assignedDate} />}</span>
-        ) : (
-          "—"
-        )}
-      </td>
+      <td className="whitespace-nowrap px-4 py-2 text-muted">{r.dueDate ? formatDate(r.dueDate) : "—"}</td>
       <td className="whitespace-nowrap px-4 py-2 text-muted">{r.clientDeadline ? formatDate(r.clientDeadline) : "—"}</td>
-      <td className="whitespace-nowrap px-4 py-2 text-muted">{r.deliveredOnISO ? formatDate(r.deliveredOnISO) : "—"}</td>
+      <td className="whitespace-nowrap px-4 py-2"><Badge tone={TASK_STATUS_TONE[r.status]} className="whitespace-nowrap">{humanizeEnum(r.status)}</Badge></td>
+      <td className="whitespace-nowrap px-4 py-2"><Badge tone={PRIORITY_TONE[r.priority]} className="whitespace-nowrap">{humanizeEnum(r.priority)}</Badge></td>
+      <td className="whitespace-nowrap px-4 py-2 text-muted">{r.assignedAtISO ? formatDateTime(r.assignedAtISO) : "—"}</td>
+      <td className="whitespace-nowrap px-4 py-2 text-muted">{r.departmentName ?? "—"}</td>
       <td className="px-4 py-2" onClick={(e) => e.stopPropagation()}>
         {r.finalLink ? (
           isHttpUrl(r.finalLink) ? (
@@ -331,14 +301,9 @@ export function TasksTable({
           <span className="text-faint">—</span>
         )}
       </td>
-      {canTrack && (
-        <td className="px-4 py-2">
-          <div className="flex justify-end">
-            <InlineTimer taskId={r.id} status={r.timer.status} baseSeconds={r.timer.baseSeconds} runStartedAtMs={r.timer.runStartedAtMs} locked={r.timer.locked} />
-          </div>
-        </td>
-      )}
-      <td className="px-4 py-2">
+      <td className="whitespace-nowrap px-4 py-2 text-muted">{r.deliveredAtISO ? formatDateTime(r.deliveredAtISO) : "—"}</td>
+      <td className="whitespace-nowrap px-4 py-2 tabular-nums text-muted">{r.totalSeconds > 0 ? fmtHm(r.totalSeconds) : "—"}</td>
+      <td className={cn("sticky right-0 z-[1] border-l border-line px-4 py-2", stickyBg)}>
         <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
           <button type="button" onClick={(e) => onEdit(e, r.id)} title="Edit task" aria-label="Edit task" className="flex size-7 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface hover:text-content">
             <Icon name="pencil" className="size-4" />
@@ -443,11 +408,11 @@ export function TasksTable({
         </div>
       </div>
 
-      <div className="overflow-x-auto">
+      <div className="max-h-[70vh] overflow-auto">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wider text-faint">
-            <th className="w-10 px-4 py-2">
+          <tr className="text-left text-xs font-semibold uppercase tracking-wider text-faint">
+            <th className="sticky left-0 top-0 z-30 w-12 border-b border-line bg-surface px-4 py-2">
               <input
                 type="checkbox"
                 checked={pageAllSelected}
@@ -456,22 +421,22 @@ export function TasksTable({
                 aria-label="Select all on page"
               />
             </th>
-            <th className="px-4 py-2">Task</th>
-            <th className="whitespace-nowrap px-4 py-2">Project</th>
-            <th className="whitespace-nowrap px-4 py-2">Department</th>
-            <th className="whitespace-nowrap px-4 py-2">Service</th>
-            <th className="whitespace-nowrap px-4 py-2">Created by</th>
-            <th className="whitespace-nowrap px-4 py-2">Assigned to</th>
-            <th className="px-4 py-2">Status</th>
-            <th className="px-4 py-2">Priority</th>
-            <th className="whitespace-nowrap px-4 py-2">Delivery</th>
-            <th className="whitespace-nowrap px-4 py-2">Delayed by</th>
-            <th className="whitespace-nowrap px-4 py-2">Due</th>
-            <th className="whitespace-nowrap px-4 py-2">Client deadline</th>
-            <th className="whitespace-nowrap px-4 py-2">Delivered on</th>
-            <th className="whitespace-nowrap px-4 py-2">Final link</th>
-            {canTrack && <th className="whitespace-nowrap px-4 py-2 text-right">Timer</th>}
-            <th className="px-4 py-2 text-right">Actions</th>
+            <th className="sticky left-12 top-0 z-30 whitespace-nowrap border-b border-r border-line bg-surface px-4 py-2">Task ID</th>
+            <th className="sticky top-0 z-20 border-b border-line bg-surface px-4 py-2">Task</th>
+            <th className="sticky top-0 z-20 whitespace-nowrap border-b border-line bg-surface px-4 py-2">Type of task</th>
+            <th className="sticky top-0 z-20 whitespace-nowrap border-b border-line bg-surface px-4 py-2">Project</th>
+            <th className="sticky top-0 z-20 border-b border-line bg-surface px-4 py-2">Description</th>
+            <th className="sticky top-0 z-20 whitespace-nowrap border-b border-line bg-surface px-4 py-2">Assigned to</th>
+            <th className="sticky top-0 z-20 whitespace-nowrap border-b border-line bg-surface px-4 py-2">Due date</th>
+            <th className="sticky top-0 z-20 whitespace-nowrap border-b border-line bg-surface px-4 py-2">Client deadline</th>
+            <th className="sticky top-0 z-20 border-b border-line bg-surface px-4 py-2">Status</th>
+            <th className="sticky top-0 z-20 border-b border-line bg-surface px-4 py-2">Priority</th>
+            <th className="sticky top-0 z-20 whitespace-nowrap border-b border-line bg-surface px-4 py-2">Assigned on</th>
+            <th className="sticky top-0 z-20 whitespace-nowrap border-b border-line bg-surface px-4 py-2">Department</th>
+            <th className="sticky top-0 z-20 whitespace-nowrap border-b border-line bg-surface px-4 py-2">Final link</th>
+            <th className="sticky top-0 z-20 whitespace-nowrap border-b border-line bg-surface px-4 py-2">Delivered on</th>
+            <th className="sticky top-0 z-20 whitespace-nowrap border-b border-line bg-surface px-4 py-2">Total time</th>
+            <th className="sticky right-0 top-0 z-30 whitespace-nowrap border-b border-l border-line bg-surface px-4 py-2 text-right">Actions</th>
           </tr>
         </thead>
         <tbody>

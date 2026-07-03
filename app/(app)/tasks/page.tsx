@@ -8,7 +8,7 @@ import { Icon } from "@/components/ui/icons";
 import { type TaskRow } from "@/components/tasks/tasks-table";
 import { TasksWorkspace } from "@/components/tasks/tasks-workspace";
 import { LiveRefresh } from "@/components/timer/live-refresh";
-import { getTaskTimerStates } from "@/lib/timer/data";
+import { getTaskTimerStates, getTaskTotals } from "@/lib/timer/data";
 import { canUseTimer } from "@/lib/timer/finalize";
 import type { TaskTimerState } from "@/lib/timer/shared";
 import { resolveTaskScope, taskScopeWhere, TASK_SCOPE_LABELS } from "@/lib/tasks/visibility";
@@ -42,6 +42,7 @@ export default async function TasksPage({
     select: {
       id: true,
       name: true,
+      description: true,
       status: true,
       priority: true,
       dueDate: true,
@@ -75,6 +76,7 @@ export default async function TasksPage({
     session.userId,
     tasks.map((t) => t.id),
   );
+  const totals = await getTaskTotals(tasks.map((t) => t.id));
 
   const rows: TaskRow[] = tasks.map((t) => {
     const isAssignee = !!session.employeeId && t.assignees.some((a) => a.employeeId === session.employeeId);
@@ -94,12 +96,20 @@ export default async function TasksPage({
       clientDeadline: t.clientDeadline ? t.clientDeadline.toISOString().slice(0, 10) : null,
       assignedDate: t.createdAt.toISOString().slice(0, 10),
       createdByName: creatorName(t.createdById),
+      description: t.description,
       finalLink: t.finalLink,
       deliveredOnISO: t.submittedAt
         ? t.submittedAt.toISOString().slice(0, 10)
         : t.status === "COMPLETED" && t.completedAt
           ? t.completedAt.toISOString().slice(0, 10)
           : null,
+      assignedAtISO: t.createdAt.toISOString(),
+      deliveredAtISO: t.submittedAt
+        ? t.submittedAt.toISOString()
+        : t.status === "COMPLETED" && t.completedAt
+          ? t.completedAt.toISOString()
+          : null,
+      totalSeconds: totals.get(t.id) ?? 0,
       mine: isAssignee,
       createdByMe: isReviewer,
       timer: { ...state, locked: !canTime },

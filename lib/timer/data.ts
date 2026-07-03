@@ -119,6 +119,29 @@ export async function taskTrackedSeconds(taskId: string): Promise<number> {
   return Math.round(logged + live);
 }
 
+/** Total tracked seconds per task (logged timesheet + live running), batched. */
+export async function getTaskTotals(taskIds: string[]): Promise<Map<string, number>> {
+  const map = new Map<string, number>();
+  if (taskIds.length === 0) return map;
+  const [logged, running] = await Promise.all([
+    prisma.timeEntry.groupBy({ by: ["taskId"], where: { taskId: { in: taskIds } }, _sum: { hours: true } }),
+    prisma.taskTimer.findMany({
+      where: { taskId: { in: taskIds }, status: "RUNNING" },
+      select: { taskId: true, runStartedAt: true },
+    }),
+  ]);
+  for (const g of logged) {
+    if (g.taskId) map.set(g.taskId, Math.round((g._sum.hours ?? 0) * 3600));
+  }
+  const now = Date.now();
+  for (const t of running) {
+    if (!t.runStartedAt) continue;
+    const live = Math.max(0, Math.floor((now - t.runStartedAt.getTime()) / 1000));
+    map.set(t.taskId, (map.get(t.taskId) ?? 0) + live);
+  }
+  return map;
+}
+
 export type TaskRunner = {
   userId: string;
   name: string;
