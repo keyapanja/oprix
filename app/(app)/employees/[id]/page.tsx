@@ -252,7 +252,16 @@ export default async function EmployeeDetailPage({
       {/* Projects + Leave */}
       <div className="mb-6 grid gap-6 lg:grid-cols-2">
         <Card>
-          <CardHeader title="Projects" description={`${projects.length} ${projects.length === 1 ? "project" : "projects"}`} />
+          <CardHeader
+            title={
+              <span className="flex items-baseline gap-2">
+                Projects
+                <span className="text-xs font-normal text-muted">
+                  {projects.length} {projects.length === 1 ? "project" : "projects"}
+                </span>
+              </span>
+            }
+          />
           <CardBody>
             {projects.length === 0 ? (
               <p className="text-sm text-muted">Not on any projects yet.</p>
