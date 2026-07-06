@@ -639,6 +639,7 @@ model RecurringTask {
   dueInDays            Int? // due date = occurrence date + this (null = no due date)
   clientDeadlineInDays Int?
   checklistEnabled     Boolean  @default(true)
+  checklist            Json? // string[] snapshot of checklist item texts, captured at setup (falls back to the sub-category template when null)
   schedule             Json     // { frequency, time, weekday?, monthday?, date? }
   active               Boolean  @default(true)
   lastRunKey           String? // idempotency: YYYY-MM-DD of the last fire

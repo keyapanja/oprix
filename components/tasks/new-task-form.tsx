@@ -11,6 +11,7 @@ import { Combobox } from "@/components/ui/combobox";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Icon } from "@/components/ui/icons";
 import { FilePreviewGrid, makePicked, type PickedFile } from "@/components/attachments/file-preview-grid";
+import { toast } from "@/components/ui/toast";
 import { humanizeEnum } from "@/lib/format";
 import { cn } from "@/lib/cn";
 
@@ -158,6 +159,9 @@ export function NewTaskForm({
         if (!res.task) return;
 
         if (files.length) {
+          // The upload result is surfaced via a toast (not setError) because we
+          // navigate to the task below — a toast survives the navigation (its host
+          // lives in the app shell), so a failed upload never disappears silently.
           try {
             const fd = new FormData();
             for (const p of files) fd.append("files", p.file);
@@ -168,13 +172,14 @@ export function NewTaskForm({
                 up.status === 413
                   ? "the file is too large for the server/proxy"
                   : j?.error || up.statusText || `HTTP ${up.status}`;
-              setError(`Task created, but uploading files failed: ${why}`);
+              toast.error(`Task created, but the attachment upload failed: ${why}. Add it again from the task page.`);
             }
           } catch {
-            setError("Task created, but uploading files failed.");
+            toast.error("Task created, but the attachment upload failed. Add it again from the task page.");
           }
         }
         router.push(`/tasks/${res.task.id}`);
+        router.refresh();
       } catch {
         setError(
           "Couldn't create the task. If this keeps happening, the database may be missing a recent update — run “npx prisma db push” (local) or redeploy (prod).",

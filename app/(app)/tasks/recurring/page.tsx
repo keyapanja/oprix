@@ -26,7 +26,14 @@ export default async function RecurringTasksPage() {
             service: {
               select: {
                 name: true,
-                children: { orderBy: { name: "asc" }, select: { id: true, name: true } },
+                children: {
+                  orderBy: { name: "asc" },
+                  select: {
+                    id: true,
+                    name: true,
+                    checklistTemplate: { orderBy: { orderIndex: "asc" }, select: { text: true } },
+                  },
+                },
               },
             },
           },
@@ -69,6 +76,9 @@ export default async function RecurringTasksPage() {
       dueInDays: t.dueInDays,
       clientDeadlineInDays: t.clientDeadlineInDays,
       checklistEnabled: t.checklistEnabled,
+      checklistCount: Array.isArray(t.checklist)
+        ? (t.checklist as unknown[]).filter((x) => typeof x === "string").length
+        : null,
       active: t.active,
       scheduleLabel: schedule ? describeSchedule(schedule) : "Invalid schedule",
       lastRunKey: t.lastRunKey,
@@ -95,6 +105,7 @@ export default async function RecurringTasksPage() {
               name: sub.name,
               categoryName: ps.service.name,
               primaryAssigneeId: ps.primaryAssigneeId ?? null,
+              checklist: sub.checklistTemplate.map((c) => c.text),
             })),
           ),
         }))}

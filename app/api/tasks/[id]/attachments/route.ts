@@ -1,5 +1,6 @@
 import "server-only";
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
 import { canEditTask } from "@/lib/projects/task-access";
@@ -49,5 +50,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     });
     created.push(row);
   }
+  // Invalidate the task page's cache so a client navigating there right after
+  // upload (e.g. the new-task form) sees the new attachments immediately.
+  revalidatePath(`/tasks/${taskId}`);
   return NextResponse.json({ ok: true, attachments: created });
 }

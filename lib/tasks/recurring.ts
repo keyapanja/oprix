@@ -17,8 +17,15 @@ export type RecurringTemplate = {
   dueInDays: number | null;
   clientDeadlineInDays: number | null;
   checklistEnabled: boolean;
+  checklist: unknown; // Json string[] snapshot; null → fall back to the sub-category template
   createdById: string | null;
 };
+
+/** Read a Json value as a clean string[] (trims, drops blanks/non-strings). */
+function asStringArray(v: unknown): string[] {
+  if (!Array.isArray(v)) return [];
+  return v.map((x) => (typeof x === "string" ? x.trim() : "")).filter(Boolean);
+}
 
 function addDaysISO(iso: string, days: number): string {
   const d = new Date(`${iso}T00:00:00Z`);
@@ -89,19 +96,24 @@ export async function createTaskFromRecurring(
     select: { id: true },
   });
 
-  // Seed the checklist from the sub-category's default template (same as a
-  // normal new task), unless the template opted out of a checklist.
-  if (rt.checklistEnabled && rt.serviceId) {
-    const template = await prisma.serviceChecklistItem.findMany({
-      where: { serviceId: rt.serviceId },
-      orderBy: { orderIndex: "asc" },
-      select: { text: true },
-    });
-    if (template.length) {
+  // Seed the checklist. The template's own snapshot (captured at setup, editable
+  // in the recurring form) wins; older templates with no snapshot fall back to
+  // the sub-category's live default template — same as a normal new task.
+  if (rt.checklistEnabled) {
+    let texts = asStringArray(rt.checklist);
+    if (texts.length === 0 && rt.checklist == null && rt.serviceId) {
+      const template = await prisma.serviceChecklistItem.findMany({
+        where: { serviceId: rt.serviceId },
+        orderBy: { orderIndex: "asc" },
+        select: { text: true },
+      });
+      texts = template.map((c) => c.text);
+    }
+    if (texts.length) {
       await prisma.checklistItem.createMany({
-        data: template.map((c, i) => ({
+        data: texts.map((text, i) => ({
           taskId: task.id,
-          text: c.text,
+          text,
           orderIndex: i,
           createdById: rt.createdById,
         })),

@@ -21,8 +21,15 @@ import { humanizeEnum } from "@/lib/format";
 import { WEEKDAY_LABELS, type ScheduleFrequency, type FormNotifySchedule } from "@/lib/forms/schedule";
 
 type Emp = { id: string; name: string };
-type SubCat = { id: string; name: string; categoryName: string; primaryAssigneeId: string | null };
+type SubCat = {
+  id: string;
+  name: string;
+  categoryName: string;
+  primaryAssigneeId: string | null;
+  checklist: string[];
+};
 type Proj = { id: string; name: string; subcategories: SubCat[] };
+type CheckItem = { text: string; isDone: boolean };
 
 type Item = {
   id: string;
@@ -35,6 +42,7 @@ type Item = {
   dueInDays: number | null;
   clientDeadlineInDays: number | null;
   checklistEnabled: boolean;
+  checklistCount: number | null;
   active: boolean;
   scheduleLabel: string;
   lastRunKey: string | null;
@@ -71,6 +79,8 @@ export function RecurringTasks({
   const [dueInDays, setDueInDays] = useState("");
   const [clientDeadlineInDays, setClientDeadlineInDays] = useState("");
   const [noChecklist, setNoChecklist] = useState(false);
+  const [checklist, setChecklist] = useState<CheckItem[]>([]);
+  const [checkText, setCheckText] = useState("");
 
   // schedule
   const [freq, setFreq] = useState<ScheduleFrequency>("WEEKLY");
@@ -98,10 +108,13 @@ export function RecurringTasks({
     setProjectId(v);
     setServiceId("");
     setAssigneeIds([]);
+    setChecklist([]);
   }
   function onTaskTypeChange(v: string) {
     setServiceId(v);
     const sub = project?.subcategories.find((s) => s.id === v);
+    // Seed the checklist from the sub-category template (editable) — same as new task.
+    setChecklist((sub?.checklist ?? []).map((text) => ({ text, isDone: false })));
     const pid = sub?.primaryAssigneeId;
     if (pid && employees.some((e) => e.id === pid)) {
       setAssigneeIds((cur) => (cur.includes(pid) ? cur : [...cur, pid]));
@@ -112,6 +125,15 @@ export function RecurringTasks({
   }
   function removeAssignee(id: string) {
     setAssigneeIds((l) => l.filter((x) => x !== id));
+  }
+  function addCheckItem() {
+    const t = checkText.trim();
+    if (!t) return;
+    setChecklist((l) => [...l, { text: t, isDone: false }]);
+    setCheckText("");
+  }
+  function removeCheck(i: number) {
+    setChecklist((l) => l.filter((_, idx) => idx !== i));
   }
 
   function resetForm() {
@@ -124,6 +146,8 @@ export function RecurringTasks({
     setDueInDays("");
     setClientDeadlineInDays("");
     setNoChecklist(false);
+    setChecklist([]);
+    setCheckText("");
     setFreq("WEEKLY");
     setTime("09:00");
     setWeekday(1);
@@ -159,6 +183,7 @@ export function RecurringTasks({
           dueInDays: dueInDays === "" ? null : Math.max(0, Number(dueInDays) || 0),
           clientDeadlineInDays: clientDeadlineInDays === "" ? null : Math.max(0, Number(clientDeadlineInDays) || 0),
           checklistEnabled: !noChecklist,
+          checklist: noChecklist ? [] : checklist.map((c) => c.text),
           schedule: buildSchedule(),
         });
         if (res.error) return setError(res.error);
@@ -260,6 +285,10 @@ export function RecurringTasks({
                         <span className="text-faint">Due:</span> {it.dueInDays === 0 ? "same day" : `+${it.dueInDays}d`}
                       </span>
                     )}
+                    <span>
+                      <span className="text-faint">Checklist:</span>{" "}
+                      {!it.checklistEnabled ? "off" : it.checklistCount != null ? `${it.checklistCount} items` : "template"}
+                    </span>
                     <span>
                       <span className="text-faint">Assignees:</span>{" "}
                       {it.assigneeNames.length ? it.assigneeNames.join(", ") : "—"}
@@ -451,19 +480,63 @@ export function RecurringTasks({
               </div>
             </Field>
 
-            <Field label="Checklist" className="sm:col-span-2">
-              <label className="flex items-center gap-2 text-sm text-content">
-                <input
-                  type="checkbox"
-                  checked={noChecklist}
-                  onChange={(e) => setNoChecklist(e.target.checked)}
-                  className="size-4 rounded border-line-strong text-brand-600 focus:ring-brand-500"
-                />
-                No checklist
-              </label>
-              {!noChecklist && (
-                <p className="mt-1 text-xs text-muted">Each created task gets the task type&apos;s default checklist automatically.</p>
-              )}
+            <Field
+              label="Checklist"
+              hint={!noChecklist && checklist.length ? `${checklist.length} item${checklist.length === 1 ? "" : "s"}` : undefined}
+              className="sm:col-span-2"
+            >
+              <div>
+                <label className="mb-2 flex items-center gap-2 text-sm text-content">
+                  <input
+                    type="checkbox"
+                    checked={noChecklist}
+                    onChange={(e) => setNoChecklist(e.target.checked)}
+                    className="size-4 rounded border-line-strong text-brand-600 focus:ring-brand-500"
+                  />
+                  No checklist for this task
+                </label>
+                {!noChecklist && (
+                  <>
+                    <p className="mb-2 text-xs text-muted">
+                      Seeded from the task type&apos;s template — every occurrence gets this exact list. Edit it here.
+                    </p>
+                    {checklist.length > 0 && (
+                      <ul className="mb-2 space-y-1">
+                        {checklist.map((it, i) => (
+                          <li key={i} className="group flex items-center gap-2.5 rounded-lg px-1 py-1.5 hover:bg-canvas">
+                            <span className="size-1.5 shrink-0 rounded-full bg-faint" />
+                            <span className="flex-1 text-sm text-content">{it.text}</span>
+                            <button
+                              type="button"
+                              onClick={() => removeCheck(i)}
+                              className="text-faint opacity-0 hover:text-red-600 group-hover:opacity-100"
+                              aria-label="Remove item"
+                            >
+                              <Icon name="trash" className="size-4" />
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    <div className="flex gap-2">
+                      <Input
+                        value={checkText}
+                        onChange={(e) => setCheckText(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            addCheckItem();
+                          }
+                        }}
+                        placeholder="Add a checklist item…"
+                      />
+                      <Button type="button" variant="secondary" onClick={addCheckItem} disabled={!checkText.trim()}>
+                        Add
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </div>
             </Field>
           </div>
 

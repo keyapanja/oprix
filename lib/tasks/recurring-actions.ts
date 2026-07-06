@@ -21,6 +21,7 @@ const RecurringInputZ = z.object({
   dueInDays: z.number().int().min(0).max(3650).optional().nullable(),
   clientDeadlineInDays: z.number().int().min(0).max(3650).optional().nullable(),
   checklistEnabled: z.boolean().default(true),
+  checklist: z.array(z.string()).default([]),
   schedule: ScheduleZ,
 });
 
@@ -64,6 +65,11 @@ export async function createRecurringTask(input: RecurringInput): Promise<Recurr
       dueInDays: d.dueInDays ?? null,
       clientDeadlineInDays: d.clientDeadlineInDays ?? null,
       checklistEnabled: d.checklistEnabled,
+      // Snapshot the checklist at setup so every occurrence gets exactly what was
+      // configured (independent of later edits to the sub-category template).
+      checklist: d.checklistEnabled
+        ? d.checklist.map((t) => t.trim()).filter(Boolean)
+        : [],
       schedule: d.schedule,
       createdById: session.userId,
     },
