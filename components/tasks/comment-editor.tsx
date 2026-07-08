@@ -272,7 +272,6 @@ export function CommentEditor({
           <Icon name="image" className={cn("size-4", uploading && "animate-pulse")} />
           <input type="file" accept="image/*" multiple className="hidden" onChange={onPickImage} disabled={uploading} />
         </label>
-        <span className="ml-auto pr-1 text-[11px] text-faint">Paste an image to attach it</span>
       </div>
 
       {/* Thumbnail chips for attached images (paste / pick) */}
