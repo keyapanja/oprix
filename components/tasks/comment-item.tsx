@@ -9,6 +9,7 @@ import { Icon } from "@/components/ui/icons";
 import { toast } from "@/components/ui/toast";
 import { confirmDialog } from "@/components/ui/confirm";
 import { CommentEditor } from "@/components/tasks/comment-editor";
+import { AttachmentLightbox, type LightboxItem } from "@/components/attachments/attachment-lightbox";
 import { renderMarkdown } from "@/lib/kb/markdown";
 
 type Person = { id: string; name: string };
@@ -35,6 +36,7 @@ export function CommentItem({
   const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(body);
+  const [preview, setPreview] = useState<LightboxItem | null>(null);
   const [pending, start] = useTransition();
 
   function save() {
@@ -126,12 +128,21 @@ export function CommentItem({
         ) : (
           <div
             className="comment-body mt-0.5 text-sm text-content [&_img]:my-1.5 [&_img]:max-h-72 [&_img]:cursor-zoom-in [&_img]:rounded-lg [&_img]:ring-1 [&_img]:ring-inset [&_img]:ring-line [&_p]:my-1 [&_ul]:my-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-1 [&_ol]:list-decimal [&_ol]:pl-5"
+            // Click any embedded image to open it full-size in the lightbox.
+            onClick={(e) => {
+              const t = e.target as HTMLElement;
+              if (t.tagName === "IMG") {
+                const img = t as HTMLImageElement;
+                setPreview({ fileName: img.alt || "image", mimeType: "image/*", href: img.src });
+              }
+            }}
             // Safe: renderMarkdown escapes all input first, then layers a fixed
             // Markdown subset (img srcs allowlisted to /… and http(s)).
             dangerouslySetInnerHTML={{ __html: renderMarkdown(body) }}
           />
         )}
       </div>
+      {preview && <AttachmentLightbox item={preview} onClose={() => setPreview(null)} />}
     </li>
   );
 }

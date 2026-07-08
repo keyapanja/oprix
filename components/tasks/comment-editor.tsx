@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ChangeEvent, type ClipboardEvent, typ
 import { toast } from "@/components/ui/toast";
 import { renderMarkdown } from "@/lib/kb/markdown";
 import { htmlToMarkdown } from "@/components/kb/rich-text-editor";
+import { AttachmentLightbox, type LightboxItem } from "@/components/attachments/attachment-lightbox";
 import { Icon } from "@/components/ui/icons";
 import { cn } from "@/lib/cn";
 
@@ -60,6 +61,7 @@ export function CommentEditor({
   const [images, setImages] = useState<Img[]>([]);
   const [empty, setEmpty] = useState(!value?.trim());
   const [uploading, setUploading] = useState(false);
+  const [preview, setPreview] = useState<LightboxItem | null>(null);
   const [mQuery, setMQuery] = useState<string | null>(null);
   const [mActive, setMActive] = useState(0);
 
@@ -290,7 +292,12 @@ export function CommentEditor({
           {images.map((img, i) => (
             <div key={`${img.url}-${i}`} className="group relative size-16 overflow-hidden rounded-lg ring-1 ring-inset ring-line-strong">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={img.url} alt={img.name} className="h-full w-full object-cover" />
+              <img
+                src={img.url}
+                alt={img.name}
+                onClick={() => setPreview({ fileName: img.name, mimeType: "image/*", href: img.url })}
+                className="h-full w-full cursor-zoom-in object-cover"
+              />
               <button
                 type="button"
                 onClick={() => removeImage(i)}
@@ -362,6 +369,8 @@ export function CommentEditor({
           ))}
         </ul>
       )}
+
+      {preview && <AttachmentLightbox item={preview} onClose={() => setPreview(null)} />}
     </div>
   );
 }
