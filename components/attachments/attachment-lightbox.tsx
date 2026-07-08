@@ -69,17 +69,26 @@ export function AttachmentLightbox({ item, onClose }: { item: LightboxItem; onCl
         </div>
       </div>
 
-      <div
-        className="flex min-h-0 flex-1 items-center justify-center p-4 pt-0"
-        onMouseDown={(e) => e.stopPropagation()}
-      >
+      <div className="flex min-h-0 flex-1 items-center justify-center p-4 pt-0">
+        {/* Only the media itself swallows the click — the surrounding overlay
+            (this container's empty space + the backdrop) closes the popup. */}
         {isImage ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={item.href} alt={label} className="max-h-full max-w-full rounded-lg object-contain" />
+          <img
+            src={item.href}
+            alt={label}
+            onMouseDown={(e) => e.stopPropagation()}
+            className="max-h-full max-w-full rounded-lg object-contain"
+          />
         ) : isPdf ? (
-          <iframe src={item.href} title={label} className="h-full w-full rounded-lg bg-white" />
+          <iframe
+            src={item.href}
+            title={label}
+            onMouseDown={(e) => e.stopPropagation()}
+            className="h-full w-full rounded-lg bg-white"
+          />
         ) : (
-          <div className="rounded-2xl bg-surface p-8 text-center">
+          <div onMouseDown={(e) => e.stopPropagation()} className="rounded-2xl bg-surface p-8 text-center">
             <Icon name="folder" className="mx-auto size-10 text-faint" />
             <p className="mt-3 text-sm font-medium text-content">{label}</p>
             <a
