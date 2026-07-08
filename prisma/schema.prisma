@@ -724,6 +724,7 @@ model Attachment {
   url        String?  // set when the attachment is a link, not an uploaded file
   mimeType   String?
   sizeBytes  Int?
+  inline     Boolean  @default(false) // image embedded inside a comment/description — hidden from the Attachments panel
   uploadedBy String // userId
   createdAt  DateTime @default(now())
 

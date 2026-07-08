@@ -22,6 +22,11 @@ function inlineText(node: Node): string {
   switch (el.tagName) {
     case "BR":
       return "\n";
+    case "IMG": {
+      const src = el.getAttribute("src") ?? "";
+      const alt = el.getAttribute("alt") ?? "";
+      return src ? `![${alt}](${src})` : "";
+    }
     case "STRONG":
     case "B": {
       const t = kids();

@@ -77,6 +77,7 @@ export default async function TaskDetailPage({
       assignees: { select: { employee: { select: { id: true, fullName: true } } } },
       checklist: { orderBy: { orderIndex: "asc" }, select: { id: true, text: true, isDone: true, createdById: true } },
       attachments: {
+        where: { inline: false }, // inline images live inside comments/description, not the panel
         orderBy: { createdAt: "desc" },
         select: { id: true, fileName: true, mimeType: true, sizeBytes: true, createdAt: true },
       },
@@ -318,6 +319,8 @@ export default async function TaskDetailPage({
                     <CommentItem
                       key={c.id}
                       id={c.id}
+                      taskId={task.id}
+                      people={employees.map((e) => ({ id: e.id, name: e.fullName }))}
                       authorName={authorName(c.authorId)}
                       authorEmpId={authorEmpId(c.authorId)}
                       body={c.body}

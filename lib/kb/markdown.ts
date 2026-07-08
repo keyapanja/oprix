@@ -48,6 +48,13 @@ function autolinkBareUrls(html: string): string {
 function inline(s: string): string {
   const withMarkup = s
     .replace(/`([^`]+)`/g, '<code class="rounded bg-canvas px-1 py-0.5 text-[0.85em]">$1</code>')
+    // Images before links: ![alt](url) contains [alt](url). Only same-origin
+    // (/…) or http(s) srcs are allowed — never javascript:/data: — so this stays
+    // XSS-safe (input is already HTML-escaped, so alt/src can't break out).
+    .replace(
+      /!\[([^\]]*)\]\((\/[^\s)]*|https?:\/\/[^\s)]+)\)/g,
+      '<img src="$2" alt="$1" loading="lazy" class="my-2 max-h-96 max-w-full rounded-lg ring-1 ring-inset ring-line" />',
+    )
     .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
     .replace(/(^|[^*])\*([^*\s][^*]*?)\*/g, "$1<em>$2</em>")
     .replace(

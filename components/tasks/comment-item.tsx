@@ -4,14 +4,19 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { editComment, deleteComment } from "@/lib/projects/actions";
-import { Textarea } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icons";
 import { toast } from "@/components/ui/toast";
 import { confirmDialog } from "@/components/ui/confirm";
+import { CommentEditor } from "@/components/tasks/comment-editor";
+import { renderMarkdown } from "@/lib/kb/markdown";
+
+type Person = { id: string; name: string };
 
 export function CommentItem({
   id,
+  taskId,
+  people,
   authorName,
   authorEmpId,
   body,
@@ -19,6 +24,8 @@ export function CommentItem({
   isMine,
 }: {
   id: string;
+  taskId: string;
+  people: Person[];
   authorName: string;
   authorEmpId: string | null;
   body: string;
@@ -99,7 +106,14 @@ export function CommentItem({
         </p>
         {editing ? (
           <div className="mt-1 space-y-2">
-            <Textarea value={text} onChange={(e) => setText(e.target.value)} />
+            <CommentEditor
+              value={body}
+              onChange={setText}
+              people={people}
+              uploadUrl={`/api/tasks/${taskId}/comment-images`}
+              onSubmit={save}
+              autoFocus
+            />
             <div className="flex gap-2">
               <Button size="sm" onClick={save} disabled={pending || !text.trim()}>
                 {pending ? "Saving…" : "Save"}
@@ -110,7 +124,12 @@ export function CommentItem({
             </div>
           </div>
         ) : (
-          <p className="mt-0.5 whitespace-pre-wrap text-sm text-muted">{body}</p>
+          <div
+            className="comment-body mt-0.5 text-sm text-content [&_img]:my-1.5 [&_img]:max-h-72 [&_img]:cursor-zoom-in [&_img]:rounded-lg [&_img]:ring-1 [&_img]:ring-inset [&_img]:ring-line [&_p]:my-1 [&_ul]:my-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-1 [&_ol]:list-decimal [&_ol]:pl-5"
+            // Safe: renderMarkdown escapes all input first, then layers a fixed
+            // Markdown subset (img srcs allowlisted to /… and http(s)).
+            dangerouslySetInnerHTML={{ __html: renderMarkdown(body) }}
+          />
         )}
       </div>
     </li>
