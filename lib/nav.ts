@@ -36,13 +36,13 @@ export const NAV: NavItem[] = [
   },
   {
     label: "Tasks",
-    href: "/tasks",
+    href: "/tasks?view=mine", // the main item lands on the user's own tasks
     icon: "check",
     action: "task:manage",
     children: [
       { label: "New task", href: "/tasks/new", action: "task:manage" },
       { label: "Recurring tasks", href: "/tasks/recurring", icon: "clock", action: "task:manage" },
-      { label: "My tasks", href: "/tasks?view=mine", icon: "check", action: "task:manage" },
+      { label: "All tasks", href: "/tasks", icon: "list", action: "task:manage" },
       { label: "Assigned by me", href: "/tasks?view=created", icon: "userGroup", action: "task:manage" },
     ],
   },

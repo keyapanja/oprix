@@ -123,7 +123,10 @@ export function Sidebar({
           <p className="px-3 pb-2 text-[10px] font-semibold uppercase tracking-wider text-faint">Menu</p>
         )}
         {items.map((item) => {
-          const active = pathname === item.href || pathname.startsWith(item.href + "/");
+          // Match on the path only — the href may carry a query (e.g. /tasks?view=mine),
+          // but usePathname() returns just the path, so compare against that.
+          const itemPath = item.href.split("?")[0];
+          const active = pathname === itemPath || pathname.startsWith(itemPath + "/");
           const children = (item.children ?? []).filter(
             (c) => (!c.action || allowed.includes(c.action)) && (!c.employeeOnly || isEmployee),
           );
@@ -172,7 +175,7 @@ export function Sidebar({
                 <div className="mt-0.5 space-y-0.5">
                   {children.map((c) => {
                     const cPath = c.href.split("?")[0];
-                    const cActive = cPath !== item.href && pathname === cPath;
+                    const cActive = cPath !== itemPath && pathname === cPath;
                     return (
                       <Link
                         key={c.href}
