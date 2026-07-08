@@ -62,7 +62,6 @@ export function CommentEditor({
   const [uploading, setUploading] = useState(false);
   const [mQuery, setMQuery] = useState<string | null>(null);
   const [mActive, setMActive] = useState(0);
-  const [mPos, setMPos] = useState<{ left: number; top: number } | null>(null);
 
   // Seed once from the initial Markdown: text into the editor, images into chips.
   useEffect(() => {
@@ -148,11 +147,23 @@ export function CommentEditor({
   function updateMention() {
     const el = ref.current;
     const sel = window.getSelection();
-    if (!el || !sel || !sel.isCollapsed || !sel.anchorNode || !el.contains(sel.anchorNode) || sel.anchorNode.nodeType !== Node.TEXT_NODE) {
+    if (!el || !sel || sel.rangeCount === 0 || !sel.isCollapsed || !sel.focusNode || !el.contains(sel.focusNode)) {
       setMQuery(null);
       return;
     }
-    const before = (sel.anchorNode.textContent ?? "").slice(0, sel.anchorOffset);
+    // All text from the start of the editor up to the caret — robust across the
+    // contentEditable node structure (the caret's node may be a text node OR the
+    // editor element itself, e.g. on the first keystroke).
+    let before = "";
+    try {
+      const r = document.createRange();
+      r.selectNodeContents(el);
+      r.setEnd(sel.focusNode, sel.focusOffset);
+      before = r.toString();
+    } catch {
+      setMQuery(null);
+      return;
+    }
     const m = before.match(/(?:^|\s)@(\S*)$/u);
     if (!m) {
       setMQuery(null);
@@ -160,8 +171,6 @@ export function CommentEditor({
     }
     setMQuery(m[1]);
     setMActive(0);
-    const rect = sel.getRangeAt(0).cloneRange().getBoundingClientRect();
-    setMPos({ left: rect.left, top: rect.bottom });
   }
 
   function insertMention(p: Person) {
@@ -245,7 +254,8 @@ export function CommentEditor({
   );
 
   return (
-    <div className="overflow-hidden rounded-xl bg-surface ring-1 ring-inset ring-line-strong focus-within:ring-2 focus-within:ring-brand-500">
+    <div className="relative">
+      <div className="overflow-hidden rounded-xl bg-surface ring-1 ring-inset ring-line-strong focus-within:ring-2 focus-within:ring-brand-500">
       <div className="flex flex-wrap items-center gap-0.5 border-b border-line bg-canvas/60 px-1.5 py-1">
         <Btn onClick={() => exec("bold")} title="Bold (Ctrl+B)">
           <span className="font-bold">B</span>
@@ -325,12 +335,10 @@ export function CommentEditor({
           )}
         />
       </div>
+      </div>
 
-      {mOpen && mPos && (
-        <ul
-          className="fixed z-50 max-h-56 w-56 overflow-y-auto rounded-xl border border-line bg-surface p-1 shadow-lg"
-          style={{ left: mPos.left, top: mPos.top + 4 }}
-        >
+      {mOpen && (
+        <ul className="absolute inset-x-0 top-full z-30 mt-1 max-h-56 overflow-y-auto rounded-xl border border-line bg-surface p-1 shadow-lg">
           {matches.map((p, i) => (
             <li key={p.id}>
               <button
