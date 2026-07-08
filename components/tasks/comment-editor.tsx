@@ -8,13 +8,34 @@ import { Icon } from "@/components/ui/icons";
 import { cn } from "@/lib/cn";
 
 type Person = { id: string; name: string };
+type Img = { url: string; name: string };
+
+const IMG_MD = /!\[([^\]]*)\]\((\/[^\s)]*|https?:\/\/[^\s)]+)\)/g;
+
+// Split a Markdown body into its text (images stripped) and the images, so an
+// existing comment re-opens with its images back in the thumbnail strip.
+function splitImages(md: string): { text: string; imgs: Img[] } {
+  const imgs: Img[] = [];
+  const text = (md ?? "")
+    .replace(IMG_MD, (_m, alt: string, url: string) => {
+      imgs.push({ url, name: alt || "image" });
+      return "";
+    })
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  return { text, imgs };
+}
+
+// Keep alt text from breaking Markdown link syntax.
+const cleanAlt = (s: string) => s.replace(/[[\]()]/g, "").trim();
 
 /**
- * Compact rich-text comment editor. It's a contentEditable surface that
- * serializes to Markdown (reusing the KB editor's htmlToMarkdown + the XSS-safe
- * renderMarkdown), so storage stays Markdown end-to-end. Supports **bold /
- * italic / lists / links**, an image button + **clipboard image paste** (each
- * image uploads to `uploadUrl` and is embedded as `![](…)`), and @-mentions.
+ * Compact rich-text comment editor. Text is a contentEditable that serializes to
+ * Markdown (reusing the KB editor's htmlToMarkdown + the XSS-safe renderMarkdown),
+ * with **bold / italic / lists / links** and @-mentions. Images — pasted from the
+ * clipboard or picked with the image button — upload to `uploadUrl` and appear as
+ * **thumbnail chips** above the text (not inline); on submit they're appended to
+ * the body as ![](…). The combined Markdown is emitted through `onChange`.
  */
 export function CommentEditor({
   value,
@@ -35,28 +56,41 @@ export function CommentEditor({
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const inited = useRef(false);
+  const imagesRef = useRef<Img[]>([]);
+  const [images, setImages] = useState<Img[]>([]);
   const [empty, setEmpty] = useState(!value?.trim());
   const [uploading, setUploading] = useState(false);
   const [mQuery, setMQuery] = useState<string | null>(null);
   const [mActive, setMActive] = useState(0);
   const [mPos, setMPos] = useState<{ left: number; top: number } | null>(null);
 
-  // Seed the editor from the initial Markdown once; thereafter it's uncontrolled
-  // (re-setting innerHTML would fight the caret). Callers clear it by remounting.
+  // Seed once from the initial Markdown: text into the editor, images into chips.
   useEffect(() => {
     const el = ref.current;
     if (el && !inited.current) {
-      el.innerHTML = value?.trim() ? renderMarkdown(value) : "";
+      const { text, imgs } = splitImages(value);
+      el.innerHTML = text ? renderMarkdown(text) : "";
+      imagesRef.current = imgs;
+      setImages(imgs);
+      setEmpty(!text.trim() && imgs.length === 0);
       inited.current = true;
       if (autoFocus) el.focus();
     }
   }, [value, autoFocus]);
 
-  function sync() {
+  // Emit the combined Markdown: text, then each image as ![](…).
+  function emit(imgs: Img[]) {
     const el = ref.current;
-    if (!el) return;
-    setEmpty(!el.textContent?.trim() && !el.querySelector("img"));
-    onChange(htmlToMarkdown(el));
+    const textMd = el ? htmlToMarkdown(el) : "";
+    const imgMd = imgs.map((i) => `![${cleanAlt(i.name)}](${i.url})`).join("\n\n");
+    onChange([textMd, imgMd].filter((s) => s && s.trim()).join("\n\n"));
+    setEmpty(!el?.textContent?.trim() && imgs.length === 0);
+  }
+
+  function updateImages(next: Img[]) {
+    imagesRef.current = next;
+    setImages(next);
+    emit(next);
   }
 
   // ---- image upload (button + paste) --------------------------------------
@@ -73,7 +107,7 @@ export function CommentEditor({
         return;
       }
       const j = (await res.json()) as { url?: string };
-      if (j.url) insertImage(j.url, file.name);
+      if (j.url) updateImages([...imagesRef.current, { url: j.url, name: file.name || "image" }]);
     } catch {
       toast.error("Image upload failed");
     } finally {
@@ -81,35 +115,13 @@ export function CommentEditor({
     }
   }
 
-  function insertImage(url: string, alt: string) {
-    const el = ref.current;
-    if (!el) return;
-    el.focus();
-    const img = document.createElement("img");
-    img.src = url;
-    img.alt = alt || "";
-    const sel = window.getSelection();
-    if (sel && sel.rangeCount && sel.anchorNode && el.contains(sel.anchorNode)) {
-      const range = sel.getRangeAt(0);
-      range.deleteContents();
-      range.insertNode(img);
-      range.setStartAfter(img);
-      range.collapse(true);
-      sel.removeAllRanges();
-      sel.addRange(range);
-    } else {
-      el.appendChild(img);
-    }
-    sync();
-  }
-
   function onPaste(e: ClipboardEvent<HTMLDivElement>) {
     const items = e.clipboardData?.items;
     if (!items) return;
-    const images = Array.from(items).filter((it) => it.kind === "file" && it.type.startsWith("image/"));
-    if (images.length) {
-      e.preventDefault(); // handle images ourselves; let non-image pastes fall through
-      for (const it of images) {
+    const pics = Array.from(items).filter((it) => it.kind === "file" && it.type.startsWith("image/"));
+    if (pics.length) {
+      e.preventDefault(); // capture images ourselves; non-image pastes fall through
+      for (const it of pics) {
         const f = it.getAsFile();
         if (f) void uploadImage(f);
       }
@@ -120,6 +132,10 @@ export function CommentEditor({
     const files = Array.from(e.target.files ?? []);
     e.target.value = "";
     for (const f of files) void uploadImage(f);
+  }
+
+  function removeImage(i: number) {
+    updateImages(imagesRef.current.filter((_, idx) => idx !== i));
   }
 
   // ---- @-mentions ----------------------------------------------------------
@@ -166,7 +182,7 @@ export function CommentEditor({
     sel.removeAllRanges();
     sel.addRange(range);
     setMQuery(null);
-    sync();
+    emit(imagesRef.current);
     ref.current?.focus();
   }
 
@@ -202,7 +218,7 @@ export function CommentEditor({
   function exec(cmd: string, val?: string) {
     ref.current?.focus();
     document.execCommand(cmd, false, val);
-    sync();
+    emit(imagesRef.current);
   }
 
   function addLink() {
@@ -259,6 +275,31 @@ export function CommentEditor({
         <span className="ml-auto pr-1 text-[11px] text-faint">Paste an image to attach it</span>
       </div>
 
+      {/* Thumbnail chips for attached images (paste / pick) */}
+      {(images.length > 0 || uploading) && (
+        <div className="flex flex-wrap gap-2 px-3 pt-2.5">
+          {images.map((img, i) => (
+            <div key={`${img.url}-${i}`} className="group relative size-16 overflow-hidden rounded-lg ring-1 ring-inset ring-line-strong">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={img.url} alt={img.name} className="h-full w-full object-cover" />
+              <button
+                type="button"
+                onClick={() => removeImage(i)}
+                className="absolute right-0.5 top-0.5 flex size-5 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition-opacity group-hover:opacity-100"
+                aria-label={`Remove ${img.name}`}
+              >
+                <Icon name="x" className="size-3" />
+              </button>
+            </div>
+          ))}
+          {uploading && (
+            <div className="flex size-16 items-center justify-center rounded-lg text-faint ring-1 ring-inset ring-line">
+              <Icon name="image" className="size-5 animate-pulse" />
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="relative">
         {empty && <p className="pointer-events-none absolute left-3 top-2.5 text-sm text-faint">{placeholder}</p>}
         <div
@@ -268,7 +309,7 @@ export function CommentEditor({
           role="textbox"
           aria-multiline="true"
           onInput={() => {
-            sync();
+            emit(imagesRef.current);
             updateMention();
           }}
           onKeyDown={onKeyDown}
@@ -277,12 +318,11 @@ export function CommentEditor({
           onPaste={onPaste}
           onBlur={() => setTimeout(() => setMQuery(null), 150)}
           className={cn(
-            "min-h-[76px] max-h-80 overflow-y-auto px-3 py-2 text-sm leading-relaxed text-content focus:outline-none",
+            "min-h-[60px] max-h-80 overflow-y-auto px-3 py-2 text-sm leading-relaxed text-content focus:outline-none",
             "[&_strong]:font-semibold [&_em]:italic",
             "[&_ul]:my-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-0.5",
             "[&_a]:text-accent-strong [&_a]:underline",
             "[&_code]:rounded [&_code]:bg-canvas [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-[0.85em]",
-            "[&_img]:my-1.5 [&_img]:max-h-64 [&_img]:max-w-full [&_img]:rounded-lg [&_img]:ring-1 [&_img]:ring-inset [&_img]:ring-line",
           )}
         />
       </div>
