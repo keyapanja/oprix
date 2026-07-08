@@ -6,26 +6,11 @@ import { renderMarkdown } from "@/lib/kb/markdown";
 import { htmlToMarkdown } from "@/components/kb/rich-text-editor";
 import { AttachmentLightbox, type LightboxItem } from "@/components/attachments/attachment-lightbox";
 import { Icon } from "@/components/ui/icons";
+import { splitCommentImages } from "@/lib/tasks/comment-content";
 import { cn } from "@/lib/cn";
 
 type Person = { id: string; name: string };
 type Img = { url: string; name: string };
-
-const IMG_MD = /!\[([^\]]*)\]\((\/[^\s)]*|https?:\/\/[^\s)]+)\)/g;
-
-// Split a Markdown body into its text (images stripped) and the images, so an
-// existing comment re-opens with its images back in the thumbnail strip.
-function splitImages(md: string): { text: string; imgs: Img[] } {
-  const imgs: Img[] = [];
-  const text = (md ?? "")
-    .replace(IMG_MD, (_m, alt: string, url: string) => {
-      imgs.push({ url, name: alt || "image" });
-      return "";
-    })
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-  return { text, imgs };
-}
 
 // Keep alt text from breaking Markdown link syntax.
 const cleanAlt = (s: string) => s.replace(/[[\]()]/g, "").trim();
@@ -69,7 +54,8 @@ export function CommentEditor({
   useEffect(() => {
     const el = ref.current;
     if (el && !inited.current) {
-      const { text, imgs } = splitImages(value);
+      const { text, images: found } = splitCommentImages(value);
+      const imgs: Img[] = found.map((im) => ({ url: im.url, name: im.alt }));
       el.innerHTML = text ? renderMarkdown(text) : "";
       imagesRef.current = imgs;
       setImages(imgs);
