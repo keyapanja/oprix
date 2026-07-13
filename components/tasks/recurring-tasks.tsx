@@ -18,6 +18,7 @@ import { Icon } from "@/components/ui/icons";
 import { toast } from "@/components/ui/toast";
 import { confirmDialog } from "@/components/ui/confirm";
 import { humanizeEnum } from "@/lib/format";
+import { cn } from "@/lib/cn";
 import { WEEKDAY_LABELS, type ScheduleFrequency, type FormNotifySchedule } from "@/lib/forms/schedule";
 
 type Emp = { id: string; name: string };
@@ -46,7 +47,16 @@ type Item = {
   active: boolean;
   scheduleLabel: string;
   lastRunKey: string | null;
+  mine: boolean;
+  createdByMe: boolean;
 };
+
+type View = "all" | "mine" | "created";
+const VIEWS: { value: View; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "mine", label: "My tasks" },
+  { value: "created", label: "Assigned by me" },
+];
 
 const PRIORITIES = ["LOW", "MEDIUM", "HIGH", "URGENT"];
 const FREQ_OPTS: { value: ScheduleFrequency; label: string }[] = [
@@ -61,13 +71,20 @@ export function RecurringTasks({
   items,
   projects,
   employees,
+  initialView = "all",
 }: {
   items: Item[];
   projects: Proj[];
   employees: Emp[];
+  initialView?: View;
 }) {
   const router = useRouter();
   const [showForm, setShowForm] = useState(items.length === 0);
+  const [view, setView] = useState<View>(initialView);
+
+  const visible = items.filter((it) =>
+    view === "mine" ? it.mine : view === "created" ? it.createdByMe : true,
+  );
 
   // ---- form state ----
   const [projectId, setProjectId] = useState("");
@@ -240,10 +257,29 @@ export function RecurringTasks({
   return (
     <div className="space-y-5">
       {/* Existing templates */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-content">
-          {items.length} recurring {items.length === 1 ? "task" : "tasks"}
-        </h2>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          {items.length > 0 && (
+            <div className="inline-flex rounded-xl bg-canvas p-0.5">
+              {VIEWS.map((v) => (
+                <button
+                  key={v.value}
+                  type="button"
+                  onClick={() => setView(v.value)}
+                  className={cn(
+                    "rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
+                    view === v.value ? "bg-surface text-content shadow-sm" : "text-muted hover:text-content",
+                  )}
+                >
+                  {v.label}
+                </button>
+              ))}
+            </div>
+          )}
+          <span className="text-sm text-muted">
+            {visible.length} recurring {visible.length === 1 ? "task" : "tasks"}
+          </span>
+        </div>
         {!showForm && (
           <Button onClick={() => setShowForm(true)}>
             <Icon name="plus" className="size-4" /> New recurring task
@@ -251,9 +287,9 @@ export function RecurringTasks({
         )}
       </div>
 
-      {items.length > 0 && (
+      {visible.length > 0 && (
         <div className="space-y-2.5">
-          {items.map((it) => (
+          {visible.map((it) => (
             <Card key={it.id} className="p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
@@ -326,6 +362,14 @@ export function RecurringTasks({
       {items.length === 0 && !showForm && (
         <Card className="p-8 text-center">
           <p className="text-sm text-muted">No recurring tasks yet.</p>
+        </Card>
+      )}
+
+      {items.length > 0 && visible.length === 0 && (
+        <Card className="p-8 text-center">
+          <p className="text-sm text-muted">
+            {view === "mine" ? "No recurring tasks assigned to you." : "No recurring tasks you created."}
+          </p>
         </Card>
       )}
 
