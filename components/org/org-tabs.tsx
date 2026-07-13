@@ -20,6 +20,7 @@ import { WorkingDaysSettings } from "@/components/org/working-days-settings";
 import type { WorkWeek } from "@/lib/leave/work-week";
 import { CompanyInfoForm, type CompanyInfo } from "@/components/org/company-info-form";
 import { DepartmentHead } from "@/components/org/department-head";
+import { DepartmentClientFacing } from "@/components/org/department-client-facing";
 import { BulkSubcategoryForm } from "@/components/org/bulk-subcategory-form";
 import {
   createDepartment,
@@ -34,7 +35,7 @@ import {
 import { setEventReminder } from "@/lib/calendar/actions";
 import { cn } from "@/lib/cn";
 
-type Dept = { id: string; name: string; headId: string | null };
+type Dept = { id: string; name: string; headId: string | null; clientFacing: boolean };
 type Svc = {
   id: string;
   name: string;
@@ -199,7 +200,7 @@ export function OrgTabs({
         <Section
           title="Departments"
           empty="No departments yet."
-          headers={["Name", "Head", ""]}
+          headers={["Name", "Head", "Client portal", ""]}
           form={
             <AddForm action={createDepartment}>
               <Field label="Department name" htmlFor="dept-name" className="min-w-64">
@@ -212,6 +213,7 @@ export function OrgTabs({
             cells: [
               d.name,
               <DepartmentHead departmentId={d.id} headId={d.headId} employees={employees} />,
+              <DepartmentClientFacing departmentId={d.id} clientFacing={d.clientFacing} />,
             ],
             delete: <DeleteButton entity="department" id={d.id} label={d.name} />,
           }))}

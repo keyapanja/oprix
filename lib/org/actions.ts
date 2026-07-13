@@ -57,6 +57,21 @@ export async function setDepartmentHead(
   return { ok: true };
 }
 
+/** Mark a department client-facing (its members are portal Business Managers) or not. */
+export async function setDepartmentClientFacing(
+  departmentId: string,
+  clientFacing: boolean,
+): Promise<ActionState> {
+  const session = await requireCapability("org:manage");
+  const res = await prisma.department.updateMany({
+    where: { id: departmentId, companyId: session.companyId },
+    data: { clientFacing },
+  });
+  if (res.count !== 1) return { error: "Department not found" };
+  revalidatePath(ORG);
+  return { ok: true };
+}
+
 const DesignationSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(80),
   departmentId: z.string().trim().min(1, "Department is required"),

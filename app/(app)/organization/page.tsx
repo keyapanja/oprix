@@ -17,7 +17,7 @@ export default async function OrganizationPage() {
 
   const [departments, services, designations, shifts, locations, probationPeriods, employees, company] =
     await Promise.all([
-      prisma.department.findMany({ where, orderBy: { name: "asc" }, select: { id: true, name: true, headId: true } }),
+      prisma.department.findMany({ where, orderBy: { name: "asc" }, select: { id: true, name: true, headId: true, clientFacing: true } }),
       prisma.service.findMany({
         where,
         orderBy: { name: "asc" },

@@ -50,8 +50,18 @@ export async function getClientProject(clientId: string, companyId: string, proj
       tasks: {
         where: { deletedAt: null },
         orderBy: { createdAt: "asc" },
-        // No assignees / timers / cost — progress only.
-        select: { id: true, name: true, status: true, finalLink: true, service: { select: { name: true } } },
+        // No timers / cost — progress only, plus client-visible flag + due date
+        // for the tasks the client and their manager exchange.
+        select: {
+          id: true,
+          name: true,
+          status: true,
+          finalLink: true,
+          clientVisible: true,
+          dueDate: true,
+          createdById: true,
+          service: { select: { name: true } },
+        },
       },
       deliverables: {
         orderBy: { submittedAt: "desc" },
@@ -100,6 +110,35 @@ export async function listPendingTaskReviews(clientId: string, companyId: string
       project: { select: { id: true, name: true } },
     },
   });
+}
+
+export type TeamMember = {
+  id: string;
+  email: string;
+  accepted: boolean; // has set a password (vs. a pending invite)
+  isPrimary: boolean; // the earliest login — can manage the team
+  lastLoginAt: Date | null;
+};
+
+/**
+ * The client's portal team — every active CLIENT login for this client. The
+ * earliest-created one is the "primary contact" who (with internal admins) can
+ * invite/remove members.
+ */
+export async function listClientTeam(clientId: string, companyId: string): Promise<TeamMember[]> {
+  const users = await prisma.user.findMany({
+    where: { clientId, companyId, role: "CLIENT", isActive: true },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, email: true, passwordHash: true, lastLoginAt: true },
+  });
+  const primaryId = users[0]?.id ?? null;
+  return users.map((u) => ({
+    id: u.id,
+    email: u.email,
+    accepted: !!u.passwordHash,
+    isPrimary: u.id === primaryId,
+    lastLoginAt: u.lastLoginAt,
+  }));
 }
 
 export async function getPortalSummary(clientId: string, companyId: string) {

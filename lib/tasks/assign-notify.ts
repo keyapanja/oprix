@@ -54,3 +54,35 @@ export async function notifyTaskAssigned(opts: {
     /* never block assignment on a notification failure */
   }
 }
+
+/**
+ * Notify a project's client team that a task is now visible to them in the
+ * portal (created client-visible, or toggled on). Best-effort; never throws.
+ */
+export async function notifyClientTask(opts: {
+  companyId: string;
+  taskId: string;
+  actorUserId: string;
+}): Promise<void> {
+  try {
+    const task = await prisma.task.findFirst({
+      where: { id: opts.taskId, project: { companyId: opts.companyId } },
+      select: { name: true, project: { select: { name: true, clientId: true } } },
+    });
+    if (!task?.project.clientId) return;
+    const clientUsers = await prisma.user.findMany({
+      where: { clientId: task.project.clientId, companyId: opts.companyId, role: "CLIENT", isActive: true },
+      select: { id: true },
+    });
+    const ids = clientUsers.map((u) => u.id).filter((id) => id !== opts.actorUserId);
+    if (!ids.length) return;
+    await notify(ids, {
+      type: "TASK",
+      title: "New task on your project",
+      body: `${task.project.name}: “${task.name}” was shared with you.`,
+      meta: { taskId: opts.taskId },
+    });
+  } catch {
+    /* never block on a notification failure */
+  }
+}

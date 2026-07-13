@@ -263,11 +263,12 @@ model RolePermission {
 }
 
 model Department {
-  id        String   @id @default(cuid())
-  companyId String
-  name      String
-  headId    String?  // Employee who heads the department
-  createdAt DateTime @default(now())
+  id           String   @id @default(cuid())
+  companyId    String
+  name         String
+  headId       String?  // Employee who heads the department
+  clientFacing Boolean  @default(false) // members are the client-portal "Business Managers" clients talk to
+  createdAt    DateTime @default(now())
 
   company      Company       @relation(fields: [companyId], references: [id])
   head         Employee?     @relation("DeptHead", fields: [headId], references: [id])
@@ -567,6 +568,7 @@ model Task {
   clientDeadline DateTime? // client-facing deadline; the due date is auto-set a day before
   priority     Priority   @default(MEDIUM)
   status       TaskStatus @default(TODO)
+  clientVisible Boolean   @default(false) // shows in the client portal; client-created requests set this true
   checklistEnabled Boolean @default(true) // false = created "without a checklist"; detail page hides the box
   startedAt    DateTime? // first moved to In Progress
   submittedAt  DateTime? // when the current work was submitted for review (for on-time/delayed)

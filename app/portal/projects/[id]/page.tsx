@@ -13,6 +13,8 @@ import { PROJECT_STATUS_TONE, PRIORITY_TONE } from "@/lib/status";
 import { ProgressBar } from "@/components/portal/progress-bar";
 import { ReviewControls } from "@/components/portal/review-controls";
 import { DeliverableCard } from "@/components/portal/deliverable-card";
+import { ClientTaskForm } from "@/components/portal/client-task-form";
+import { getProjectManager } from "@/lib/portal/manager";
 
 export const metadata: Metadata = { title: "Project · Client Portal" };
 
@@ -33,7 +35,9 @@ export default async function PortalProjectDetailPage({ params }: { params: Prom
   const project = await getClientProject(session.clientId, session.companyId, id);
   if (!project) notFound();
 
+  const bm = await getProjectManager(project.id);
   const progress = progressOf(project.tasks);
+  const clientTasks = project.tasks.filter((t) => t.clientVisible);
   const pendingTasks = project.tasks.filter((t) => t.status === "CLIENT_REVIEW");
   const pendingDeliverables = project.deliverables.filter((d) => d.status === "SUBMITTED");
   const pastDeliverables = project.deliverables.filter((d) => d.status !== "SUBMITTED");
@@ -81,6 +85,42 @@ export default async function PortalProjectDetailPage({ params }: { params: Prom
           </div>
         </div>
       </Card>
+
+      {/* Your Business Manager + raise a task */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-muted">
+          {bm ? (
+            <>Your Business Manager: <span className="font-medium text-content">{bm.name}</span></>
+          ) : (
+            <span className="text-faint">No Business Manager assigned to this project yet.</span>
+          )}
+        </p>
+        <ClientTaskForm projectId={project.id} projectName={project.name} bmName={bm?.name ?? null} />
+      </div>
+
+      {/* Tasks you and your manager are working on */}
+      {clientTasks.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-faint">Your tasks</h2>
+          <Card className="divide-y divide-line overflow-hidden">
+            {clientTasks.map((t) => {
+              const pill = taskPill(t.status);
+              return (
+                <div key={t.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-content">{t.name}</p>
+                    <p className="text-xs text-faint">
+                      {t.createdById === session.userId ? "Raised by you" : "From your team"}
+                      {t.dueDate ? ` · Due ${formatDate(t.dueDate)}` : ""}
+                    </p>
+                  </div>
+                  <Badge tone={pill.tone}>{pill.label}</Badge>
+                </div>
+              );
+            })}
+          </Card>
+        </section>
+      )}
 
       {/* Awaiting your review */}
       {needsReview > 0 && (

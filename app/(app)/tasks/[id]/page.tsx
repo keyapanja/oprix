@@ -19,6 +19,7 @@ import { TaskDuplicate } from "@/components/tasks/task-duplicate";
 import { TaskStatusEditor } from "@/components/tasks/task-status-editor";
 import { TaskWorkflow } from "@/components/tasks/task-workflow";
 import { TaskDueBadge } from "@/components/tasks/task-due-badge";
+import { TaskClientVisible } from "@/components/tasks/task-client-visible";
 import { CommentForm } from "@/components/tasks/comment-form";
 import { CommentItem } from "@/components/tasks/comment-item";
 import { TaskTimerControl } from "@/components/timer/task-timer-control";
@@ -49,6 +50,7 @@ export default async function TaskDetailPage({
       serviceId: true,
       createdById: true,
       checklistEnabled: true,
+      clientVisible: true,
       finalLink: true,
       dueDate: true,
       clientDeadline: true,
@@ -60,6 +62,7 @@ export default async function TaskDetailPage({
         select: {
           id: true,
           name: true,
+          clientId: true,
           services: {
             select: {
               serviceId: true,
@@ -203,6 +206,9 @@ export default async function TaskDetailPage({
               <Badge tone={TASK_STATUS_TONE[task.status]}>{TASK_STATUS_LABEL[task.status]}</Badge>
             )}
             {isManager && <TaskDuplicate taskId={task.id} />}
+            {isManager && task.project.clientId && (
+              <TaskClientVisible taskId={task.id} clientVisible={task.clientVisible} />
+            )}
             {canEdit && (
               <TaskEdit
                 taskId={task.id}

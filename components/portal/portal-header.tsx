@@ -24,6 +24,7 @@ export function PortalHeader({
     { label: "Projects", href: "/portal/projects" },
     { label: "Deliverables", href: "/portal/deliverables" },
     ...(showForms ? [{ label: "Forms", href: "/portal/forms" }] : []),
+    { label: "Team", href: "/portal/team" },
   ];
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
