@@ -42,7 +42,7 @@ export function AllRequests({
 }: {
   requests: LeaveDetail[];
   canApprove: boolean;
-  leaveTypeOpts: { id: string; name: string }[];
+  leaveTypeOpts: { id: string; name: string; attachmentEnabled?: boolean }[];
 }) {
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("");

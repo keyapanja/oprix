@@ -36,7 +36,7 @@ export default async function LeavePage() {
   const leaveTypeOpts = await prisma.leaveType.findMany({
     where: { companyId },
     orderBy: { name: "asc" },
-    select: { id: true, name: true },
+    select: { id: true, name: true, attachmentEnabled: true },
   });
 
   const myRequests = session.employeeId

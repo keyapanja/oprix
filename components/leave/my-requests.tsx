@@ -20,7 +20,7 @@ export function MyRequests({
   leaveTypes,
 }: {
   requests: LeaveDetail[];
-  leaveTypes: { id: string; name: string }[];
+  leaveTypes: { id: string; name: string; attachmentEnabled?: boolean }[];
 }) {
   // Track by id so an edit / attachment upload (router.refresh) updates the open modal.
   const [selId, setSelId] = useState<string | null>(null);

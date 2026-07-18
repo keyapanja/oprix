@@ -8,9 +8,10 @@ import { Modal } from "@/components/ui/modal";
 import { RequestForm } from "@/components/leave/request-form";
 
 type Opt = { id: string; name: string };
+type TypeOpt = { id: string; name: string; attachmentEnabled: boolean };
 
 /** Manager action: open a modal to raise a leave request for any employee. */
-export function AddLeaveButton({ employees, leaveTypes }: { employees: Opt[]; leaveTypes: Opt[] }) {
+export function AddLeaveButton({ employees, leaveTypes }: { employees: Opt[]; leaveTypes: TypeOpt[] }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   return (

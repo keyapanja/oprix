@@ -33,7 +33,7 @@ export default async function LeaveRequestsPage() {
       orderBy: { createdAt: "desc" },
       select: REQUEST_SELECT,
     }),
-    prisma.leaveType.findMany({ where: { companyId }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    prisma.leaveType.findMany({ where: { companyId }, orderBy: { name: "asc" }, select: { id: true, name: true, attachmentEnabled: true } }),
     prisma.employee.findMany({
       where: { companyId, deletedAt: null },
       orderBy: { fullName: "asc" },

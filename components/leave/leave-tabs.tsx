@@ -36,7 +36,7 @@ type Tab = (typeof TABS)[number];
 
 export function LeaveTabs({ leaveTypes, employees }: { leaveTypes: LType[]; employees: Opt[] }) {
   const [tab, setTab] = useState<Tab>("Requests");
-  const typeOpts = leaveTypes.map((t) => ({ id: t.id, name: t.name }));
+  const typeOpts = leaveTypes.map((t) => ({ id: t.id, name: t.name, attachmentEnabled: t.attachmentEnabled }));
 
   return (
     <div>

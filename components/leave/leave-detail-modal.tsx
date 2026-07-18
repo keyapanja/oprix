@@ -77,7 +77,7 @@ export function LeaveDetailModal({
   req: LeaveDetail;
   canApprove: boolean;
   canEdit: boolean;
-  leaveTypes: { id: string; name: string }[];
+  leaveTypes: { id: string; name: string; attachmentEnabled?: boolean }[];
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -198,7 +198,10 @@ export function LeaveDetailModal({
   const eSingle = !!eStart && eStart === eEnd;
   // Attachments (medical certs etc.) can be uploaded/replaced by the applicant
   // (while pending) or an approver, on a leave request.
-  const canUploadAttachment = req.kind === "LEAVE" && (canApprove || (canEdit && req.status === "PENDING"));
+  // Only leave types with attachments enabled (e.g. Sick leave) offer upload.
+  const typeAllowsAttachment = !!leaveTypes.find((t) => t.id === req.leaveTypeId)?.attachmentEnabled;
+  const canUploadAttachment =
+    req.kind === "LEAVE" && typeAllowsAttachment && (canApprove || (canEdit && req.status === "PENDING"));
   const isDecided = req.status === "HR_APPROVED" || req.status === "APPROVED" || req.status === "REJECTED";
   const newType = req.pendingEdit?.leaveTypeId
     ? leaveTypes.find((t) => t.id === req.pendingEdit?.leaveTypeId)?.name ?? "—"
