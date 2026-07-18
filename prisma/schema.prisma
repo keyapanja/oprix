@@ -823,6 +823,7 @@ model LeaveRequest {
   endDate         DateTime       @db.Date
   days            Float
   isHalfDay       Boolean        @default(false)
+  halfDayPeriod   String? // "FIRST" | "SECOND" — which half, when isHalfDay
   reason          String?
   status          ApprovalStatus @default(PENDING)
   managerApprovedById String?

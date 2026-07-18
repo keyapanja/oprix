@@ -14,7 +14,7 @@ const iso = (d: Date) => d.toISOString().slice(0, 10);
 const asPending = (j: unknown): LeaveDetail["pendingEdit"] => (j as LeaveDetail["pendingEdit"]) ?? null;
 
 const REQUEST_SELECT = {
-  id: true, status: true, kind: true, days: true, isHalfDay: true,
+  id: true, status: true, kind: true, days: true, isHalfDay: true, halfDayPeriod: true,
   startDate: true, endDate: true, reason: true, createdAt: true,
   leaveTypeId: true, pendingEdit: true, hrApprovedById: true, decidedAt: true,
   leaveType: { select: { name: true } },
@@ -65,6 +65,7 @@ export default async function LeaveRequestsPage() {
     endDate: iso(r.endDate),
     days: r.days,
     isHalfDay: r.isHalfDay,
+    halfDayPeriod: r.halfDayPeriod,
     reason: r.reason,
     status: r.status,
     appliedAt: r.createdAt.toISOString(),

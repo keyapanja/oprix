@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { DatePicker } from "@/components/ui/date-picker";
 import { toast } from "@/components/ui/toast";
+import { HALF_DAY_OPTIONS } from "@/lib/leave/half-day";
 
 type Opt = { id: string; name: string };
 
@@ -27,9 +28,11 @@ export function RequestForm({
   );
   // Remount fields on success so Comboboxes/DatePickers reset too.
   const [resetKey, setResetKey] = useState(0);
+  const [half, setHalf] = useState(false);
   useEffect(() => {
     if (state.ok) {
       setResetKey((k) => k + 1);
+      setHalf(false);
       toast.success("Leave request added");
       onSuccess?.();
     }
@@ -77,7 +80,8 @@ export function RequestForm({
           <Field label="Duration">
             <Combobox
               name="isHalfDay"
-              defaultValue="false"
+              value={half ? "true" : "false"}
+              onChange={(v) => setHalf(v === "true")}
               disabled={!ready}
               options={[
                 { value: "false", label: "Full day" },
@@ -85,6 +89,16 @@ export function RequestForm({
               ]}
             />
           </Field>
+          {half && (
+            <Field label="Which half">
+              <Combobox
+                name="halfDayPeriod"
+                defaultValue="FIRST"
+                disabled={!ready}
+                options={HALF_DAY_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+              />
+            </Field>
+          )}
         </div>
         <Field label="Reason" htmlFor="lr-reason">
           <Textarea id="lr-reason" name="reason" placeholder="Optional note…" disabled={!ready} />

@@ -12,6 +12,7 @@ import { Icon } from "@/components/ui/icons";
 import { toast } from "@/components/ui/toast";
 import { FilePreviewGrid, makePicked, type PickedFile } from "@/components/attachments/file-preview-grid";
 import { countWorkingDays, type WorkWeek } from "@/lib/leave/work-week";
+import { HALF_DAY_OPTIONS, type HalfDayPeriod } from "@/lib/leave/half-day";
 import { cn } from "@/lib/cn";
 
 type Balance = {
@@ -50,6 +51,7 @@ export function ApplyForm({
   const [start, setStart] = useState(initialStart);
   const [end, setEnd] = useState(initialEnd);
   const [half, setHalf] = useState(false);
+  const [halfPeriod, setHalfPeriod] = useState<HalfDayPeriod>("FIRST");
   const [files, setFiles] = useState<PickedFile[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState(false);
@@ -101,6 +103,7 @@ export function ApplyForm({
     setStart("");
     setEnd("");
     setHalf(false);
+    setHalfPeriod("FIRST");
     setKind("LEAVE");
     setFiles([]);
   }
@@ -209,16 +212,35 @@ export function ApplyForm({
         </div>
 
         {singleDay && (
-          <label className="flex items-center gap-2 text-sm text-content">
-            <input
-              type="checkbox"
-              name="isHalfDay"
-              checked={half}
-              onChange={(e) => setHalf(e.target.checked)}
-              className="size-4 rounded border-line-strong text-brand-600 focus:ring-brand-500"
-            />
-            Half day
-          </label>
+          <div className="space-y-2">
+            <label className="flex items-center gap-2 text-sm text-content">
+              <input
+                type="checkbox"
+                name="isHalfDay"
+                checked={half}
+                onChange={(e) => setHalf(e.target.checked)}
+                className="size-4 rounded border-line-strong text-brand-600 focus:ring-brand-500"
+              />
+              Half day
+            </label>
+            {half && (
+              <div className="flex items-center gap-4 pl-6 text-sm">
+                {HALF_DAY_OPTIONS.map((o) => (
+                  <label key={o.value} className="flex items-center gap-1.5 text-content">
+                    <input
+                      type="radio"
+                      name="halfDayPeriod"
+                      value={o.value}
+                      checked={halfPeriod === o.value}
+                      onChange={() => setHalfPeriod(o.value)}
+                      className="size-4 border-line-strong text-brand-600 focus:ring-brand-500"
+                    />
+                    {o.label}
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
         )}
 
         {requestedDays > 0 && (

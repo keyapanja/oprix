@@ -9,6 +9,7 @@ import { getSession } from "@/lib/auth/session";
 import { hasPermission } from "@/lib/auth/permissions";
 import { remainingForType } from "@/lib/leave/balance";
 import { countLeaveDays } from "@/lib/leave/count";
+import { parseHalfDayPeriod } from "@/lib/leave/half-day";
 import { parseWorkWeek } from "@/lib/leave/work-week";
 import { deleteUpload } from "@/lib/uploads";
 import { dateAtUTC } from "@/lib/dates";
@@ -130,6 +131,7 @@ const ApplySchema = z.object({
   startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Start date is required"),
   endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "End date is required"),
   isHalfDay: z.string().optional(),
+  halfDayPeriod: z.string().optional(),
   reason: z.string().trim().max(300).optional().or(z.literal("")),
 });
 
@@ -169,6 +171,7 @@ export async function applyLeave(
 
   const singleDay = d.startDate === d.endDate;
   const isHalfDay = singleDay && d.isHalfDay === "on";
+  const halfDayPeriod = isHalfDay ? parseHalfDayPeriod(d.halfDayPeriod) : null;
   // Only working days count — weekly offs, nth-Saturday rules, and holidays in
   // the span are excluded automatically.
   const days = await countLeaveDays(session.companyId, start, end, isHalfDay);
@@ -197,6 +200,7 @@ export async function applyLeave(
       endDate: end,
       days,
       isHalfDay,
+      halfDayPeriod,
       reason: d.reason || null,
       status: "PENDING",
     },
@@ -243,6 +247,7 @@ const RequestSchema = z.object({
   endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "End date is required"),
   reason: z.string().trim().max(300).optional().or(z.literal("")),
   isHalfDay: z.enum(["true", "false"]).optional(),
+  halfDayPeriod: z.string().optional(),
 });
 
 export async function createLeaveRequest(
@@ -296,6 +301,7 @@ export async function createLeaveRequest(
       endDate: end,
       days,
       isHalfDay: half,
+      halfDayPeriod: half ? parseHalfDayPeriod(d.halfDayPeriod) : null,
       reason: d.reason || null,
       status: "PENDING",
     },
@@ -396,6 +402,7 @@ export type PendingEdit = {
   endDate: string;
   leaveTypeId: string | null;
   isHalfDay: boolean;
+  halfDayPeriod: string | null;
   days: number;
   reason: string | null;
 };
@@ -405,6 +412,7 @@ const EditSchema = z.object({
   endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "End date is required"),
   leaveTypeId: z.string().optional().or(z.literal("")),
   isHalfDay: z.string().optional(),
+  halfDayPeriod: z.string().optional(),
   reason: z.string().trim().max(300).optional().or(z.literal("")),
 });
 
@@ -448,6 +456,7 @@ export async function requestLeaveEdit(_prev: LeaveState, formData: FormData): P
     endDate: d.endDate,
     leaveTypeId: req.kind === "LEAVE" ? d.leaveTypeId || null : null,
     isHalfDay,
+    halfDayPeriod: isHalfDay ? parseHalfDayPeriod(d.halfDayPeriod) : null,
     days,
     reason: d.reason || null,
   };
@@ -494,6 +503,7 @@ export async function approveLeaveEdit(id: string): Promise<LeaveState> {
       endDate: dateAtUTC(p.endDate),
       leaveTypeId: p.leaveTypeId,
       isHalfDay: p.isHalfDay,
+      halfDayPeriod: p.isHalfDay ? p.halfDayPeriod ?? "FIRST" : null,
       days: p.days,
       reason: p.reason,
       pendingEdit: Prisma.DbNull,
@@ -595,6 +605,7 @@ export async function adminEditLeave(_prev: LeaveState, formData: FormData): Pro
       endDate: end,
       leaveTypeId: req.kind === "LEAVE" ? d.leaveTypeId || null : null,
       isHalfDay,
+      halfDayPeriod: isHalfDay ? parseHalfDayPeriod(d.halfDayPeriod) : null,
       days,
       reason: d.reason || null,
       status: d.status,

@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useState, useTransition, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import type { ApprovalStatus } from "@prisma/client";
+import { HALF_DAY_OPTIONS, halfDayLabel, type HalfDayPeriod } from "@/lib/leave/half-day";
 import {
   requestLeaveEdit,
   adminEditLeave,
@@ -33,6 +34,7 @@ export type LeaveDetail = {
   endDate: string;
   days: number;
   isHalfDay: boolean;
+  halfDayPeriod: string | null;
   reason: string | null;
   status: ApprovalStatus;
   appliedAt: string; // ISO datetime
@@ -44,6 +46,7 @@ export type LeaveDetail = {
     endDate: string;
     leaveTypeId: string | null;
     isHalfDay: boolean;
+    halfDayPeriod: string | null;
     days: number;
     reason: string | null;
   } | null;
@@ -83,6 +86,7 @@ export function LeaveDetailModal({
   const [eEnd, setEEnd] = useState(req.endDate);
   const [eType, setEType] = useState(req.leaveTypeId ?? "");
   const [eHalf, setEHalf] = useState(req.isHalfDay);
+  const [ePeriod, setEPeriod] = useState<HalfDayPeriod>(req.halfDayPeriod === "SECOND" ? "SECOND" : "FIRST");
   const [eStatus, setEStatus] = useState(
     req.status === "PENDING" ? "PENDING" : req.status === "REJECTED" ? "REJECTED" : "HR_APPROVED",
   );
@@ -181,7 +185,7 @@ export function LeaveDetailModal({
           <dt className="text-faint">Days</dt>
           <dd className="col-span-2 text-content">
             {req.days}
-            {req.isHalfDay && " (half day)"}
+            {req.isHalfDay && ` (half day${halfDayLabel(req.halfDayPeriod) ? ` · ${halfDayLabel(req.halfDayPeriod)}` : ""})`}
           </dd>
           <dt className="text-faint">Status</dt>
           <dd className="col-span-2">
@@ -227,7 +231,7 @@ export function LeaveDetailModal({
               <dt className="text-amber-700/80 dark:text-amber-300/80">New days</dt>
               <dd className="col-span-2 text-content">
                 {req.pendingEdit.days}
-                {req.pendingEdit.isHalfDay && " (half day)"}
+                {req.pendingEdit.isHalfDay && ` (half day${halfDayLabel(req.pendingEdit.halfDayPeriod) ? ` · ${halfDayLabel(req.pendingEdit.halfDayPeriod)}` : ""})`}
               </dd>
               {newType && req.pendingEdit.leaveTypeId !== req.leaveTypeId && (
                 <>
@@ -317,16 +321,35 @@ export function LeaveDetailModal({
               </Field>
             </div>
             {eSingle && (
-              <label className="flex items-center gap-2 text-sm text-content">
-                <input
-                  type="checkbox"
-                  name="isHalfDay"
-                  checked={eHalf}
-                  onChange={(e) => setEHalf(e.target.checked)}
-                  className="size-4 rounded border-line-strong text-brand-600 focus:ring-brand-500"
-                />
-                Half day
-              </label>
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 text-sm text-content">
+                  <input
+                    type="checkbox"
+                    name="isHalfDay"
+                    checked={eHalf}
+                    onChange={(e) => setEHalf(e.target.checked)}
+                    className="size-4 rounded border-line-strong text-brand-600 focus:ring-brand-500"
+                  />
+                  Half day
+                </label>
+                {eHalf && (
+                  <div className="flex items-center gap-4 pl-6 text-sm">
+                    {HALF_DAY_OPTIONS.map((o) => (
+                      <label key={o.value} className="flex items-center gap-1.5 text-content">
+                        <input
+                          type="radio"
+                          name="halfDayPeriod"
+                          value={o.value}
+                          checked={ePeriod === o.value}
+                          onChange={() => setEPeriod(o.value)}
+                          className="size-4 border-line-strong text-brand-600 focus:ring-brand-500"
+                        />
+                        {o.label}
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
             <Field label="Reason">
               <Textarea name="reason" defaultValue={req.reason ?? ""} placeholder="Optional note…" />
@@ -391,16 +414,35 @@ export function LeaveDetailModal({
               </Field>
             </div>
             {eSingle && (
-              <label className="flex items-center gap-2 text-sm text-content">
-                <input
-                  type="checkbox"
-                  name="isHalfDay"
-                  checked={eHalf}
-                  onChange={(e) => setEHalf(e.target.checked)}
-                  className="size-4 rounded border-line-strong text-brand-600 focus:ring-brand-500"
-                />
-                Half day
-              </label>
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 text-sm text-content">
+                  <input
+                    type="checkbox"
+                    name="isHalfDay"
+                    checked={eHalf}
+                    onChange={(e) => setEHalf(e.target.checked)}
+                    className="size-4 rounded border-line-strong text-brand-600 focus:ring-brand-500"
+                  />
+                  Half day
+                </label>
+                {eHalf && (
+                  <div className="flex items-center gap-4 pl-6 text-sm">
+                    {HALF_DAY_OPTIONS.map((o) => (
+                      <label key={o.value} className="flex items-center gap-1.5 text-content">
+                        <input
+                          type="radio"
+                          name="halfDayPeriod"
+                          value={o.value}
+                          checked={ePeriod === o.value}
+                          onChange={() => setEPeriod(o.value)}
+                          className="size-4 border-line-strong text-brand-600 focus:ring-brand-500"
+                        />
+                        {o.label}
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
             <Field label="Reason">
               <Textarea name="reason" defaultValue={req.reason ?? ""} placeholder="Optional note…" />
