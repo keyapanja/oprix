@@ -289,7 +289,7 @@ export function FieldConfigPanel({
           )}
           <div className="space-y-1.5 text-sm text-content">
             <span>Width</span>
-            <div className="grid grid-cols-4 gap-1.5">
+            <div className="grid grid-cols-3 gap-1.5">
               {WIDTH_OPTIONS.map((w) => {
                 const active = (field.width ?? "full") === w.value;
                 return (

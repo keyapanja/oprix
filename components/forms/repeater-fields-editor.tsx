@@ -93,7 +93,7 @@ export function RepeaterFieldsEditor({
               </div>
             )}
 
-            <div className="mt-2 flex items-center gap-3 text-xs text-content">
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-content">
               {sf.type !== "calculation" && (
                 <label className="flex items-center gap-1.5">
                   <input
@@ -105,7 +105,8 @@ export function RepeaterFieldsEditor({
                   Required
                 </label>
               )}
-              <div className="ml-auto flex gap-1">
+              <div className="flex flex-wrap items-center gap-1">
+                <span className="mr-0.5 text-faint">Width</span>
                 {WIDTH_OPTIONS.map((w) => (
                   <button
                     key={w.value}

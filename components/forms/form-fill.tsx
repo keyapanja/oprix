@@ -43,9 +43,10 @@ export function FormFill({
       let empty: boolean;
       if (f.type === "daterange") empty = !(Array.isArray(v) && v[0] && v[1]);
       else if (f.type === "yesno") empty = v === undefined;
+      else if (f.type === "check") empty = v !== true && v !== "true";
       else if (Array.isArray(v)) empty = v.length === 0;
       else empty = v == null || v === "";
-      if (empty) errs[f.id] = "This field is required.";
+      if (empty) errs[f.id] = f.type === "check" ? "Please tick this box." : "This field is required.";
     }
     if (Object.keys(errs).length) {
       setErrors(errs);

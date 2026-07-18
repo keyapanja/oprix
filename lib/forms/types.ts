@@ -19,6 +19,7 @@ export type FieldType =
   | "multiselect"
   | "radio"
   | "checkbox"
+  | "check"
   | "yesno"
   | "reference"
   | "repeater"
@@ -37,9 +38,10 @@ export type CondOp = "eq" | "neq" | "gt" | "lt" | "contains" | "empty" | "notEmp
 export type Condition = { fieldId: string; op: CondOp; value?: string };
 
 /** How much of a row a field occupies. Forms lay out on a 12-column grid, so
- *  these map to quarter / third / half / full. Legacy values ("full"/"half")
- *  keep working unchanged. */
-export type FieldWidth = "quarter" | "third" | "half" | "full";
+ *  these map to quarter / third / half / two-thirds / three-quarters / full,
+ *  which compose full rows (¼+¾, ⅓+⅔, ⅓+⅓+⅓, ¼+¼+½, …). Legacy values
+ *  ("full"/"half") keep working unchanged. */
+export type FieldWidth = "quarter" | "third" | "half" | "twoThirds" | "threeQuarters" | "full";
 
 /** Tailwind col-span in the 12-col form grid. Literal strings so Tailwind's JIT
  *  scanner can see them (never build these class names dynamically). */
@@ -47,6 +49,8 @@ export const WIDTH_SPAN_CLASS: Record<FieldWidth, string> = {
   quarter: "sm:col-span-3",
   third: "sm:col-span-4",
   half: "sm:col-span-6",
+  twoThirds: "sm:col-span-8",
+  threeQuarters: "sm:col-span-9",
   full: "sm:col-span-12",
 };
 
@@ -55,6 +59,8 @@ export const WIDTH_OPTIONS: { value: FieldWidth; label: string; pct: string; tit
   { value: "quarter", label: "¼", pct: "25%", title: "Quarter width (25%)" },
   { value: "third", label: "⅓", pct: "33%", title: "Third width (33%)" },
   { value: "half", label: "½", pct: "50%", title: "Half width (50%)" },
+  { value: "twoThirds", label: "⅔", pct: "66%", title: "Two-thirds width (66%)" },
+  { value: "threeQuarters", label: "¾", pct: "75%", title: "Three-quarters width (75%)" },
   { value: "full", label: "Full", pct: "100%", title: "Full width (100%)" },
 ];
 
@@ -115,6 +121,7 @@ export const FIELD_CATALOG: FieldMeta[] = [
   { type: "multiselect", label: "Multi-select", icon: "checklist", hasOptions: true, input: true },
   { type: "radio", label: "Single choice", icon: "radio", hasOptions: true, input: true },
   { type: "checkbox", label: "Checkboxes", icon: "squareCheck", hasOptions: true, input: true },
+  { type: "check", label: "Single checkbox", icon: "check", hasOptions: false, input: true },
   { type: "yesno", label: "Yes / No", icon: "toggle", hasOptions: false, input: true },
   { type: "reference", label: "Dynamic list", icon: "userGroup", hasOptions: false, input: true },
   { type: "repeater", label: "Repeater", icon: "copy", hasOptions: false, input: true },
@@ -132,7 +139,7 @@ export const hasOptions = (t: FieldType): boolean => fieldMeta(t).hasOptions;
 /** Field types a repeater row may contain (no nesting, no display blocks). */
 export const REPEATER_SUBTYPES: FieldType[] = [
   "text", "textarea", "number", "email", "phone", "date", "daterange",
-  "dropdown", "multiselect", "radio", "checkbox", "yesno", "reference", "calculation",
+  "dropdown", "multiselect", "radio", "checkbox", "check", "yesno", "reference", "calculation",
 ];
 
 // ---- Factories (builder, client-side) -------------------------------------
@@ -192,7 +199,7 @@ const OptionZ = z.object({ id: z.string().min(1), label: z.string().trim().max(2
 const SourceZ = z.enum(["clients", "projects", "employees"]);
 const TypeZ = z.enum([
   "text", "textarea", "number", "email", "phone", "date", "daterange",
-  "dropdown", "multiselect", "radio", "checkbox", "yesno", "reference",
+  "dropdown", "multiselect", "radio", "checkbox", "check", "yesno", "reference",
   "repeater", "list", "calculation", "heading", "paragraph",
 ]);
 
@@ -221,7 +228,7 @@ const FieldDefZ: z.ZodType<FieldDef> = z.lazy(() =>
     max: z.number().nullable().optional(),
     maxLength: z.number().int().positive().nullable().optional(),
     rangeDays: z.number().int().positive().max(3650).nullable().optional(),
-    width: z.enum(["quarter", "third", "half", "full"]).optional(),
+    width: z.enum(["quarter", "third", "half", "twoThirds", "threeQuarters", "full"]).optional(),
   }),
 );
 
@@ -454,6 +461,13 @@ export function validateAnswers(
       continue;
     }
 
+    if (f.type === "check") {
+      const b = v === true || v === "true" || v === "yes" || v === "on";
+      if (f.required && !b) errors[f.id] = "Please tick this box.";
+      clean[f.id] = b;
+      continue;
+    }
+
     const s = v == null ? "" : String(v).trim();
     if (!s) {
       if (f.required) errors[f.id] = "This field is required.";
@@ -496,6 +510,7 @@ export function validateAnswers(
 export function answerToText(field: FieldDef, value: unknown): string {
   if (value == null) return "";
   if (field.type === "yesno") return value === true || value === "true" ? "Yes" : "No";
+  if (field.type === "check") return value === true || value === "true" ? "Yes" : "No";
   if (field.type === "daterange") {
     const a = Array.isArray(value) ? value : [];
     return a[0] && a[1] ? `${a[0]} → ${a[1]}` : String(a[0] || a[1] || "");
