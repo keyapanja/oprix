@@ -10,6 +10,7 @@ import { canManageForms, audienceAllows } from "@/lib/forms/access";
 import { FormSchemaZ, validateAnswers, parseSchema } from "@/lib/forms/types";
 import { ScheduleZ } from "@/lib/forms/schedule";
 import { EDITABLE_ROLES } from "@/lib/auth/can";
+import { logActivity, actorLabel } from "@/lib/activity";
 
 export type FormActionState = {
   ok?: boolean;
@@ -220,9 +221,48 @@ export async function updateSubmission(
   const { ok, errors, clean } = validateAnswers(schema.fields, data);
   if (!ok) return { error: "Please fix the highlighted fields.", fieldErrors: errors };
 
-  await prisma.formSubmission.update({ where: { id }, data: { data: asJson(clean) } });
+  await prisma.formSubmission.update({
+    where: { id },
+    data: { data: asJson(clean), editedAt: new Date(), editedById: session.userId },
+  });
+  // Keep an append-only audit trail of who edited the entry and when.
+  await logActivity({
+    companyId: session.companyId,
+    actorId: session.userId,
+    actorLabel: await actorLabel(session.userId),
+    entityType: "FORM_SUBMISSION",
+    entityId: id,
+    message: "Updated the entry",
+  });
   revalidatePath(`/forms/${sub.formId}/entries`);
   return { ok: true };
+}
+
+export type SubmissionEvent = { actor: string; at: string; action: string };
+
+/** The edit history for one entry — who changed it and when. Visible to a form
+ *  manager or the person who submitted it. */
+export async function getSubmissionHistory(id: string): Promise<SubmissionEvent[]> {
+  const session = await getSession();
+  if (!session) return [];
+  const sub = await prisma.formSubmission.findFirst({
+    where: { id, companyId: session.companyId, deletedAt: null },
+    select: { id: true, submittedByUserId: true },
+  });
+  if (!sub) return [];
+  const manage = await canManageForms(session);
+  if (!manage && sub.submittedByUserId !== session.userId) return [];
+
+  const logs = await prisma.activityLog.findMany({
+    where: { companyId: session.companyId, entityType: "FORM_SUBMISSION", entityId: id },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+  });
+  return logs.map((l) => ({
+    actor: (l.meta as { actor?: string } | null)?.actor ?? "Someone",
+    at: l.createdAt.toISOString(),
+    action: l.action,
+  }));
 }
 
 /** Delete an entry — a form manager, or the person who submitted it. */

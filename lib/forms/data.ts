@@ -82,6 +82,8 @@ export type EntryRow = {
   submitterName: string;
   mine: boolean;
   createdAt: string;
+  editedAt: string | null;
+  editedByName: string | null;
 };
 
 /** Submissions for a form the user can access. Managers + viewAll roles see all;
@@ -113,12 +115,18 @@ export async function listSubmissions(
       data: true,
       submittedByUserId: true,
       submittedByClientId: true,
+      editedById: true,
+      editedAt: true,
       createdAt: true,
     },
   });
 
-  // Resolve submitter display names in two batched lookups.
-  const userIds = [...new Set(rows.map((r) => r.submittedByUserId).filter(Boolean) as string[])];
+  // Resolve submitter + editor display names in two batched lookups.
+  const userIds = [
+    ...new Set(
+      [...rows.map((r) => r.submittedByUserId), ...rows.map((r) => r.editedById)].filter(Boolean) as string[],
+    ),
+  ];
   const clientIds = [...new Set(rows.map((r) => r.submittedByClientId).filter(Boolean) as string[])];
   const [users, clients] = await Promise.all([
     userIds.length
@@ -147,6 +155,8 @@ export async function listSubmissions(
         "—",
       mine: r.submittedByUserId === session.userId,
       createdAt: r.createdAt.toISOString(),
+      editedAt: r.editedAt ? r.editedAt.toISOString() : null,
+      editedByName: r.editedById ? userName.get(r.editedById) ?? "—" : null,
     })),
   };
 }

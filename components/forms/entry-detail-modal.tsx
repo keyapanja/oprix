@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
-import { updateSubmission } from "@/lib/forms/actions";
+import { updateSubmission, getSubmissionHistory, type SubmissionEvent } from "@/lib/forms/actions";
 import { FieldInput, type FieldValue } from "@/components/forms/field-input";
 import {
   answerToText,
@@ -17,7 +17,15 @@ import {
   type Lookups,
 } from "@/lib/forms/types";
 
-type Entry = { id: string; data: Record<string, unknown>; submitterName: string; createdAt: string; mine: boolean };
+type Entry = {
+  id: string;
+  data: Record<string, unknown>;
+  submitterName: string;
+  createdAt: string;
+  mine: boolean;
+  editedAt: string | null;
+  editedByName: string | null;
+};
 
 /** Read-only display of one stored answer (repeater rows expanded). */
 function ViewValue({ field, value }: { field: FieldDef; value: unknown }) {
@@ -81,8 +89,20 @@ export function EntryDetailModal({
   const [values, setValues] = useState<Record<string, FieldValue>>(() => entry.data as Record<string, FieldValue>);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [pending, start] = useTransition();
+  const [history, setHistory] = useState<SubmissionEvent[] | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
 
   const inputFields = fields.filter((f) => isInputField(f.type));
+
+  // Load the edit log lazily the first time the history section is opened.
+  useEffect(() => {
+    if (!showHistory || history !== null) return;
+    let alive = true;
+    getSubmissionHistory(entry.id).then((h) => alive && setHistory(h));
+    return () => {
+      alive = false;
+    };
+  }, [showHistory, history, entry.id]);
 
   function setValue(id: string, v: FieldValue) {
     setValues((p) => ({ ...p, [id]: v }));
@@ -130,13 +150,51 @@ export function EntryDetailModal({
   return (
     <Modal onClose={onClose} title={editing ? "Edit entry" : "Entry"}>
       <div className="space-y-4">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-line pb-3 text-xs text-muted">
-          {showSubmitter && (
-            <span>
-              By <span className="font-medium text-content">{entry.submitterName}</span>
-            </span>
+        <div className="space-y-2 border-b border-line pb-3">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
+            {showSubmitter && (
+              <span>
+                By <span className="font-medium text-content">{entry.submitterName}</span>
+              </span>
+            )}
+            <span>{new Date(entry.createdAt).toLocaleString()}</span>
+            {entry.editedAt && (
+              <>
+                <span className="inline-flex items-center gap-1">
+                  <span className="rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 ring-1 ring-inset ring-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:ring-amber-500/25">
+                    Edited
+                  </span>
+                  by <span className="font-medium text-content">{entry.editedByName ?? "someone"}</span> ·{" "}
+                  {new Date(entry.editedAt).toLocaleString()}
+                </span>
+                <button
+                  onClick={() => setShowHistory((v) => !v)}
+                  className="ml-auto font-medium text-accent-strong hover:underline"
+                >
+                  {showHistory ? "Hide history" : "View history"}
+                </button>
+              </>
+            )}
+          </div>
+          {showHistory && entry.editedAt && (
+            <div className="rounded-lg bg-canvas/50 p-2.5 ring-1 ring-inset ring-line">
+              {history === null ? (
+                <p className="text-xs text-muted">Loading…</p>
+              ) : history.length === 0 ? (
+                <p className="text-xs text-muted">No edit history recorded.</p>
+              ) : (
+                <ul className="space-y-1">
+                  {history.map((h, i) => (
+                    <li key={i} className="flex flex-wrap items-center gap-x-2 text-xs">
+                      <span className="font-medium text-content">{h.actor}</span>
+                      <span className="text-muted">{h.action.toLowerCase()}</span>
+                      <span className="ml-auto text-faint">{new Date(h.at).toLocaleString()}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           )}
-          <span>{new Date(entry.createdAt).toLocaleString()}</span>
         </div>
 
         {editing ? (

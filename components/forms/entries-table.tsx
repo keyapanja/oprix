@@ -20,6 +20,8 @@ type Row = {
   submitterName: string;
   mine: boolean;
   createdAt: string;
+  editedAt: string | null;
+  editedByName: string | null;
 };
 
 type Col = {
@@ -90,9 +92,7 @@ export function EntriesTable({
 
   const cols: Col[] = useMemo(() => {
     const list: Col[] = [];
-    if (showSubmitter)
-      list.push({ key: "__submitter", label: "Submitted by", display: (r) => r.submitterName, sortVal: (r) => r.submitterName.toLowerCase() });
-    list.push({ key: "__date", label: "Date", display: (r) => new Date(r.createdAt).toLocaleString(), sortVal: (r) => r.createdAt });
+    // Answer columns lead; the "who / when" metadata trails at the end.
     for (const f of inputCols) {
       const numeric = f.type === "number" || f.type === "calculation";
       list.push({
@@ -102,6 +102,9 @@ export function EntriesTable({
         sortVal: (r) => (numeric ? Number(answerToText(f, r.data[f.id])) || 0 : answerToText(f, r.data[f.id]).toLowerCase()),
       });
     }
+    if (showSubmitter)
+      list.push({ key: "__submitter", label: "Submitted by", display: (r) => r.submitterName, sortVal: (r) => r.submitterName.toLowerCase() });
+    list.push({ key: "__date", label: "Date", display: (r) => new Date(r.createdAt).toLocaleString(), sortVal: (r) => r.createdAt });
     return list;
   }, [inputCols, showSubmitter]);
 
@@ -227,7 +230,21 @@ export function EntriesTable({
                     : "max-w-xs truncate text-content",
               )}
             >
-              {c.display(r) || "—"}
+              {c.key === "__date" ? (
+                <span className="inline-flex items-center gap-1.5">
+                  {c.display(r) || "—"}
+                  {r.editedAt && (
+                    <span
+                      title={`Edited by ${r.editedByName ?? "someone"} on ${new Date(r.editedAt).toLocaleString()}`}
+                      className="rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 ring-1 ring-inset ring-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:ring-amber-500/25"
+                    >
+                      Edited
+                    </span>
+                  )}
+                </span>
+              ) : (
+                c.display(r) || "—"
+              )}
             </td>
           ))}
           <td className="px-4 py-2.5 text-right">

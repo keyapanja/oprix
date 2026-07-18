@@ -1149,6 +1149,8 @@ model FormSubmission {
   data                Json // { [fieldId]: value }
   submittedByUserId   String? // staff submitter (userId)
   submittedByClientId String? // portal submitter (clientId)
+  editedAt            DateTime? // last time the answers were edited after submission
+  editedById          String? // userId who last edited (full history in ActivityLog)
   deletedAt           DateTime?
   deletedById         String?
   createdAt           DateTime  @default(now())
