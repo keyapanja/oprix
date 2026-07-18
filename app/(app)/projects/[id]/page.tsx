@@ -53,6 +53,10 @@ export default async function ProjectDetailPage({
                       orderBy: { orderIndex: "asc" },
                       select: { id: true, text: true },
                     },
+                    projectChecklistConfigs: {
+                      where: { projectId: id },
+                      select: { mode: true },
+                    },
                   },
                 },
               },
@@ -172,8 +176,9 @@ export default async function ProjectDetailPage({
             subcategories: ps.service.children.map((sub) => ({
               id: sub.id,
               name: sub.name,
-              defaultCount: sub.checklistTemplate.length,
+              defaultItems: sub.checklistTemplate.map((c) => c.text),
               override: sub.projectChecklistOverrides,
+              mode: sub.projectChecklistConfigs[0]?.mode ?? null,
             })),
           }))}
           available={available}

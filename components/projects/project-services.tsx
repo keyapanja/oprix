@@ -13,7 +13,13 @@ import { ProjectSubcategoryChecklist } from "@/components/projects/project-subca
 import { cn } from "@/lib/cn";
 
 type Opt = { id: string; name: string };
-type Sub = { id: string; name: string; defaultCount: number; override: { id: string; text: string }[] };
+type Sub = {
+  id: string;
+  name: string;
+  defaultItems: string[];
+  override: { id: string; text: string }[];
+  mode: "EXTEND" | "REPLACE" | null;
+};
 type PS = {
   id: string;
   categoryName: string;
@@ -156,7 +162,7 @@ export function ProjectServices({
  *  default; the header shows the count + how many task types are overridden. */
 function CategoryChecklists({ projectId, subcategories }: { projectId: string; subcategories: Sub[] }) {
   const [open, setOpen] = useState(false);
-  const customCount = subcategories.filter((s) => s.override.length > 0).length;
+  const customCount = subcategories.filter((s) => s.mode !== null).length;
   return (
     <div className="mt-3 border-t border-line pl-7 pt-3">
       <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-2 text-left">
@@ -178,7 +184,8 @@ function CategoryChecklists({ projectId, subcategories }: { projectId: string; s
               serviceId={sub.id}
               name={sub.name}
               initial={sub.override}
-              defaultCount={sub.defaultCount}
+              defaultItems={sub.defaultItems}
+              mode={sub.mode}
             />
           ))}
         </div>

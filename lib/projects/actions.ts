@@ -11,6 +11,7 @@ import { dateAtUTC } from "@/lib/dates";
 import { logActivity, actorLabel, logTaskActivity } from "@/lib/activity";
 import { finalizeTaskTimer, finalizeAllTaskTimers } from "@/lib/timer/finalize";
 import { canEditTask, toggleChecklistItemFor } from "@/lib/projects/task-access";
+import { resolveTaskChecklist } from "@/lib/projects/checklist";
 import { TASK_STATUS_LABEL } from "@/lib/status";
 import { deleteUpload } from "@/lib/uploads";
 import { notifyTaskAssigned, notifyClientTask } from "@/lib/tasks/assign-notify";
@@ -271,6 +272,65 @@ export async function removeProjectSubcategoryChecklistItem(itemId: string): Pro
   return { ok: true };
 }
 
+/** Set how a (project, task type) checklist relates to the org default:
+ *  DEFAULT (use the template as-is — clears any custom items),
+ *  EXTEND (default items + the custom items) or REPLACE (custom items only). */
+export async function setProjectSubcategoryChecklistMode(
+  projectId: string,
+  serviceId: string,
+  mode: "DEFAULT" | "EXTEND" | "REPLACE",
+): Promise<ProjectState> {
+  const session = await requireCapability("project:manage");
+  if (!(await ownsProject(session.companyId, projectId))) return { error: "Project not found" };
+  if (mode === "DEFAULT") {
+    await prisma.$transaction([
+      prisma.projectSubcategoryChecklistItem.deleteMany({ where: { projectId, serviceId } }),
+      prisma.projectSubcategoryChecklist.deleteMany({ where: { projectId, serviceId } }),
+    ]);
+  } else {
+    const svc = await prisma.service.findFirst({
+      where: { id: serviceId, companyId: session.companyId, parentId: { not: null } },
+      select: { id: true },
+    });
+    if (!svc) return { error: "Invalid task type" };
+    await prisma.projectSubcategoryChecklist.upsert({
+      where: { projectId_serviceId: { projectId, serviceId } },
+      create: { projectId, serviceId, mode },
+      update: { mode },
+    });
+  }
+  revalidatePath(`/projects/${projectId}`);
+  return { ok: true };
+}
+
+/** Append the sub-category's org default items as editable custom items (for a
+ *  REPLACE list you want to start from the default). Returns the full list. */
+export async function copyDefaultChecklistItems(
+  projectId: string,
+  serviceId: string,
+): Promise<{ ok?: boolean; error?: string; items?: { id: string; text: string }[] }> {
+  const session = await requireCapability("project:manage");
+  if (!(await ownsProject(session.companyId, projectId))) return { error: "Project not found" };
+  const defaults = await prisma.serviceChecklistItem.findMany({
+    where: { serviceId },
+    orderBy: { orderIndex: "asc" },
+    select: { text: true },
+  });
+  if (defaults.length) {
+    const count = await prisma.projectSubcategoryChecklistItem.count({ where: { projectId, serviceId } });
+    await prisma.projectSubcategoryChecklistItem.createMany({
+      data: defaults.map((d, i) => ({ projectId, serviceId, text: d.text, orderIndex: count + i })),
+    });
+  }
+  const items = await prisma.projectSubcategoryChecklistItem.findMany({
+    where: { projectId, serviceId },
+    orderBy: { orderIndex: "asc" },
+    select: { id: true, text: true },
+  });
+  revalidatePath(`/projects/${projectId}`);
+  return { ok: true, items };
+}
+
 // ---- Tasks ----------------------------------------------------------------
 export type KanbanTask = {
   id: string;
@@ -387,22 +447,11 @@ export async function createTask(input: {
         });
       }
     } else if (input.serviceId) {
-      // A per-(project, task type) override wins over the sub-category's global template.
-      const override = await prisma.projectSubcategoryChecklistItem.findMany({
-        where: { projectId: input.projectId, serviceId: input.serviceId },
-        orderBy: { orderIndex: "asc" },
-        select: { text: true },
-      });
-      const template = override.length
-        ? override
-        : await prisma.serviceChecklistItem.findMany({
-            where: { serviceId: input.serviceId },
-            orderBy: { orderIndex: "asc" },
-            select: { text: true },
-          });
-      if (template.length) {
+      // Resolve the (project, task type) checklist — default / extend / replace.
+      const texts = await resolveTaskChecklist(input.projectId, input.serviceId);
+      if (texts.length) {
         await prisma.checklistItem.createMany({
-          data: template.map((c, i) => ({ taskId: task.id, text: c.text, orderIndex: i, createdById: session.userId })),
+          data: texts.map((text, i) => ({ taskId: task.id, text, orderIndex: i, createdById: session.userId })),
         });
       }
     }

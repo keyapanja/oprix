@@ -15,7 +15,7 @@ export default async function NewTaskPage({
   const session = await requirePage("task:manage");
   const sp = await searchParams;
 
-  const [projects, employees, overrides] = await Promise.all([
+  const [projects, employees, overrides, configs] = await Promise.all([
     prisma.project.findMany({
       where: { companyId: session.companyId, deletedAt: null },
       orderBy: { createdAt: "desc" },
@@ -57,14 +57,28 @@ export default async function NewTaskPage({
       orderBy: { orderIndex: "asc" },
       select: { projectId: true, serviceId: true, text: true },
     }),
+    // …and the mode (extend / replace) for the pairs that are customised.
+    prisma.projectSubcategoryChecklist.findMany({
+      where: { project: { companyId: session.companyId, deletedAt: null } },
+      select: { projectId: true, serviceId: true, mode: true },
+    }),
   ]);
 
-  // Map "<projectId>:<subcategoryId>" → override checklist texts (if any).
+  // Map "<projectId>:<subcategoryId>" → override checklist texts + mode.
   const overrideMap = new Map<string, string[]>();
   for (const o of overrides) {
     const k = `${o.projectId}:${o.serviceId}`;
     (overrideMap.get(k) ?? overrideMap.set(k, []).get(k)!).push(o.text);
   }
+  const modeMap = new Map<string, "EXTEND" | "REPLACE">();
+  for (const c of configs) modeMap.set(`${c.projectId}:${c.serviceId}`, c.mode);
+  // Resolve a pair's pre-filled checklist: default / extend / replace.
+  const resolveChecklist = (pair: string, def: string[]): string[] => {
+    const m = modeMap.get(pair);
+    if (!m) return def;
+    const custom = overrideMap.get(pair) ?? [];
+    return m === "EXTEND" ? [...def, ...custom] : custom;
+  };
 
   // Pre-select the project when arriving from a project page (?project=…).
   const initialProjectId = projects.some((p) => p.id === sp.project) ? sp.project! : "";
@@ -87,7 +101,7 @@ export default async function NewTaskPage({
               name: sub.name,
               categoryName: ps.service.name,
               primaryAssigneeId: ps.primaryAssigneeId ?? null,
-              checklist: overrideMap.get(`${p.id}:${sub.id}`) ?? sub.checklistTemplate.map((c) => c.text),
+              checklist: resolveChecklist(`${p.id}:${sub.id}`, sub.checklistTemplate.map((c) => c.text)),
             })),
           ),
         }))}

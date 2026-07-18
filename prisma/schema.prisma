@@ -302,7 +302,8 @@ model Service {
   projectLinks     ProjectService[]
   tasks            Task[]
   checklistTemplate ServiceChecklistItem[]
-  projectChecklistOverrides ProjectSubcategoryChecklistItem[] // per-project checklist for this sub-category
+  projectChecklistOverrides ProjectSubcategoryChecklistItem[] // per-project checklist items for this sub-category
+  projectChecklistConfigs   ProjectSubcategoryChecklist[]     // per-project checklist mode for this sub-category
   kbArticles       KbArticle[]
 
   @@unique([companyId, name])
@@ -544,7 +545,8 @@ model Project {
   company      Company          @relation(fields: [companyId], references: [id])
   client       Client?          @relation(fields: [clientId], references: [id])
   services     ProjectService[]
-  subcategoryChecklists ProjectSubcategoryChecklistItem[] // per-task-type checklist overrides
+  subcategoryChecklists ProjectSubcategoryChecklistItem[] // per-task-type checklist items
+  subcategoryChecklistConfigs ProjectSubcategoryChecklist[] // per-task-type checklist mode
   tasks        Task[]
   timeEntries  TimeEntry[]
   deliverables Deliverable[]
@@ -642,6 +644,27 @@ model ProjectSubcategoryChecklistItem {
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
 
+  @@index([projectId, serviceId])
+}
+
+enum ProjectChecklistMode {
+  EXTEND // the sub-category's org default items PLUS the custom items above
+  REPLACE // only the custom items (default ignored; no custom items = empty checklist)
+}
+
+// Per-(project, sub-category) checklist config. Its presence means the pair is
+// customised; `mode` says whether the custom items extend or replace the
+// sub-category's global template. No row = use the default template as-is.
+model ProjectSubcategoryChecklist {
+  id        String               @id @default(cuid())
+  projectId String
+  serviceId String // the sub-category (task type)
+  mode      ProjectChecklistMode @default(REPLACE)
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, serviceId])
   @@index([projectId, serviceId])
 }
 
