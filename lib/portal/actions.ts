@@ -178,6 +178,7 @@ export async function clientCreateTask(input: ClientTaskInput): Promise<PortalAc
       taskNumber,
       createdById: session.userId, // the client user who raised it
       clientVisible: true,
+      clientRaised: true, // surfaces in the internal "Client tasks" view
       checklistEnabled: false,
       assignees: { create: [{ employeeId: bm.employeeId }] },
     },

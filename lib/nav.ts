@@ -47,6 +47,12 @@ export const NAV: NavItem[] = [
     ],
   },
   {
+    label: "Client tasks",
+    href: "/client-tasks",
+    icon: "userGroup",
+    action: "clienttask:view",
+  },
+  {
     label: "Reports",
     href: "/reports",
     icon: "chart",

@@ -573,6 +573,7 @@ model Task {
   priority     Priority   @default(MEDIUM)
   status       TaskStatus @default(TODO)
   clientVisible Boolean   @default(false) // shows in the client portal; client-created requests set this true
+  clientRaised  Boolean   @default(false) // the client raised this task from the portal (drives the internal "Client tasks" view)
   checklistEnabled Boolean @default(true) // false = created "without a checklist"; detail page hides the box
   startedAt    DateTime? // first moved to In Progress
   submittedAt  DateTime? // when the current work was submitted for review (for on-time/delayed)

@@ -24,14 +24,15 @@ export type Action =
   | "form:manage"
   | "report:view"
   | "self:service"
-  | "portal:access";
+  | "portal:access"
+  | "clienttask:view";
 
 export const DEFAULT_PERMISSIONS: Record<Role, Action[]> = {
   SUPER_ADMIN: [
     "org:manage", "roles:manage", "employee:manage", "employee:read",
     "attendance:manage", "leave:manage", "leave:approve", "payroll:manage",
     "project:manage", "task:manage", "timesheet:approve", "client:manage",
-    "kb:manage", "form:manage", "report:view", "self:service",
+    "kb:manage", "form:manage", "report:view", "self:service", "clienttask:view",
   ],
   HR_MANAGER: [
     "employee:manage", "employee:read", "attendance:manage", "leave:manage",
@@ -76,6 +77,7 @@ export const EDITABLE_ACTIONS: Action[] = [
   "project:manage",
   "task:manage",
   "client:manage",
+  "clienttask:view",
   "kb:manage",
   "form:manage",
   "payroll:manage",
@@ -93,6 +95,7 @@ export const ACTION_LABELS: Partial<Record<Action, { label: string; description:
   "project:manage": { label: "Manage projects", description: "Create and manage projects" },
   "task:manage": { label: "Manage tasks", description: "Create and move tasks" },
   "client:manage": { label: "Manage clients", description: "Clients and contacts" },
+  "clienttask:view": { label: "Client tasks", description: "See tasks clients raised, assigned to them" },
   "kb:manage": { label: "Manage knowledge base", description: "Articles and categories" },
   "form:manage": { label: "Build forms", description: "Create forms and set who can access them" },
   "payroll:manage": { label: "Manage payroll", description: "Salary and payroll runs" },
