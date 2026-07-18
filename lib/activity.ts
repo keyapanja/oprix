@@ -2,7 +2,8 @@ import "server-only";
 import { prisma } from "@/lib/db";
 import { getActorLabel } from "@/lib/cache";
 
-/** Append a human-readable entry to a task's (or any entity's) change history. */
+/** Append a human-readable entry to a task's (or any entity's) change history.
+ *  Extra `meta` (e.g. a field-level diff) is merged alongside the actor label. */
 export async function logActivity(opts: {
   companyId: string;
   actorId: string;
@@ -10,6 +11,7 @@ export async function logActivity(opts: {
   entityType: string;
   entityId: string;
   message: string;
+  meta?: Record<string, unknown>;
 }): Promise<void> {
   await prisma.activityLog.create({
     data: {
@@ -18,7 +20,7 @@ export async function logActivity(opts: {
       entityType: opts.entityType,
       entityId: opts.entityId,
       action: opts.message,
-      meta: { actor: opts.actorLabel },
+      meta: { actor: opts.actorLabel, ...(opts.meta ?? {}) },
     },
   });
 }

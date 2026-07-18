@@ -202,12 +202,26 @@ export function EntryDetailModal({
               ) : history.length === 0 ? (
                 <p className="text-xs text-muted">No edit history recorded.</p>
               ) : (
-                <ul className="space-y-1">
+                <ul className="space-y-2">
                   {history.map((h, i) => (
-                    <li key={i} className="flex flex-wrap items-center gap-x-2 text-xs">
-                      <span className="font-medium text-content">{h.actor}</span>
-                      <span className="text-muted">{h.action.toLowerCase()}</span>
-                      <span className="ml-auto text-faint">{new Date(h.at).toLocaleString()}</span>
+                    <li key={i} className="space-y-1">
+                      <div className="flex flex-wrap items-center gap-x-2 text-xs">
+                        <span className="font-medium text-content">{h.actor}</span>
+                        <span className="text-muted">{h.action.toLowerCase()}</span>
+                        <span className="ml-auto text-faint">{new Date(h.at).toLocaleString()}</span>
+                      </div>
+                      {h.changes.length > 0 && (
+                        <ul className="space-y-0.5 border-l-2 border-line pl-2.5">
+                          {h.changes.map((c, j) => (
+                            <li key={j} className="break-words text-xs">
+                              <span className="font-medium text-content">{c.label}:</span>{" "}
+                              <span className="text-muted line-through">{c.from || "—"}</span>
+                              <span className="mx-1 text-faint">→</span>
+                              <span className="text-content">{c.to || "—"}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                     </li>
                   ))}
                 </ul>

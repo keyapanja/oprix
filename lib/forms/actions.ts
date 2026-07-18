@@ -7,7 +7,7 @@ import { prisma } from "@/lib/db";
 import { requireCapability, requirePortalAction } from "@/lib/auth/guard";
 import { getSession } from "@/lib/auth/session";
 import { canManageForms, audienceAllows } from "@/lib/forms/access";
-import { FormSchemaZ, validateAnswers, parseSchema } from "@/lib/forms/types";
+import { FormSchemaZ, validateAnswers, parseSchema, answerToText, isInputField } from "@/lib/forms/types";
 import { ScheduleZ } from "@/lib/forms/schedule";
 import { EDITABLE_ROLES } from "@/lib/auth/can";
 import { logActivity, actorLabel } from "@/lib/activity";
@@ -210,7 +210,7 @@ export async function updateSubmission(
   if (!session) return { error: "Not authenticated." };
   const sub = await prisma.formSubmission.findFirst({
     where: { id, companyId: session.companyId, deletedAt: null },
-    select: { id: true, formId: true, submittedByUserId: true, form: { select: { schema: true } } },
+    select: { id: true, formId: true, submittedByUserId: true, data: true, form: { select: { schema: true } } },
   });
   if (!sub) return { error: "Entry not found." };
 
@@ -223,24 +223,39 @@ export async function updateSubmission(
   const { ok, errors, clean } = validateAnswers(schema.fields, data);
   if (!ok) return { error: "Please fix the highlighted fields.", fieldErrors: errors };
 
+  // Field-level diff (human-readable) so the history shows what actually changed.
+  const before = (sub.data && typeof sub.data === "object" ? sub.data : {}) as Record<string, unknown>;
+  const changes: SubmissionChange[] = [];
+  for (const f of schema.fields) {
+    if (!isInputField(f.type)) continue;
+    const from = answerToText(f, before[f.id]);
+    const to = answerToText(f, clean[f.id]);
+    if (from !== to) changes.push({ label: f.label, from: from.slice(0, 200), to: to.slice(0, 200) });
+  }
+
   await prisma.formSubmission.update({
     where: { id },
-    data: { data: asJson(clean), editedAt: new Date(), editedById: session.userId },
+    // Only stamp an "edit" when something actually changed.
+    data: { data: asJson(clean), ...(changes.length ? { editedAt: new Date(), editedById: session.userId } : {}) },
   });
-  // Keep an append-only audit trail of who edited the entry and when.
-  await logActivity({
-    companyId: session.companyId,
-    actorId: session.userId,
-    actorLabel: await actorLabel(session.userId),
-    entityType: "FORM_SUBMISSION",
-    entityId: id,
-    message: "Updated the entry",
-  });
+  // Append-only audit trail: who edited the entry, when, and what changed.
+  if (changes.length) {
+    await logActivity({
+      companyId: session.companyId,
+      actorId: session.userId,
+      actorLabel: await actorLabel(session.userId),
+      entityType: "FORM_SUBMISSION",
+      entityId: id,
+      message: "Updated the entry",
+      meta: { changes },
+    });
+  }
   revalidatePath(`/forms/${sub.formId}/entries`);
   return { ok: true };
 }
 
-export type SubmissionEvent = { actor: string; at: string; action: string };
+export type SubmissionChange = { label: string; from: string; to: string };
+export type SubmissionEvent = { actor: string; at: string; action: string; changes: SubmissionChange[] };
 
 /** The edit history for one entry — who changed it and when. Visible to a form
  *  manager or the person who submitted it. */
@@ -260,11 +275,15 @@ export async function getSubmissionHistory(id: string): Promise<SubmissionEvent[
     orderBy: { createdAt: "desc" },
     take: 50,
   });
-  return logs.map((l) => ({
-    actor: (l.meta as { actor?: string } | null)?.actor ?? "Someone",
-    at: l.createdAt.toISOString(),
-    action: l.action,
-  }));
+  return logs.map((l) => {
+    const m = (l.meta ?? {}) as { actor?: string; changes?: SubmissionChange[] };
+    return {
+      actor: m.actor ?? "Someone",
+      at: l.createdAt.toISOString(),
+      action: l.action,
+      changes: Array.isArray(m.changes) ? m.changes : [],
+    };
+  });
 }
 
 /** Delete an entry — a form manager, or the person who submitted it. */
