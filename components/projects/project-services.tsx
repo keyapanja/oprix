@@ -10,6 +10,7 @@ import { Card } from "@/components/ui/card";
 import { Combobox } from "@/components/ui/combobox";
 import { Icon } from "@/components/ui/icons";
 import { ProjectSubcategoryChecklist } from "@/components/projects/project-subcategory-checklist";
+import { cn } from "@/lib/cn";
 
 type Opt = { id: string; name: string };
 type Sub = { id: string; name: string; defaultCount: number; override: { id: string; text: string }[] };
@@ -119,21 +120,7 @@ export function ProjectServices({
                 </div>
 
                 {ps.subcategories.length > 0 && (
-                  <div className="mt-3 space-y-1.5 border-t border-line pl-7 pt-3">
-                    <p className="text-[11px] font-medium uppercase tracking-wide text-faint">
-                      Task-type checklists
-                    </p>
-                    {ps.subcategories.map((sub) => (
-                      <ProjectSubcategoryChecklist
-                        key={sub.id}
-                        projectId={projectId}
-                        serviceId={sub.id}
-                        name={sub.name}
-                        initial={sub.override}
-                        defaultCount={sub.defaultCount}
-                      />
-                    ))}
-                  </div>
+                  <CategoryChecklists projectId={projectId} subcategories={ps.subcategories} />
                 )}
               </div>
             ))}
@@ -162,5 +149,40 @@ export function ProjectServices({
         )}
       </div>
     </Card>
+  );
+}
+
+/** Collapsible "Task-type checklists" list under a category. Collapsed by
+ *  default; the header shows the count + how many task types are overridden. */
+function CategoryChecklists({ projectId, subcategories }: { projectId: string; subcategories: Sub[] }) {
+  const [open, setOpen] = useState(false);
+  const customCount = subcategories.filter((s) => s.override.length > 0).length;
+  return (
+    <div className="mt-3 border-t border-line pl-7 pt-3">
+      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-2 text-left">
+        <Icon name="chevronDown" className={cn("size-3.5 shrink-0 text-faint transition-transform", !open && "-rotate-90")} />
+        <span className="text-[11px] font-medium uppercase tracking-wide text-faint">Task-type checklists</span>
+        <span className="text-[11px] text-faint">({subcategories.length})</span>
+        {customCount > 0 && (
+          <span className="rounded-full bg-accent-soft px-1.5 py-0.5 text-[10px] font-semibold text-accent-strong ring-1 ring-inset ring-brand-500/30">
+            {customCount} custom
+          </span>
+        )}
+      </button>
+      {open && (
+        <div className="mt-2 space-y-1.5">
+          {subcategories.map((sub) => (
+            <ProjectSubcategoryChecklist
+              key={sub.id}
+              projectId={projectId}
+              serviceId={sub.id}
+              name={sub.name}
+              initial={sub.override}
+              defaultCount={sub.defaultCount}
+            />
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
