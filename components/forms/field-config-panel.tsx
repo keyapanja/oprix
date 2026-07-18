@@ -4,7 +4,7 @@ import { Input, Textarea } from "@/components/ui/input";
 import { Combobox } from "@/components/ui/combobox";
 import { Icon } from "@/components/ui/icons";
 import { cn } from "@/lib/cn";
-import { hasOptions, isInputField, newId, WIDTH_OPTIONS, type CondOp, type FieldDef, type FieldOption, type RefSource } from "@/lib/forms/types";
+import { CHIP_COLORS, CHIP_DOT, hasOptions, isInputField, newId, WIDTH_OPTIONS, type ChipColor, type CondOp, type FieldDef, type FieldOption, type RefSource } from "@/lib/forms/types";
 import { RepeaterFieldsEditor } from "@/components/forms/repeater-fields-editor";
 import { FormulaEditor } from "@/components/forms/formula-editor";
 
@@ -72,6 +72,11 @@ export function FieldConfigPanel({
   }
   function removeOption(i: number) {
     onChange({ options: (field.options ?? []).filter((_, idx) => idx !== i) });
+  }
+  function setOptionColor(i: number, color: ChipColor) {
+    const next = [...(field.options ?? [])];
+    next[i] = { ...next[i], color };
+    onChange({ options: next });
   }
 
   return (
@@ -166,17 +171,50 @@ export function FieldConfigPanel({
       {choice && (
         <div>
           <span className="mb-1 block text-xs font-medium text-muted">Options</span>
-          <div className="space-y-1.5">
+          {field.type === "dropdown" && (
+            <label className="mb-2 flex items-center justify-between rounded-lg bg-canvas px-2.5 py-1.5 text-xs font-medium text-content">
+              Show as colour chips
+              <input
+                type="checkbox"
+                checked={!!field.chips}
+                onChange={(e) => onChange({ chips: e.target.checked })}
+                className="size-4 rounded border-line-strong text-brand-600 focus:ring-brand-500"
+              />
+            </label>
+          )}
+          <div className="space-y-2">
             {(field.options ?? []).map((o, i) => (
-              <div key={o.id} className="flex items-center gap-1.5">
-                <Input value={o.label} onChange={(e) => setOption(i, e.target.value)} />
-                <button
-                  onClick={() => removeOption(i)}
-                  className="shrink-0 rounded-lg p-1.5 text-faint hover:bg-canvas hover:text-red-600"
-                  title="Remove option"
-                >
-                  <Icon name="x" className="size-4" />
-                </button>
+              <div key={o.id} className="space-y-1.5">
+                <div className="flex items-center gap-1.5">
+                  <Input value={o.label} onChange={(e) => setOption(i, e.target.value)} />
+                  <button
+                    onClick={() => removeOption(i)}
+                    className="shrink-0 rounded-lg p-1.5 text-faint hover:bg-canvas hover:text-red-600"
+                    title="Remove option"
+                  >
+                    <Icon name="x" className="size-4" />
+                  </button>
+                </div>
+                {field.type === "dropdown" && field.chips && (
+                  <div className="flex flex-wrap items-center gap-1 pl-0.5">
+                    {CHIP_COLORS.map((c) => (
+                      <button
+                        key={c}
+                        type="button"
+                        title={c}
+                        onClick={() => setOptionColor(i, c)}
+                        aria-pressed={(o.color ?? "gray") === c}
+                        className={cn(
+                          "size-5 rounded-full transition",
+                          CHIP_DOT[c],
+                          (o.color ?? "gray") === c
+                            ? "ring-2 ring-offset-2 ring-offset-surface ring-brand-500"
+                            : "ring-1 ring-inset ring-black/10 opacity-70 hover:opacity-100",
+                        )}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>

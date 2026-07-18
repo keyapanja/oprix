@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { deleteSubmission } from "@/lib/forms/actions";
 import { answerToText, isInputField, type FieldDef, type Lookups } from "@/lib/forms/types";
 import { EntryDetailModal } from "@/components/forms/entry-detail-modal";
+import { OptionChip } from "@/components/forms/option-chip";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -29,6 +30,8 @@ type Col = {
   label: string;
   display: (r: Row) => string;
   sortVal: (r: Row) => string | number;
+  /** Custom cell rendering (e.g. colour chips); display() still drives CSV/sort/search. */
+  renderCell?: (r: Row) => ReactNode;
 };
 
 const PAGE_SIZES = [10, 25, 50, 100];
@@ -100,6 +103,10 @@ export function EntriesTable({
         label: f.label,
         display: (r) => answerToText(f, r.data[f.id]),
         sortVal: (r) => (numeric ? Number(answerToText(f, r.data[f.id])) || 0 : answerToText(f, r.data[f.id]).toLowerCase()),
+        renderCell:
+          f.type === "dropdown" && f.chips
+            ? (r) => <OptionChip field={f} value={answerToText(f, r.data[f.id])} />
+            : undefined,
       });
     }
     if (showSubmitter)
@@ -227,10 +234,14 @@ export function EntriesTable({
                   ? "whitespace-nowrap font-medium text-content"
                   : c.key === "__date"
                     ? "whitespace-nowrap text-muted"
-                    : "max-w-xs truncate text-content",
+                    : c.renderCell
+                      ? "whitespace-nowrap text-content"
+                      : "max-w-xs truncate text-content",
               )}
             >
-              {c.key === "__date" ? (
+              {c.renderCell ? (
+                c.renderCell(r)
+              ) : c.key === "__date" ? (
                 <span className="inline-flex items-center gap-1.5">
                   {c.display(r) || "—"}
                   {r.editedAt && (

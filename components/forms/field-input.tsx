@@ -5,7 +5,7 @@ import { Combobox } from "@/components/ui/combobox";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Icon } from "@/components/ui/icons";
 import { cn } from "@/lib/cn";
-import { addDaysISO, computeCalc, formatCalc, isVisible, WIDTH_SPAN_CLASS } from "@/lib/forms/types";
+import { addDaysISO, chipClass, computeCalc, formatCalc, isVisible, WIDTH_SPAN_CLASS } from "@/lib/forms/types";
 import type { FieldDef, FieldValue, Lookups, RepeaterRows, ScalarValue } from "@/lib/forms/types";
 
 export type { FieldValue } from "@/lib/forms/types";
@@ -121,7 +121,9 @@ export function FieldInput({
       break;
     }
     case "dropdown":
-      control = (
+      control = field.chips ? (
+        <ChipSelect field={field} value={str} onChange={set} disabled={disabled} />
+      ) : (
         <Combobox value={str} onChange={set} disabled={disabled} placeholder={field.placeholder || "Select…"}
           options={opts.map((o) => ({ value: o.label, label: o.label }))} />
       );
@@ -300,6 +302,47 @@ export function FieldInput({
       {control}
       {field.helpText && <p className="mt-1 text-xs text-muted">{field.helpText}</p>}
       {error && <p className="mt-1 text-xs font-medium text-red-600 dark:text-red-400">{error}</p>}
+    </div>
+  );
+}
+
+/** Chips-mode dropdown: options render as clickable coloured chips (single-select;
+ *  click the selected chip again to clear). */
+function ChipSelect({
+  field,
+  value,
+  onChange,
+  disabled,
+}: {
+  field: FieldDef;
+  value: string;
+  onChange: (v: FieldValue) => void;
+  disabled?: boolean;
+}) {
+  const opts = field.options ?? [];
+  if (opts.length === 0) return <p className="text-sm text-muted">No options yet.</p>;
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {opts.map((o) => {
+        const selected = value === o.label;
+        return (
+          <button
+            key={o.id}
+            type="button"
+            disabled={disabled}
+            onClick={() => onChange(selected ? "" : o.label)}
+            aria-pressed={selected}
+            className={cn(
+              "inline-flex items-center rounded-full px-3 py-1 text-sm font-medium ring-1 ring-inset transition",
+              chipClass(o.color),
+              selected ? "opacity-100 ring-2" : "opacity-45 hover:opacity-80",
+              disabled && "pointer-events-none",
+            )}
+          >
+            {o.label}
+          </button>
+        );
+      })}
     </div>
   );
 }

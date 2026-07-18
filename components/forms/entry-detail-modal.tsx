@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
 import { updateSubmission, getSubmissionHistory, type SubmissionEvent } from "@/lib/forms/actions";
 import { FieldInput, type FieldValue } from "@/components/forms/field-input";
+import { OptionChip } from "@/components/forms/option-chip";
 import {
   answerToText,
   computeCalc,
@@ -63,6 +64,11 @@ function ViewValue({ field, value }: { field: FieldDef; value: unknown }) {
         ))}
       </ul>
     );
+  }
+
+  if (field.type === "dropdown" && field.chips) {
+    const s = answerToText(field, value);
+    return s ? <OptionChip field={field} value={s} /> : <span className="text-sm text-muted">—</span>;
   }
 
   const text = answerToText(field, value);

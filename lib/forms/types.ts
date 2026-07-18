@@ -31,7 +31,11 @@ export type FieldType =
 /** Live platform data a "reference" field pulls its options from. */
 export type RefSource = "clients" | "projects" | "employees";
 
-export type FieldOption = { id: string; label: string };
+/** Chip colours a dropdown option can be tagged with (status-style display). */
+export const CHIP_COLORS = ["gray", "red", "amber", "green", "teal", "blue", "purple", "pink"] as const;
+export type ChipColor = (typeof CHIP_COLORS)[number];
+
+export type FieldOption = { id: string; label: string; color?: ChipColor };
 
 /** Conditional visibility: show the field only when another field's answer matches. */
 export type CondOp = "eq" | "neq" | "gt" | "lt" | "contains" | "empty" | "notEmpty";
@@ -64,6 +68,34 @@ export const WIDTH_OPTIONS: { value: FieldWidth; label: string; pct: string; tit
   { value: "full", label: "Full", pct: "100%", title: "Full width (100%)" },
 ];
 
+/** Chip pill colour classes (bg + text + ring colour). Shape/ring-width is added
+ *  by the consumer, mirroring the Badge component. Literal strings for the JIT. */
+export const CHIP_CLASSES: Record<ChipColor, string> = {
+  gray: "bg-gray-100 text-gray-700 ring-gray-300 dark:bg-gray-500/15 dark:text-gray-300 dark:ring-gray-500/30",
+  red: "bg-red-50 text-red-700 ring-red-200 dark:bg-red-500/15 dark:text-red-300 dark:ring-red-500/25",
+  amber: "bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:ring-amber-500/25",
+  green: "bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:ring-emerald-500/25",
+  teal: "bg-teal-50 text-teal-700 ring-teal-200 dark:bg-teal-500/15 dark:text-teal-300 dark:ring-teal-500/25",
+  blue: "bg-blue-50 text-blue-700 ring-blue-200 dark:bg-blue-500/15 dark:text-blue-300 dark:ring-blue-500/25",
+  purple: "bg-purple-50 text-purple-700 ring-purple-200 dark:bg-purple-500/15 dark:text-purple-300 dark:ring-purple-500/25",
+  pink: "bg-pink-50 text-pink-700 ring-pink-200 dark:bg-pink-500/15 dark:text-pink-300 dark:ring-pink-500/25",
+};
+
+/** Solid swatch colour for the option colour picker. */
+export const CHIP_DOT: Record<ChipColor, string> = {
+  gray: "bg-gray-400",
+  red: "bg-red-500",
+  amber: "bg-amber-500",
+  green: "bg-emerald-500",
+  teal: "bg-teal-500",
+  blue: "bg-blue-500",
+  purple: "bg-purple-500",
+  pink: "bg-pink-500",
+};
+
+/** Chip colour classes for a value, defaulting to gray. */
+export const chipClass = (color?: string | null): string => CHIP_CLASSES[(color as ChipColor)] ?? CHIP_CLASSES.gray;
+
 export type FieldDef = {
   id: string; // stable key — used in submission data; never reused
   type: FieldType;
@@ -83,6 +115,7 @@ export type FieldDef = {
   maxLength?: number | null; // text / textarea
   rangeDays?: number | null; // daterange: auto-fill end = start + (rangeDays - 1); locks the end
   width?: FieldWidth;
+  chips?: boolean; // dropdown: render the value as a coloured chip (per-option colours)
 };
 
 export type FormSchema = {
@@ -195,7 +228,7 @@ export function neededSources(fields: FieldDef[]): RefSource[] {
 
 // ---- Parsing & validation -------------------------------------------------
 
-const OptionZ = z.object({ id: z.string().min(1), label: z.string().trim().max(200) });
+const OptionZ = z.object({ id: z.string().min(1), label: z.string().trim().max(200), color: z.enum(CHIP_COLORS).optional() });
 const SourceZ = z.enum(["clients", "projects", "employees"]);
 const TypeZ = z.enum([
   "text", "textarea", "number", "email", "phone", "date", "daterange",
@@ -229,6 +262,7 @@ const FieldDefZ: z.ZodType<FieldDef> = z.lazy(() =>
     maxLength: z.number().int().positive().nullable().optional(),
     rangeDays: z.number().int().positive().max(3650).nullable().optional(),
     width: z.enum(["quarter", "third", "half", "twoThirds", "threeQuarters", "full"]).optional(),
+    chips: z.boolean().optional(),
   }),
 );
 
