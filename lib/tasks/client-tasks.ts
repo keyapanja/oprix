@@ -28,11 +28,19 @@ export async function listClientTasks(
   const scope = await resolveTaskScope(session.companyId, session.role);
   const mineOnly = scope !== "ALL";
 
+  // A task is "client-raised" if the flag is set (new tasks) OR its creator is a
+  // client user (covers tasks created before the flag existed — no backfill).
+  const clientUsers = await prisma.user.findMany({
+    where: { companyId: session.companyId, role: "CLIENT" },
+    select: { id: true },
+  });
+  const clientUserIds = clientUsers.map((u) => u.id);
+
   const tasks = await prisma.task.findMany({
     where: {
       deletedAt: null,
-      clientRaised: true,
       project: { companyId: session.companyId, deletedAt: null },
+      OR: [{ clientRaised: true }, ...(clientUserIds.length ? [{ createdById: { in: clientUserIds } }] : [])],
       // Non-admins: only tasks assigned to them. (No employee record ⇒ nothing.)
       ...(mineOnly ? { assignees: { some: { employeeId: session.employeeId ?? "__none__" } } } : {}),
     },
