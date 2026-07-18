@@ -44,7 +44,7 @@ export default async function FillFormPage({ params }: { params: Promise<{ id: s
       </div>
 
       {form.status !== "PUBLISHED" && canManage && (
-        <div className="mx-auto mb-4 max-w-2xl rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-800 ring-1 ring-inset ring-amber-200 dark:bg-amber-500/15 dark:text-amber-200 dark:ring-amber-500/25">
+        <div className="mx-auto mb-4 max-w-4xl rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-800 ring-1 ring-inset ring-amber-200 dark:bg-amber-500/15 dark:text-amber-200 dark:ring-amber-500/25">
           This form is <strong>{form.status.toLowerCase()}</strong> — only you (a form manager) can see it. Publish it from the builder to open it up.
         </div>
       )}

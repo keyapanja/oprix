@@ -68,7 +68,7 @@ export function FormFill({
 
   if (done) {
     return (
-      <Card className="mx-auto max-w-2xl p-8 text-center">
+      <Card className="mx-auto max-w-4xl p-8 text-center">
         <span className="mx-auto mb-3 flex size-12 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
           <Icon name="check" className="size-6" />
         </span>
@@ -83,7 +83,7 @@ export function FormFill({
   }
 
   return (
-    <Card className="mx-auto max-w-2xl p-6">
+    <Card className="mx-auto max-w-4xl p-6">
       <h1 className="text-xl font-semibold text-content">{form.title}</h1>
       {form.description && <p className="mt-1 text-sm text-muted">{form.description}</p>}
 
