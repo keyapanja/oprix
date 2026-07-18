@@ -40,7 +40,22 @@ export default async function ProjectDetailPage({
             serviceId: true,
             primaryAssigneeId: true,
             service: {
-              select: { name: true },
+              select: {
+                name: true,
+                children: {
+                  orderBy: { name: "asc" },
+                  select: {
+                    id: true,
+                    name: true,
+                    checklistTemplate: { orderBy: { orderIndex: "asc" }, select: { text: true } },
+                    projectChecklistOverrides: {
+                      where: { projectId: id },
+                      orderBy: { orderIndex: "asc" },
+                      select: { id: true, text: true },
+                    },
+                  },
+                },
+              },
             },
           },
         },
@@ -154,6 +169,12 @@ export default async function ProjectDetailPage({
             id: ps.id,
             categoryName: ps.service.name,
             primaryAssigneeId: ps.primaryAssigneeId,
+            subcategories: ps.service.children.map((sub) => ({
+              id: sub.id,
+              name: sub.name,
+              defaultCount: sub.checklistTemplate.length,
+              override: sub.projectChecklistOverrides,
+            })),
           }))}
           available={available}
           employees={employees.map((e) => ({ id: e.id, name: e.fullName }))}

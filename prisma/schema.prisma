@@ -302,6 +302,7 @@ model Service {
   projectLinks     ProjectService[]
   tasks            Task[]
   checklistTemplate ServiceChecklistItem[]
+  projectChecklistOverrides ProjectSubcategoryChecklistItem[] // per-project checklist for this sub-category
   kbArticles       KbArticle[]
 
   @@unique([companyId, name])
@@ -543,6 +544,7 @@ model Project {
   company      Company          @relation(fields: [companyId], references: [id])
   client       Client?          @relation(fields: [clientId], references: [id])
   services     ProjectService[]
+  subcategoryChecklists ProjectSubcategoryChecklistItem[] // per-task-type checklist overrides
   tasks        Task[]
   timeEntries  TimeEntry[]
   deliverables Deliverable[]
@@ -624,6 +626,23 @@ model ProjectServiceChecklistItem {
   projectService ProjectService @relation(fields: [projectServiceId], references: [id], onDelete: Cascade)
 
   @@index([projectServiceId])
+}
+
+// Per-(project, sub-category/"task type") checklist override. When any rows
+// exist for a (project, sub-category), they REPLACE that sub-category's global
+// ServiceChecklistItem template for new tasks created for that pair — so a
+// checklist can be scoped to one task type in one project. Empty = use default.
+model ProjectSubcategoryChecklistItem {
+  id         String @id @default(cuid())
+  projectId  String
+  serviceId  String // the sub-category (task type)
+  text       String
+  orderIndex Int    @default(0)
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, serviceId])
 }
 
 // Recurring task template — auto-creates a task on a schedule (same schedule

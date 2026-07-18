@@ -15,7 +15,7 @@ export default async function NewTaskPage({
   const session = await requirePage("task:manage");
   const sp = await searchParams;
 
-  const [projects, employees] = await Promise.all([
+  const [projects, employees, overrides] = await Promise.all([
     prisma.project.findMany({
       where: { companyId: session.companyId, deletedAt: null },
       orderBy: { createdAt: "desc" },
@@ -51,7 +51,20 @@ export default async function NewTaskPage({
       orderBy: { fullName: "asc" },
       select: { id: true, fullName: true },
     }),
+    // Per-(project, task type) checklist overrides across the company's projects.
+    prisma.projectSubcategoryChecklistItem.findMany({
+      where: { project: { companyId: session.companyId, deletedAt: null } },
+      orderBy: { orderIndex: "asc" },
+      select: { projectId: true, serviceId: true, text: true },
+    }),
   ]);
+
+  // Map "<projectId>:<subcategoryId>" → override checklist texts (if any).
+  const overrideMap = new Map<string, string[]>();
+  for (const o of overrides) {
+    const k = `${o.projectId}:${o.serviceId}`;
+    (overrideMap.get(k) ?? overrideMap.set(k, []).get(k)!).push(o.text);
+  }
 
   // Pre-select the project when arriving from a project page (?project=…).
   const initialProjectId = projects.some((p) => p.id === sp.project) ? sp.project! : "";
@@ -74,7 +87,7 @@ export default async function NewTaskPage({
               name: sub.name,
               categoryName: ps.service.name,
               primaryAssigneeId: ps.primaryAssigneeId ?? null,
-              checklist: sub.checklistTemplate.map((c) => c.text),
+              checklist: overrideMap.get(`${p.id}:${sub.id}`) ?? sub.checklistTemplate.map((c) => c.text),
             })),
           ),
         }))}

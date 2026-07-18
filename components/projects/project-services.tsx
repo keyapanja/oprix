@@ -9,12 +9,15 @@ import { addProjectService, removeProjectService, setServicePrimary } from "@/li
 import { Card } from "@/components/ui/card";
 import { Combobox } from "@/components/ui/combobox";
 import { Icon } from "@/components/ui/icons";
+import { ProjectSubcategoryChecklist } from "@/components/projects/project-subcategory-checklist";
 
 type Opt = { id: string; name: string };
+type Sub = { id: string; name: string; defaultCount: number; override: { id: string; text: string }[] };
 type PS = {
   id: string;
   categoryName: string;
   primaryAssigneeId: string | null;
+  subcategories: Sub[];
 };
 
 export function ProjectServices({
@@ -76,8 +79,8 @@ export function ProjectServices({
       </div>
       <div className="p-5">
         <p className="mb-4 text-sm text-muted">
-          Tasks on this project are created under a category&rsquo;s sub-category. Manage sub-categories and
-          their checklists in{" "}
+          Tasks are created under a category&rsquo;s sub-category (task type). Each task type below can carry a
+          checklist that&rsquo;s specific to this project — it overrides that type&rsquo;s default template from{" "}
           <Link href="/organization" className="font-medium text-accent-strong hover:underline">
             Organization → Services
           </Link>
@@ -114,6 +117,24 @@ export function ProjectServices({
                     />
                   </div>
                 </div>
+
+                {ps.subcategories.length > 0 && (
+                  <div className="mt-3 space-y-1.5 border-t border-line pl-7 pt-3">
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-faint">
+                      Task-type checklists
+                    </p>
+                    {ps.subcategories.map((sub) => (
+                      <ProjectSubcategoryChecklist
+                        key={sub.id}
+                        projectId={projectId}
+                        serviceId={sub.id}
+                        name={sub.name}
+                        initial={sub.override}
+                        defaultCount={sub.defaultCount}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>

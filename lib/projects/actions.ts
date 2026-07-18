@@ -231,6 +231,46 @@ export async function removeProjectServiceChecklistItem(itemId: string): Promise
   return { ok: true };
 }
 
+// ---- Per-(project, task type) checklist overrides -------------------------
+// When any rows exist for (project, sub-category), they replace that
+// sub-category's global template for new tasks of that pair. See createTask.
+
+export async function addProjectSubcategoryChecklistItem(
+  projectId: string,
+  serviceId: string,
+  text: string,
+): Promise<{ ok?: boolean; error?: string; item?: { id: string; text: string } }> {
+  const session = await requireCapability("project:manage");
+  const t = text.trim();
+  if (!t) return { error: "Item text is required" };
+  if (!(await ownsProject(session.companyId, projectId))) return { error: "Project not found" };
+  // Must be a real sub-category (task type) in this company.
+  const svc = await prisma.service.findFirst({
+    where: { id: serviceId, companyId: session.companyId, parentId: { not: null } },
+    select: { id: true },
+  });
+  if (!svc) return { error: "Invalid task type" };
+  const count = await prisma.projectSubcategoryChecklistItem.count({ where: { projectId, serviceId } });
+  const item = await prisma.projectSubcategoryChecklistItem.create({
+    data: { projectId, serviceId, text: t, orderIndex: count },
+    select: { id: true, text: true },
+  });
+  revalidatePath(`/projects/${projectId}`);
+  return { ok: true, item };
+}
+
+export async function removeProjectSubcategoryChecklistItem(itemId: string): Promise<ProjectState> {
+  const session = await requireCapability("project:manage");
+  const item = await prisma.projectSubcategoryChecklistItem.findFirst({
+    where: { id: itemId, project: { companyId: session.companyId } },
+    select: { id: true, projectId: true },
+  });
+  if (!item) return { error: "Not found" };
+  await prisma.projectSubcategoryChecklistItem.delete({ where: { id: item.id } });
+  revalidatePath(`/projects/${item.projectId}`);
+  return { ok: true };
+}
+
 // ---- Tasks ----------------------------------------------------------------
 export type KanbanTask = {
   id: string;
@@ -347,11 +387,19 @@ export async function createTask(input: {
         });
       }
     } else if (input.serviceId) {
-      const template = await prisma.serviceChecklistItem.findMany({
-        where: { serviceId: input.serviceId },
+      // A per-(project, task type) override wins over the sub-category's global template.
+      const override = await prisma.projectSubcategoryChecklistItem.findMany({
+        where: { projectId: input.projectId, serviceId: input.serviceId },
         orderBy: { orderIndex: "asc" },
         select: { text: true },
       });
+      const template = override.length
+        ? override
+        : await prisma.serviceChecklistItem.findMany({
+            where: { serviceId: input.serviceId },
+            orderBy: { orderIndex: "asc" },
+            select: { text: true },
+          });
       if (template.length) {
         await prisma.checklistItem.createMany({
           data: template.map((c, i) => ({ taskId: task.id, text: c.text, orderIndex: i, createdById: session.userId })),
