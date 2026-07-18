@@ -9,6 +9,8 @@ import {
   adminEditLeave,
   approveLeaveEdit,
   rejectLeaveEdit,
+  approveLeave,
+  rejectLeave,
   deleteLeaveRequest,
   type LeaveState,
 } from "@/lib/leave/actions";
@@ -132,6 +134,33 @@ export function LeaveDetailModal({
     });
   }
 
+  // Approve / reject the request itself, straight from the detail view.
+  function onApprove() {
+    startTx(async () => {
+      const res = await approveLeave(req.id);
+      if (res.error) {
+        toast.error(res.error);
+      } else {
+        toast.success("Leave approved");
+        router.refresh();
+        onClose();
+      }
+    });
+  }
+  async function onReject() {
+    if (!(await confirmDialog({ message: "Reject this leave request?", tone: "danger", confirmLabel: "Reject" }))) return;
+    startTx(async () => {
+      const res = await rejectLeave(req.id);
+      if (res.error) {
+        toast.error(res.error);
+      } else {
+        toast.success("Leave rejected");
+        router.refresh();
+        onClose();
+      }
+    });
+  }
+
   async function onDelete() {
     const ok = await confirmDialog({
       message: "Delete this leave request permanently? This can't be undone.",
@@ -170,6 +199,7 @@ export function LeaveDetailModal({
   // Attachments (medical certs etc.) can be uploaded/replaced by the applicant
   // (while pending) or an approver, on a leave request.
   const canUploadAttachment = req.kind === "LEAVE" && (canApprove || (canEdit && req.status === "PENDING"));
+  const isDecided = req.status === "HR_APPROVED" || req.status === "APPROVED" || req.status === "REJECTED";
   const newType = req.pendingEdit?.leaveTypeId
     ? leaveTypes.find((t) => t.id === req.pendingEdit?.leaveTypeId)?.name ?? "—"
     : null;
@@ -291,7 +321,7 @@ export function LeaveDetailModal({
 
         {/* Approver / Super Admin — edit the request directly, or delete it */}
         {!req.pendingEdit && canApprove && !editing && (
-          <div className="flex items-center justify-between gap-2 border-t border-line pt-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line pt-3">
             <Button
               variant="ghost"
               size="sm"
@@ -302,9 +332,22 @@ export function LeaveDetailModal({
               <Icon name="trash" className="size-4" />
               Delete
             </Button>
-            <Button variant="secondary" size="sm" onClick={() => setEditing(true)}>
-              Edit request
-            </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              {!isDecided && (
+                <>
+                  <Button size="sm" disabled={pending} onClick={onApprove}>
+                    <Icon name="check" className="size-4" />
+                    Approve
+                  </Button>
+                  <Button size="sm" variant="secondary" disabled={pending} onClick={onReject}>
+                    Reject
+                  </Button>
+                </>
+              )}
+              <Button variant="secondary" size="sm" onClick={() => setEditing(true)}>
+                Edit request
+              </Button>
+            </div>
           </div>
         )}
 
@@ -351,34 +394,31 @@ export function LeaveDetailModal({
               </Field>
             </div>
             {eSingle && (
-              <div className="space-y-2">
-                <label className="flex items-center gap-2 text-sm text-content">
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
+                <label className="flex items-center gap-2 text-content">
                   <input
                     type="checkbox"
                     name="isHalfDay"
                     checked={eHalf}
                     onChange={(e) => setEHalf(e.target.checked)}
-                    className="size-4 rounded border-line-strong text-brand-600 focus:ring-brand-500"
+                    className="size-4"
                   />
                   Half day
                 </label>
-                {eHalf && (
-                  <div className="flex items-center gap-4 pl-6 text-sm">
-                    {HALF_DAY_OPTIONS.map((o) => (
-                      <label key={o.value} className="flex items-center gap-1.5 text-content">
-                        <input
-                          type="radio"
-                          name="halfDayPeriod"
-                          value={o.value}
-                          checked={ePeriod === o.value}
-                          onChange={() => setEPeriod(o.value)}
-                          className="size-4 border-line-strong text-brand-600 focus:ring-brand-500"
-                        />
-                        {o.label}
-                      </label>
-                    ))}
-                  </div>
-                )}
+                {eHalf &&
+                  HALF_DAY_OPTIONS.map((o) => (
+                    <label key={o.value} className="flex items-center gap-1.5 text-content">
+                      <input
+                        type="radio"
+                        name="halfDayPeriod"
+                        value={o.value}
+                        checked={ePeriod === o.value}
+                        onChange={() => setEPeriod(o.value)}
+                        className="size-4"
+                      />
+                      {o.label}
+                    </label>
+                  ))}
               </div>
             )}
             <Field label="Reason">
@@ -446,34 +486,31 @@ export function LeaveDetailModal({
               </Field>
             </div>
             {eSingle && (
-              <div className="space-y-2">
-                <label className="flex items-center gap-2 text-sm text-content">
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
+                <label className="flex items-center gap-2 text-content">
                   <input
                     type="checkbox"
                     name="isHalfDay"
                     checked={eHalf}
                     onChange={(e) => setEHalf(e.target.checked)}
-                    className="size-4 rounded border-line-strong text-brand-600 focus:ring-brand-500"
+                    className="size-4"
                   />
                   Half day
                 </label>
-                {eHalf && (
-                  <div className="flex items-center gap-4 pl-6 text-sm">
-                    {HALF_DAY_OPTIONS.map((o) => (
-                      <label key={o.value} className="flex items-center gap-1.5 text-content">
-                        <input
-                          type="radio"
-                          name="halfDayPeriod"
-                          value={o.value}
-                          checked={ePeriod === o.value}
-                          onChange={() => setEPeriod(o.value)}
-                          className="size-4 border-line-strong text-brand-600 focus:ring-brand-500"
-                        />
-                        {o.label}
-                      </label>
-                    ))}
-                  </div>
-                )}
+                {eHalf &&
+                  HALF_DAY_OPTIONS.map((o) => (
+                    <label key={o.value} className="flex items-center gap-1.5 text-content">
+                      <input
+                        type="radio"
+                        name="halfDayPeriod"
+                        value={o.value}
+                        checked={ePeriod === o.value}
+                        onChange={() => setEPeriod(o.value)}
+                        className="size-4"
+                      />
+                      {o.label}
+                    </label>
+                  ))}
               </div>
             )}
             <Field label="Reason">

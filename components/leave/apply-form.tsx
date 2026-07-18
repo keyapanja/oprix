@@ -212,34 +212,31 @@ export function ApplyForm({
         </div>
 
         {singleDay && (
-          <div className="space-y-2">
-            <label className="flex items-center gap-2 text-sm text-content">
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
+            <label className="flex items-center gap-2 text-content">
               <input
                 type="checkbox"
                 name="isHalfDay"
                 checked={half}
                 onChange={(e) => setHalf(e.target.checked)}
-                className="size-4 rounded border-line-strong text-brand-600 focus:ring-brand-500"
+                className="size-4"
               />
               Half day
             </label>
-            {half && (
-              <div className="flex items-center gap-4 pl-6 text-sm">
-                {HALF_DAY_OPTIONS.map((o) => (
-                  <label key={o.value} className="flex items-center gap-1.5 text-content">
-                    <input
-                      type="radio"
-                      name="halfDayPeriod"
-                      value={o.value}
-                      checked={halfPeriod === o.value}
-                      onChange={() => setHalfPeriod(o.value)}
-                      className="size-4 border-line-strong text-brand-600 focus:ring-brand-500"
-                    />
-                    {o.label}
-                  </label>
-                ))}
-              </div>
-            )}
+            {half &&
+              HALF_DAY_OPTIONS.map((o) => (
+                <label key={o.value} className="flex items-center gap-1.5 text-content">
+                  <input
+                    type="radio"
+                    name="halfDayPeriod"
+                    value={o.value}
+                    checked={halfPeriod === o.value}
+                    onChange={() => setHalfPeriod(o.value)}
+                    className="size-4"
+                  />
+                  {o.label}
+                </label>
+              ))}
           </div>
         )}
 

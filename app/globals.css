@@ -206,6 +206,45 @@ input[type="checkbox"]:disabled {
   opacity: 0.5;
 }
 
+/* Branded radio — mirrors the checkbox (native, no forms plugin). Green when
+   checked, so radios match the brand green everywhere. Size comes from size-*. */
+input[type="radio"] {
+  appearance: none;
+  -webkit-appearance: none;
+  flex-shrink: 0;
+  display: inline-grid;
+  place-content: center;
+  border: 1.5px solid var(--line-strong);
+  border-radius: 9999px;
+  background-color: var(--surface);
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+input[type="radio"]::before {
+  content: "";
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 9999px;
+  transform: scale(0);
+  transition: transform 0.12s ease-in-out;
+  background-color: #fff;
+}
+input[type="radio"]:checked {
+  background-color: #059669;
+  border-color: #059669;
+}
+input[type="radio"]:checked::before {
+  transform: scale(1);
+}
+input[type="radio"]:focus-visible {
+  outline: 2px solid #10b981;
+  outline-offset: 2px;
+}
+input[type="radio"]:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 /* ---------------------------------------------------------------------------
    Pointer cursor on interactive controls. Browsers default <button> (so our
    tabs and the Combobox / select triggers) to the arrow cursor — switch them to
