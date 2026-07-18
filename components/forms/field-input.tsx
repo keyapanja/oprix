@@ -41,23 +41,30 @@ export function FieldInput({
   if (field.type === "paragraph") {
     return <p className="whitespace-pre-wrap text-sm text-muted">{field.label}</p>;
   }
-  // Single checkbox — the field's label is the caption beside the box (e.g. "Done").
+  // Single checkbox — label on top like every other field; the control is a
+  // larger checkbox inside an input-height box so it lines up in a row.
   if (field.type === "check") {
     const on = value === true || value === "true";
     return (
       <div>
-        <label className="flex items-start gap-2 text-sm text-content">
+        <label className="mb-1.5 block text-sm font-medium text-content">
+          {field.label}
+          {field.required && <span className="text-red-500"> *</span>}
+        </label>
+        <label
+          className={cn(
+            "flex h-10 items-center rounded-xl bg-surface px-3.5 shadow-sm ring-1 ring-inset ring-line-strong",
+            disabled ? "opacity-60" : "cursor-pointer",
+          )}
+        >
           <input
             type="checkbox"
             checked={on}
             onChange={(e) => onChange?.(e.target.checked)}
             disabled={disabled}
-            className="mt-0.5 size-4 rounded border-line-strong text-brand-600 focus:ring-brand-500"
+            aria-label={field.label}
+            className="size-5 rounded border-line-strong text-brand-600 focus:ring-brand-500"
           />
-          <span>
-            {field.label}
-            {field.required && <span className="text-red-500"> *</span>}
-          </span>
         </label>
         {field.helpText && <p className="mt-1 text-xs text-muted">{field.helpText}</p>}
         {error && <p className="mt-1 text-xs font-medium text-red-600 dark:text-red-400">{error}</p>}
