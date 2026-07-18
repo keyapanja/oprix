@@ -40,11 +40,14 @@ export function AttachmentsPanel({
   canEdit,
   initial,
   allowLinks = false,
+  onChange,
 }: {
   uploadUrl: string;
   canEdit: boolean;
   initial: Att[];
   allowLinks?: boolean;
+  /** Fires after a successful upload or delete (e.g. to flag "attachment changed"). */
+  onChange?: () => void;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -70,6 +73,7 @@ export function AttachmentsPanel({
         return false;
       }
       toast.success(okMsg);
+      onChange?.();
       router.refresh();
       return true;
     } catch {
@@ -122,6 +126,7 @@ export function AttachmentsPanel({
         toast.error(res.error);
       } else {
         toast.success("Attachment deleted");
+        onChange?.();
         router.refresh();
       }
     });

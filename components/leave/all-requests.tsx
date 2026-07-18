@@ -48,7 +48,9 @@ export function AllRequests({
   const [status, setStatus] = useState("");
   const [type, setType] = useState(""); // "" = all, "WFH", or a leaveTypeId
   const [sort, setSort] = useState<SortKey>("applied");
-  const [sel, setSel] = useState<LeaveDetail | null>(null);
+  // Track by id so an edit / attachment upload (router.refresh) updates the open modal.
+  const [selId, setSelId] = useState<string | null>(null);
+  const sel = selId ? requests.find((r) => r.id === selId) ?? null : null;
 
   const typeOptions = useMemo(
     () => [{ value: "WFH", label: "Work from home" }, ...leaveTypeOpts.map((t) => ({ value: t.id, label: t.name }))],
@@ -123,7 +125,7 @@ export function AllRequests({
               {filtered.map((r) => {
                 const s = STATUS_TONE[r.status] ?? STATUS_TONE.PENDING;
                 return (
-                  <tr key={r.id} className="cursor-pointer hover:bg-canvas" onClick={() => setSel(r)}>
+                  <tr key={r.id} className="cursor-pointer hover:bg-canvas" onClick={() => setSelId(r.id)}>
                     <td className="px-5 py-3 font-medium text-content">{r.employeeName}</td>
                     <td className="px-5 py-3">
                       {r.kind === "WFH" ? (
@@ -170,7 +172,7 @@ export function AllRequests({
           canApprove={canApprove}
           canEdit={false}
           leaveTypes={leaveTypeOpts}
-          onClose={() => setSel(null)}
+          onClose={() => setSelId(null)}
         />
       )}
     </div>

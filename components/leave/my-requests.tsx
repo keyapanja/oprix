@@ -22,7 +22,9 @@ export function MyRequests({
   requests: LeaveDetail[];
   leaveTypes: { id: string; name: string }[];
 }) {
-  const [sel, setSel] = useState<LeaveDetail | null>(null);
+  // Track by id so an edit / attachment upload (router.refresh) updates the open modal.
+  const [selId, setSelId] = useState<string | null>(null);
+  const sel = selId ? requests.find((r) => r.id === selId) ?? null : null;
 
   if (requests.length === 0) {
     return <p className="px-5 py-8 text-center text-sm text-muted">No requests yet.</p>;
@@ -44,7 +46,7 @@ export function MyRequests({
           {requests.map((r) => {
             const s = TONE[r.status] ?? TONE.PENDING;
             return (
-              <tr key={r.id} className="cursor-pointer hover:bg-canvas" onClick={() => setSel(r)}>
+              <tr key={r.id} className="cursor-pointer hover:bg-canvas" onClick={() => setSelId(r.id)}>
                 <td className="px-5 py-3">
                   {r.kind === "WFH" ? <Badge tone="blue">WFH</Badge> : <span className="font-medium text-content">{r.typeName ?? "Leave"}</span>}
                 </td>
@@ -85,7 +87,7 @@ export function MyRequests({
           canApprove={false}
           canEdit
           leaveTypes={leaveTypes}
-          onClose={() => setSel(null)}
+          onClose={() => setSelId(null)}
         />
       )}
     </>

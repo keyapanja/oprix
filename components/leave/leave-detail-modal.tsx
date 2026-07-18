@@ -23,6 +23,7 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { toast } from "@/components/ui/toast";
 import { confirmDialog } from "@/components/ui/confirm";
 import { AttachmentGrid } from "@/components/attachments/attachment-grid";
+import { AttachmentsPanel } from "@/components/attachments/attachments-panel";
 import { formatDate, formatDateTime } from "@/lib/format";
 
 export type LeaveDetail = {
@@ -49,6 +50,7 @@ export type LeaveDetail = {
     halfDayPeriod: string | null;
     days: number;
     reason: string | null;
+    attachmentChanged?: boolean;
   } | null;
   attachments: { id: string; fileName: string; mimeType: string | null }[];
 };
@@ -87,6 +89,9 @@ export function LeaveDetailModal({
   const [eType, setEType] = useState(req.leaveTypeId ?? "");
   const [eHalf, setEHalf] = useState(req.isHalfDay);
   const [ePeriod, setEPeriod] = useState<HalfDayPeriod>(req.halfDayPeriod === "SECOND" ? "SECOND" : "FIRST");
+  // Set when the viewer uploads/replaces an attachment — surfaced to the approver
+  // as part of the applicant's edit request.
+  const [attachmentTouched, setAttachmentTouched] = useState(false);
   const [eStatus, setEStatus] = useState(
     req.status === "PENDING" ? "PENDING" : req.status === "REJECTED" ? "REJECTED" : "HR_APPROVED",
   );
@@ -162,6 +167,9 @@ export function LeaveDetailModal({
   }
 
   const eSingle = !!eStart && eStart === eEnd;
+  // Attachments (medical certs etc.) can be uploaded/replaced by the applicant
+  // (while pending) or an approver, on a leave request.
+  const canUploadAttachment = req.kind === "LEAVE" && (canApprove || (canEdit && req.status === "PENDING"));
   const newType = req.pendingEdit?.leaveTypeId
     ? leaveTypes.find((t) => t.id === req.pendingEdit?.leaveTypeId)?.name ?? "—"
     : null;
@@ -213,12 +221,28 @@ export function LeaveDetailModal({
           )}
         </dl>
 
-        {req.attachments.length > 0 && (
+        {canUploadAttachment ? (
+          <div className="border-t border-line pt-3">
+            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-faint">Attachments</p>
+            <AttachmentsPanel
+              uploadUrl={`/api/leave/${req.id}/attachments`}
+              canEdit
+              onChange={() => setAttachmentTouched(true)}
+              initial={req.attachments.map((a) => ({
+                id: a.id,
+                fileName: a.fileName,
+                mimeType: a.mimeType,
+                sizeBytes: null,
+                createdAt: "",
+              }))}
+            />
+          </div>
+        ) : req.attachments.length > 0 ? (
           <div className="border-t border-line pt-3">
             <p className="mb-2 text-xs font-medium uppercase tracking-wide text-faint">Attachments</p>
             <AttachmentGrid items={req.attachments} />
           </div>
-        )}
+        ) : null}
 
         {req.pendingEdit && (
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-3.5 dark:border-amber-500/25 dark:bg-amber-500/10">
@@ -243,6 +267,12 @@ export function LeaveDetailModal({
                 <>
                   <dt className="text-amber-700/80 dark:text-amber-300/80">New reason</dt>
                   <dd className="col-span-2 whitespace-pre-wrap text-content">{req.pendingEdit.reason || "—"}</dd>
+                </>
+              )}
+              {req.pendingEdit.attachmentChanged && (
+                <>
+                  <dt className="text-amber-700/80 dark:text-amber-300/80">Attachment</dt>
+                  <dd className="col-span-2 font-medium text-content">Updated by the applicant</dd>
                 </>
               )}
             </dl>
@@ -385,8 +415,10 @@ export function LeaveDetailModal({
           <form action={formAction} className="space-y-3 border-t border-line pt-3">
             <p className="text-xs text-muted">
               Propose a change — it won&apos;t take effect until an approver accepts it.
+              {attachmentTouched && " Your attachment change is included."}
             </p>
             <input type="hidden" name="id" value={req.id} />
+            <input type="hidden" name="attachmentChanged" value={attachmentTouched ? "true" : "false"} />
             <div className="grid gap-3 sm:grid-cols-2">
               {req.kind === "LEAVE" && (
                 <Field label="Leave type" className="sm:col-span-2">

@@ -413,18 +413,31 @@ export async function deleteAttachment(attachmentId: string): Promise<ProjectSta
       OR: [
         { task: { project: { companyId: session.companyId } } },
         { project: { companyId: session.companyId } },
+        { leaveRequest: { companyId: session.companyId } },
       ],
     },
-    select: { id: true, fileKey: true, taskId: true, projectId: true },
+    select: {
+      id: true,
+      fileKey: true,
+      taskId: true,
+      projectId: true,
+      leaveRequestId: true,
+      leaveRequest: { select: { employeeId: true } },
+    },
   });
   if (!att) return { error: "Attachment not found" };
 
-  // Task attachments: anyone who can edit the task. Project attachments: project:manage.
+  // Task attachments: anyone who can edit the task. Project attachments:
+  // project:manage. Leave attachments: the applicant or a leave manager.
   if (att.taskId) {
     if (!(await canEditTask(session, att.taskId))) return { error: "No access" };
   } else if (att.projectId) {
     const canManage = await hasPermission(session.companyId, session.role, "project:manage");
     if (!canManage || !(await ownsProject(session.companyId, att.projectId))) return { error: "No access" };
+  } else if (att.leaveRequestId) {
+    const isOwner = !!session.employeeId && att.leaveRequest?.employeeId === session.employeeId;
+    const canManage = await hasPermission(session.companyId, session.role, "leave:manage");
+    if (!isOwner && !canManage) return { error: "No access" };
   } else {
     return { error: "No access" };
   }
@@ -433,6 +446,10 @@ export async function deleteAttachment(attachmentId: string): Promise<ProjectSta
   if (att.fileKey) await deleteUpload(att.fileKey); // link attachments have no file on disk
   if (att.taskId) revalidatePath(`/tasks/${att.taskId}`);
   if (att.projectId) revalidatePath(`/projects/${att.projectId}`);
+  if (att.leaveRequestId) {
+    revalidatePath("/leave");
+    revalidatePath("/leave/requests");
+  }
   return { ok: true };
 }
 

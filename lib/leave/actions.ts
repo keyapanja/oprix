@@ -253,7 +253,7 @@ const RequestSchema = z.object({
 export async function createLeaveRequest(
   _prev: LeaveState,
   formData: FormData,
-): Promise<LeaveState> {
+): Promise<LeaveState & { id?: string }> {
   const session = await requireCapability("leave:manage");
   const parsed = RequestSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
@@ -292,7 +292,7 @@ export async function createLeaveRequest(
     return { error: "This employee already has a request covering these dates." };
   }
 
-  await prisma.leaveRequest.create({
+  const created = await prisma.leaveRequest.create({
     data: {
       companyId: session.companyId,
       employeeId: d.employeeId,
@@ -305,9 +305,10 @@ export async function createLeaveRequest(
       reason: d.reason || null,
       status: "PENDING",
     },
+    select: { id: true },
   });
   revalidatePath(LEAVE);
-  return { ok: true };
+  return { ok: true, id: created.id };
 }
 
 /**
@@ -405,6 +406,7 @@ export type PendingEdit = {
   halfDayPeriod: string | null;
   days: number;
   reason: string | null;
+  attachmentChanged?: boolean;
 };
 
 const EditSchema = z.object({
@@ -413,6 +415,7 @@ const EditSchema = z.object({
   leaveTypeId: z.string().optional().or(z.literal("")),
   isHalfDay: z.string().optional(),
   halfDayPeriod: z.string().optional(),
+  attachmentChanged: z.string().optional(),
   reason: z.string().trim().max(300).optional().or(z.literal("")),
 });
 
@@ -459,6 +462,7 @@ export async function requestLeaveEdit(_prev: LeaveState, formData: FormData): P
     halfDayPeriod: isHalfDay ? parseHalfDayPeriod(d.halfDayPeriod) : null,
     days,
     reason: d.reason || null,
+    attachmentChanged: d.attachmentChanged === "true",
   };
 
   await prisma.leaveRequest.update({
