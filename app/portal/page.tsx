@@ -13,6 +13,8 @@ import { Icon } from "@/components/ui/icons";
 import { ProjectCard } from "@/components/portal/project-card";
 import { ReviewControls } from "@/components/portal/review-controls";
 import { DeliverableCard } from "@/components/portal/deliverable-card";
+import { ClientTaskForm } from "@/components/portal/client-task-form";
+import { getProjectManager } from "@/lib/portal/manager";
 
 export const metadata: Metadata = { title: "Overview · Client Portal" };
 
@@ -47,16 +49,25 @@ export default async function PortalHomePage() {
   const pendingDeliverables = deliverables.filter((d) => d.status === "SUBMITTED");
   const awaiting = pendingTasks.length + pendingDeliverables.length;
 
+  // The client's projects + their Business Manager, for the "Raise a task" launcher.
+  const bms = await Promise.all(projects.map((p) => getProjectManager(p.id)));
+  const projectsWithBm = projects.map((p, i) => ({ id: p.id, name: p.name, bmName: bms[i]?.name ?? null }));
+
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-content">Welcome back</h1>
-        <p className="mt-1 text-sm text-muted">
-          {awaiting > 0
-            ? `You have ${awaiting} item${awaiting > 1 ? "s" : ""} awaiting your review.`
-            : "You're all caught up — nothing needs your review right now."}
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-content">Welcome back</h1>
+          <p className="mt-1 text-sm text-muted">
+            {awaiting > 0
+              ? `You have ${awaiting} item${awaiting > 1 ? "s" : ""} awaiting your review.`
+              : "You're all caught up — nothing needs your review right now."}
+          </p>
+        </div>
       </div>
+
+      {/* "Raise a task" launcher — a button that expands into the full-width form. */}
+      {projectsWithBm.length > 0 && <ClientTaskForm projects={projectsWithBm} />}
 
       <div className="grid gap-4 sm:grid-cols-3">
         <StatCard icon="briefcase" label="Projects" value={summary.projectCount} />

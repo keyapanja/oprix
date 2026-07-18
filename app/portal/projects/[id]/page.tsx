@@ -95,7 +95,10 @@ export default async function PortalProjectDetailPage({ params }: { params: Prom
             <span className="text-faint">No Business Manager assigned to this project yet.</span>
           )}
         </p>
-        <ClientTaskForm projectId={project.id} projectName={project.name} bmName={bm?.name ?? null} />
+        <ClientTaskForm
+          projects={[{ id: project.id, name: project.name, bmName: bm?.name ?? null }]}
+          fixedProjectId={project.id}
+        />
       </div>
 
       {/* Tasks you and your manager are working on */}
