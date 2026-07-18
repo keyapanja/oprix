@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { NAV, NAV_SOON } from "@/lib/nav";
+import { NAV, NAV_SOON, type NavChild } from "@/lib/nav";
 import { Icon } from "@/components/ui/icons";
 import { cn } from "@/lib/cn";
 
@@ -14,11 +14,14 @@ export function Sidebar({
   allowed,
   isSuperAdmin,
   isEmployee,
+  menuForms,
   company,
 }: {
   allowed: string[];
   isSuperAdmin: boolean;
   isEmployee: boolean;
+  /** Forms pinned into the sidebar (Form.inMenu) — shown under the Forms item. */
+  menuForms: { id: string; title: string }[];
   company: { name: string; tagline: string | null; logoUrl: string | null };
 }) {
   const pathname = usePathname();
@@ -127,9 +130,15 @@ export function Sidebar({
           // but usePathname() returns just the path, so compare against that.
           const itemPath = item.href.split("?")[0];
           const active = pathname === itemPath || pathname.startsWith(itemPath + "/");
-          const children = (item.children ?? []).filter(
+          const baseChildren = (item.children ?? []).filter(
             (c) => (!c.action || allowed.includes(c.action)) && (!c.employeeOnly || isEmployee),
           );
+          // Forms pinned "into the menu" appear as sub-items linking to their entries.
+          const pinned: NavChild[] =
+            item.href === "/forms"
+              ? menuForms.map((f) => ({ label: f.title, href: `/forms/${f.id}/entries`, icon: "chart" }))
+              : [];
+          const children = [...baseChildren, ...pinned];
           const hasChildren = children.length > 0;
           const open = !collapsed && hasChildren && isOpen(item.href, active);
           return (

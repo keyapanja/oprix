@@ -25,6 +25,7 @@ export default async function EditFormPage({ params }: { params: Promise<{ id: s
         viewAllRoles: form.viewAllRoles,
         portalEnabled: form.portalEnabled,
         allowMultiple: form.allowMultiple,
+        inMenu: form.inMenu,
         notifyEnabled: form.notifyEnabled,
         notifySchedule: parseSchedule(form.notifySchedule),
       }}

@@ -51,6 +51,7 @@ type Initial = {
   viewAllRoles: string[];
   portalEnabled: boolean;
   allowMultiple: boolean;
+  inMenu: boolean;
   notifyEnabled: boolean;
   notifySchedule: FormNotifySchedule | null;
 };
@@ -145,6 +146,7 @@ export function FormBuilder({ initial }: { initial: Initial }) {
   const [viewAllRoles, setViewAllRoles] = useState<string[]>(initial.viewAllRoles);
   const [portalEnabled, setPortalEnabled] = useState(initial.portalEnabled);
   const [allowMultiple, setAllowMultiple] = useState(initial.allowMultiple);
+  const [inMenu, setInMenu] = useState(initial.inMenu);
   const [defaultGroupBy, setDefaultGroupBy] = useState(initial.schema.defaultGroupBy ?? "");
   const [notifyEnabled, setNotifyEnabled] = useState(initial.notifyEnabled);
   const [notifyFreq, setNotifyFreq] = useState<ScheduleFrequency>(initial.notifySchedule?.frequency ?? "WEEKLY");
@@ -242,6 +244,7 @@ export function FormBuilder({ initial }: { initial: Initial }) {
         viewAllRoles,
         portalEnabled,
         allowMultiple,
+        inMenu,
         status,
         notifyEnabled,
         notifySchedule,
@@ -425,6 +428,21 @@ export function FormBuilder({ initial }: { initial: Initial }) {
                     type="checkbox"
                     checked={allowMultiple}
                     onChange={(e) => setAllowMultiple(e.target.checked)}
+                    className="size-4 rounded border-line-strong text-brand-600 focus:ring-brand-500"
+                  />
+                </label>
+
+                <label className="flex items-center justify-between border-t border-line pt-3 text-sm text-content">
+                  <span>
+                    Add into menu
+                    <span className="mt-0.5 block text-xs font-normal text-muted">
+                      Pin this form&apos;s entries under Forms in the sidebar.
+                    </span>
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={inMenu}
+                    onChange={(e) => setInMenu(e.target.checked)}
                     className="size-4 rounded border-line-strong text-brand-600 focus:ring-brand-500"
                   />
                 </label>

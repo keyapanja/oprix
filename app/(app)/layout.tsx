@@ -6,6 +6,7 @@ import { getActiveTimers } from "@/lib/timer/data";
 import { sendEventReminders } from "@/lib/calendar/reminders";
 import { sendFormReminders } from "@/lib/forms/notify-cron";
 import { runRecurringTasks } from "@/lib/tasks/recurring-cron";
+import { listMenuForms } from "@/lib/forms/data";
 import { Sidebar } from "@/components/shell/sidebar";
 import { Topbar } from "@/components/shell/topbar";
 import { TimerBar } from "@/components/timer/timer-bar";
@@ -26,7 +27,7 @@ export default async function AppLayout({
   if (session.role === "CLIENT") redirect("/portal");
 
   // One parallel batch for the whole shell instead of several sequential queries.
-  const [allowed, notifications, unread, activeTimers, company, me] = await Promise.all([
+  const [allowed, notifications, unread, activeTimers, company, me, menuForms] = await Promise.all([
     listPermissions(session.companyId, session.role),
     prisma.notification.findMany({
       where: { userId: session.userId },
@@ -52,6 +53,7 @@ export default async function AppLayout({
       where: { id: session.userId },
       select: { nickname: true, avatarUrl: true, employee: { select: { fullName: true } } },
     }),
+    listMenuForms(session),
   ]);
 
   // Day-before holiday/announcement reminders (lazy — there's no in-app cron, so
@@ -98,6 +100,7 @@ export default async function AppLayout({
         allowed={allowed}
         isSuperAdmin={session.role === "SUPER_ADMIN"}
         isEmployee={!!session.employeeId}
+        menuForms={menuForms}
         company={{
           name: company?.name ?? "Oprix",
           tagline: company?.tagline || company?.businessType || null,

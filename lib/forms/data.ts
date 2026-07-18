@@ -51,6 +51,24 @@ export async function listFormsForUser(
   };
 }
 
+/** Forms whose author pinned them into the sidebar (Form.inMenu). Managers see
+ *  all pinned forms; everyone else only pinned+published forms in their audience.
+ *  Drives the "Forms" nav sub-items — each links to the form's entries page. */
+export async function listMenuForms(session: SessionUser): Promise<{ id: string; title: string }[]> {
+  const canManage = await canManageForms(session);
+  const rows = await prisma.form.findMany({
+    where: {
+      companyId: session.companyId,
+      deletedAt: null,
+      inMenu: true,
+      ...(canManage ? {} : { status: "PUBLISHED", audienceRoles: { has: session.role } }),
+    },
+    orderBy: { title: "asc" },
+    select: { id: true, title: true },
+  });
+  return rows.map((f) => ({ id: f.id, title: f.title }));
+}
+
 /** Full form for the builder — manager-only. Returns null if not allowed/found. */
 export async function getFormForManage(session: SessionUser, id: string) {
   if (!(await canManageForms(session))) return null;

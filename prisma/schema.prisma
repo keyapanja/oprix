@@ -1124,6 +1124,7 @@ model Form {
   viewAllRoles  Role[]     @default([])
   portalEnabled Boolean    @default(false)
   allowMultiple Boolean    @default(true) // can one person submit more than once?
+  inMenu        Boolean    @default(false) // pin the entries page as a sidebar sub-item under Forms
   // Scheduled "please fill this out" reminders to the audience roles.
   notifyEnabled    Boolean @default(false)
   notifySchedule   Json? // { frequency, time, weekday?, monthday?, date? } — see lib/forms/schedule.ts
