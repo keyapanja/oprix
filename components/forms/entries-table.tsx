@@ -106,7 +106,17 @@ export function EntriesTable({
         renderCell:
           f.type === "dropdown" && f.chips
             ? (r) => <OptionChip field={f} value={answerToText(f, r.data[f.id])} />
-            : undefined,
+            : f.type === "check"
+              ? (r) => (
+                  <input
+                    type="checkbox"
+                    checked={r.data[f.id] === true || r.data[f.id] === "true"}
+                    readOnly
+                    aria-label={answerToText(f, r.data[f.id])}
+                    className="pointer-events-none size-4 rounded border-line-strong text-brand-600"
+                  />
+                )
+              : undefined,
       });
     }
     if (showSubmitter)

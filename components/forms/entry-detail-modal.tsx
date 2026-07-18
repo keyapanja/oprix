@@ -71,6 +71,18 @@ function ViewValue({ field, value }: { field: FieldDef; value: unknown }) {
     return s ? <OptionChip field={field} value={s} /> : <span className="text-sm text-muted">—</span>;
   }
 
+  if (field.type === "check") {
+    return (
+      <input
+        type="checkbox"
+        checked={value === true || value === "true"}
+        readOnly
+        aria-label={answerToText(field, value)}
+        className="pointer-events-none size-4 rounded border-line-strong text-brand-600"
+      />
+    );
+  }
+
   const text = answerToText(field, value);
   return <span className="whitespace-pre-wrap break-words text-sm text-content">{text || "—"}</span>;
 }
