@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { deleteSubmission } from "@/lib/forms/actions";
+import { deleteSubmission, toggleSubmissionCheck } from "@/lib/forms/actions";
 import { answerToText, isInputField, type FieldDef, type Lookups } from "@/lib/forms/types";
 import { EntryDetailModal } from "@/components/forms/entry-detail-modal";
 import { OptionChip } from "@/components/forms/option-chip";
@@ -108,12 +108,12 @@ export function EntriesTable({
             ? (r) => <OptionChip field={f} value={answerToText(f, r.data[f.id])} />
             : f.type === "check"
               ? (r) => (
-                  <input
-                    type="checkbox"
+                  <CheckCell
+                    submissionId={r.id}
+                    fieldId={f.id}
+                    label={f.label}
                     checked={r.data[f.id] === true || r.data[f.id] === "true"}
-                    readOnly
-                    aria-label={answerToText(f, r.data[f.id])}
-                    className="pointer-events-none size-4 rounded border-line-strong text-brand-600"
+                    editable={canDeleteAny || r.mine}
                   />
                 )
               : undefined,
@@ -123,7 +123,7 @@ export function EntriesTable({
       list.push({ key: "__submitter", label: "Submitted by", display: (r) => r.submitterName, sortVal: (r) => r.submitterName.toLowerCase() });
     list.push({ key: "__date", label: "Date", display: (r) => new Date(r.createdAt).toLocaleString(), sortVal: (r) => r.createdAt });
     return list;
-  }, [inputCols, showSubmitter]);
+  }, [inputCols, showSubmitter, canDeleteAny]);
 
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
@@ -401,5 +401,64 @@ export function EntriesTable({
       />
     )}
     </>
+  );
+}
+
+/** A single-checkbox entry cell. Read-only for viewers; for a manager or the
+ *  submitter it toggles + auto-saves in place (optimistic; history captured). */
+function CheckCell({
+  submissionId,
+  fieldId,
+  label,
+  checked,
+  editable,
+}: {
+  submissionId: string;
+  fieldId: string;
+  label: string;
+  checked: boolean;
+  editable: boolean;
+}) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [on, setOn] = useState(checked);
+  // Re-sync when the row refreshes with server-confirmed data.
+  useEffect(() => setOn(checked), [checked]);
+
+  if (!editable) {
+    return (
+      <input
+        type="checkbox"
+        checked={checked}
+        readOnly
+        aria-label={label}
+        className="pointer-events-none size-4 rounded border-line-strong text-brand-600"
+      />
+    );
+  }
+
+  return (
+    <input
+      type="checkbox"
+      checked={on}
+      disabled={pending}
+      aria-label={label}
+      title={`Toggle ${label}`}
+      onClick={(e) => e.stopPropagation()}
+      onChange={(e) => {
+        const next = e.target.checked;
+        setOn(next);
+        start(async () => {
+          const res = await toggleSubmissionCheck(submissionId, fieldId, next);
+          if (res.error) {
+            setOn(!next); // revert on failure
+            toast.error(res.error);
+            return;
+          }
+          router.refresh();
+        });
+      }}
+      className="size-4 cursor-pointer rounded border-line-strong text-brand-600 focus:ring-brand-500 disabled:opacity-50"
+    />
   );
 }

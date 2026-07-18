@@ -286,6 +286,53 @@ export async function getSubmissionHistory(id: string): Promise<SubmissionEvent[
   });
 }
 
+/** Toggle a single-checkbox (`check`) field straight from the entries table.
+ *  Surgical — touches only that field (no full re-validation), stamps the edit,
+ *  and records the same before→after diff in the history. Manager or submitter. */
+export async function toggleSubmissionCheck(
+  id: string,
+  fieldId: string,
+  value: boolean,
+): Promise<FormActionState> {
+  const session = await getSession();
+  if (!session) return { error: "Not authenticated." };
+  const sub = await prisma.formSubmission.findFirst({
+    where: { id, companyId: session.companyId, deletedAt: null },
+    select: { id: true, formId: true, submittedByUserId: true, data: true, form: { select: { schema: true } } },
+  });
+  if (!sub) return { error: "Entry not found." };
+
+  const manage = await canManageForms(session);
+  if (!manage && sub.submittedByUserId !== session.userId) {
+    return { error: "You can't edit this entry." };
+  }
+
+  const field = parseSchema(sub.form.schema).fields.find((f) => f.id === fieldId);
+  if (!field || field.type !== "check") return { error: "Field not found." };
+
+  const data = (sub.data && typeof sub.data === "object" ? { ...(sub.data as Record<string, unknown>) } : {}) as Record<string, unknown>;
+  const from = answerToText(field, data[fieldId]);
+  data[fieldId] = value === true;
+  const to = answerToText(field, data[fieldId]);
+  if (from === to) return { ok: true }; // already in that state — no-op
+
+  await prisma.formSubmission.update({
+    where: { id },
+    data: { data: asJson(data), editedAt: new Date(), editedById: session.userId },
+  });
+  await logActivity({
+    companyId: session.companyId,
+    actorId: session.userId,
+    actorLabel: await actorLabel(session.userId),
+    entityType: "FORM_SUBMISSION",
+    entityId: id,
+    message: "Updated the entry",
+    meta: { changes: [{ label: field.label, from, to }] },
+  });
+  revalidatePath(`/forms/${sub.formId}/entries`);
+  return { ok: true };
+}
+
 /** Delete an entry — a form manager, or the person who submitted it. */
 export async function deleteSubmission(id: string): Promise<FormActionState> {
   const session = await getSession();
