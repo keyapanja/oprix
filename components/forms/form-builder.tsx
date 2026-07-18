@@ -104,7 +104,9 @@ function SortableField({
   onSelect: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: field.id });
-  const style = { transform: CSS.Transform.toString(transform), transition };
+  // Translate only — CSS.Transform adds scaleX/scaleY to morph between different-
+  // sized fields, which stretches the card's content on the variable-width grid.
+  const style = { transform: CSS.Translate.toString(transform), transition };
   return (
     // The whole card is the drag handle (grab anywhere to reorder); a click that
     // doesn't move selects the field for editing. dnd-kit's 5px activation
