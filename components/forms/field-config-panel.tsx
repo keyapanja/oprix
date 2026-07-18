@@ -4,7 +4,7 @@ import { Input, Textarea } from "@/components/ui/input";
 import { Combobox } from "@/components/ui/combobox";
 import { Icon } from "@/components/ui/icons";
 import { cn } from "@/lib/cn";
-import { hasOptions, isInputField, newId, type CondOp, type FieldDef, type FieldOption, type RefSource } from "@/lib/forms/types";
+import { hasOptions, isInputField, newId, WIDTH_OPTIONS, type CondOp, type FieldDef, type FieldOption, type RefSource } from "@/lib/forms/types";
 import { RepeaterFieldsEditor } from "@/components/forms/repeater-fields-editor";
 import { FormulaEditor } from "@/components/forms/formula-editor";
 
@@ -287,23 +287,36 @@ export function FieldConfigPanel({
               />
             </label>
           )}
-          <div className="flex items-center justify-between text-sm text-content">
+          <div className="space-y-1.5 text-sm text-content">
             <span>Width</span>
-            <div className="flex gap-1">
-              {(["full", "half"] as const).map((w) => (
-                <button
-                  key={w}
-                  onClick={() => onChange({ width: w })}
-                  className={cn(
-                    "rounded-lg px-2.5 py-1 text-xs font-medium capitalize ring-1 ring-inset",
-                    (field.width ?? "full") === w
-                      ? "bg-accent-soft text-accent-strong ring-brand-500/30"
-                      : "bg-canvas text-muted ring-line hover:text-content",
-                  )}
-                >
-                  {w}
-                </button>
-              ))}
+            <div className="grid grid-cols-4 gap-1.5">
+              {WIDTH_OPTIONS.map((w) => {
+                const active = (field.width ?? "full") === w.value;
+                return (
+                  <button
+                    key={w.value}
+                    type="button"
+                    onClick={() => onChange({ width: w.value })}
+                    title={w.title}
+                    aria-pressed={active}
+                    className={cn(
+                      "flex flex-col items-center gap-1.5 rounded-lg px-1.5 py-2 ring-1 ring-inset transition-colors",
+                      active
+                        ? "bg-accent-soft text-accent-strong ring-brand-500/40"
+                        : "bg-canvas text-muted ring-line hover:text-content hover:ring-line-strong",
+                    )}
+                  >
+                    {/* Proportion glyph — a track filled to the field's share of a row. */}
+                    <span className="flex h-3.5 w-full overflow-hidden rounded-sm bg-line">
+                      <span
+                        className={cn("h-full rounded-sm transition-all", active ? "bg-brand-500" : "bg-faint")}
+                        style={{ width: w.pct }}
+                      />
+                    </span>
+                    <span className="text-xs font-semibold leading-none">{w.label}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>

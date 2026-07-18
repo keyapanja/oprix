@@ -6,8 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icons";
 import { toast } from "@/components/ui/toast";
 import { FieldInput, type FieldValue } from "@/components/forms/field-input";
-import { computeCalc, formatCalc, isInputField, isVisible, type FieldDef, type Lookups } from "@/lib/forms/types";
-import { cn } from "@/lib/cn";
+import { computeCalc, formatCalc, isInputField, isVisible, WIDTH_SPAN_CLASS, type FieldDef, type Lookups } from "@/lib/forms/types";
 
 type SubmitResult = { ok?: boolean; error?: string; fieldErrors?: Record<string, string> };
 
@@ -90,11 +89,11 @@ export function FormFill({
       {fields.length === 0 ? (
         <p className="mt-6 text-sm text-muted">This form has no fields yet.</p>
       ) : (
-        <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="mt-5 grid grid-cols-1 items-start gap-4 sm:grid-cols-12">
           {fields
             .filter((f) => isVisible(f, values as Record<string, unknown>))
             .map((f) => (
-            <div key={f.id} className={cn((f.width ?? "full") === "half" ? "sm:col-span-1" : "sm:col-span-2")}>
+            <div key={f.id} className={WIDTH_SPAN_CLASS[f.width ?? "full"]}>
               <FieldInput
                 field={f}
                 value={
@@ -108,7 +107,7 @@ export function FormFill({
               />
             </div>
           ))}
-          <div className="sm:col-span-2">
+          <div className="sm:col-span-12">
             <Button onClick={submit} disabled={pending}>
               {pending ? "Submitting…" : "Submit"}
             </Button>

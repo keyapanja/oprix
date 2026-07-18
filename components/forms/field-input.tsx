@@ -5,7 +5,7 @@ import { Combobox } from "@/components/ui/combobox";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Icon } from "@/components/ui/icons";
 import { cn } from "@/lib/cn";
-import { addDaysISO, computeCalc, formatCalc, isVisible } from "@/lib/forms/types";
+import { addDaysISO, computeCalc, formatCalc, isVisible, WIDTH_SPAN_CLASS } from "@/lib/forms/types";
 import type { FieldDef, FieldValue, Lookups, RepeaterRows, ScalarValue } from "@/lib/forms/types";
 
 export type { FieldValue } from "@/lib/forms/types";
@@ -227,11 +227,11 @@ export function FieldInput({
                   </button>
                 )}
               </div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-12">
                 {subs
                   .filter((sf) => isVisible(sf, row as Record<string, unknown>))
                   .map((sf) => (
-                  <div key={sf.id} className={cn((sf.width ?? "full") === "half" ? "sm:col-span-1" : "sm:col-span-2")}>
+                  <div key={sf.id} className={WIDTH_SPAN_CLASS[sf.width ?? "full"]}>
                     <FieldInput
                       field={sf}
                       value={sf.type === "calculation" ? formatCalc(sf, computeCalc(sf, subs, row as Record<string, unknown>)) : row[sf.id]}

@@ -14,11 +14,12 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
-import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { SortableContext, arrayMove, useSortable, rectSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { updateForm } from "@/lib/forms/actions";
 import {
   FIELD_CATALOG,
+  WIDTH_SPAN_CLASS,
   fieldMeta,
   isInputField,
   makeField,
@@ -116,6 +117,7 @@ function SortableField({
       {...listeners}
       className={cn(
         "cursor-grab touch-none rounded-xl border bg-surface p-4 transition-shadow active:cursor-grabbing",
+        WIDTH_SPAN_CLASS[field.width ?? "full"],
         selected ? "border-brand-500 ring-1 ring-brand-500" : "border-line hover:border-line-strong",
         isDragging && "opacity-50 shadow-card-hover",
       )}
@@ -302,16 +304,18 @@ export function FormBuilder({ initial }: { initial: Initial }) {
                 placeholder="Untitled form"
                 className="w-full bg-transparent text-xl font-semibold text-content placeholder:text-faint focus:outline-none"
               />
-              <div className="mt-4 space-y-3">
+              <div className="mt-4">
                 {fields.length === 0 ? (
                   <div className="rounded-xl border-2 border-dashed border-line py-16 text-center text-sm text-muted">
                     Drag a field here, or click one from the left to start building.
                   </div>
                 ) : (
-                  <SortableContext items={fields.map((f) => f.id)} strategy={verticalListSortingStrategy}>
-                    {fields.map((f) => (
-                      <SortableField key={f.id} field={f} selected={f.id === selectedId} onSelect={() => select(f.id)} />
-                    ))}
+                  <SortableContext items={fields.map((f) => f.id)} strategy={rectSortingStrategy}>
+                    <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-12">
+                      {fields.map((f) => (
+                        <SortableField key={f.id} field={f} selected={f.id === selectedId} onSelect={() => select(f.id)} />
+                      ))}
+                    </div>
                   </SortableContext>
                 )}
               </div>

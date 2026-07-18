@@ -7,6 +7,7 @@ import { FormulaEditor } from "@/components/forms/formula-editor";
 import { cn } from "@/lib/cn";
 import {
   REPEATER_SUBTYPES,
+  WIDTH_OPTIONS,
   fieldMeta,
   makeField,
   newId,
@@ -105,18 +106,21 @@ export function RepeaterFieldsEditor({
                 </label>
               )}
               <div className="ml-auto flex gap-1">
-                {(["full", "half"] as const).map((w) => (
+                {WIDTH_OPTIONS.map((w) => (
                   <button
-                    key={w}
-                    onClick={() => update(i, { width: w })}
+                    key={w.value}
+                    type="button"
+                    onClick={() => update(i, { width: w.value })}
+                    title={w.title}
+                    aria-pressed={(sf.width ?? "full") === w.value}
                     className={cn(
-                      "rounded px-2 py-0.5 capitalize ring-1 ring-inset",
-                      (sf.width ?? "full") === w
+                      "rounded px-2 py-0.5 font-medium ring-1 ring-inset",
+                      (sf.width ?? "full") === w.value
                         ? "bg-accent-soft text-accent-strong ring-brand-500/30"
-                        : "bg-canvas text-muted ring-line",
+                        : "bg-canvas text-muted ring-line hover:text-content",
                     )}
                   >
-                    {w}
+                    {w.label}
                   </button>
                 ))}
               </div>

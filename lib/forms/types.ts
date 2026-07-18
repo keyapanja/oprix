@@ -36,6 +36,28 @@ export type FieldOption = { id: string; label: string };
 export type CondOp = "eq" | "neq" | "gt" | "lt" | "contains" | "empty" | "notEmpty";
 export type Condition = { fieldId: string; op: CondOp; value?: string };
 
+/** How much of a row a field occupies. Forms lay out on a 12-column grid, so
+ *  these map to quarter / third / half / full. Legacy values ("full"/"half")
+ *  keep working unchanged. */
+export type FieldWidth = "quarter" | "third" | "half" | "full";
+
+/** Tailwind col-span in the 12-col form grid. Literal strings so Tailwind's JIT
+ *  scanner can see them (never build these class names dynamically). */
+export const WIDTH_SPAN_CLASS: Record<FieldWidth, string> = {
+  quarter: "sm:col-span-3",
+  third: "sm:col-span-4",
+  half: "sm:col-span-6",
+  full: "sm:col-span-12",
+};
+
+/** Options for the builder's width picker — glyph, fill %, and tooltip. */
+export const WIDTH_OPTIONS: { value: FieldWidth; label: string; pct: string; title: string }[] = [
+  { value: "quarter", label: "¼", pct: "25%", title: "Quarter width (25%)" },
+  { value: "third", label: "⅓", pct: "33%", title: "Third width (33%)" },
+  { value: "half", label: "½", pct: "50%", title: "Half width (50%)" },
+  { value: "full", label: "Full", pct: "100%", title: "Full width (100%)" },
+];
+
 export type FieldDef = {
   id: string; // stable key — used in submission data; never reused
   type: FieldType;
@@ -54,7 +76,7 @@ export type FieldDef = {
   max?: number | null; // number
   maxLength?: number | null; // text / textarea
   rangeDays?: number | null; // daterange: auto-fill end = start + (rangeDays - 1); locks the end
-  width?: "full" | "half";
+  width?: FieldWidth;
 };
 
 export type FormSchema = {
@@ -199,7 +221,7 @@ const FieldDefZ: z.ZodType<FieldDef> = z.lazy(() =>
     max: z.number().nullable().optional(),
     maxLength: z.number().int().positive().nullable().optional(),
     rangeDays: z.number().int().positive().max(3650).nullable().optional(),
-    width: z.enum(["full", "half"]).optional(),
+    width: z.enum(["quarter", "third", "half", "full"]).optional(),
   }),
 );
 
