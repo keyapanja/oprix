@@ -230,9 +230,7 @@ export function EntriesTable({
     </thead>
   );
 
-  const body = (data: Row[], columns: Col[]) => (
-    <tbody className="divide-y divide-line">
-      {data.map((r) => (
+  const renderRow = (r: Row, columns: Col[]) => (
         <tr key={r.id} onClick={() => setView(r)} className="cursor-pointer hover:bg-canvas">
           {columns.map((c) => (
             <td
@@ -284,8 +282,10 @@ export function EntriesTable({
             )}
           </td>
         </tr>
-      ))}
-    </tbody>
+  );
+
+  const body = (data: Row[], columns: Col[]) => (
+    <tbody className="divide-y divide-line">{data.map((r) => renderRow(r, columns))}</tbody>
   );
 
   return (
@@ -321,37 +321,39 @@ export function EntriesTable({
       {total === 0 ? (
         <p className="px-5 py-16 text-center text-sm text-muted">No entries here.</p>
       ) : effectiveGroup ? (
-        <div className="divide-y divide-line">
-          {groups.map(([gval, grows]) => {
-            const open = !collapsed.has(gval);
-            return (
-              <div key={gval}>
-                <button
-                  onClick={() =>
-                    setCollapsed((s) => {
-                      const n = new Set(s);
-                      if (n.has(gval)) n.delete(gval);
-                      else n.add(gval);
-                      return n;
-                    })
-                  }
-                  className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm font-medium text-content hover:bg-canvas"
-                >
-                  <Icon name="chevronDown" className={cn("size-4 text-faint transition-transform", !open && "-rotate-90")} />
-                  <span className="truncate">{gval}</span>
-                  <span className="text-xs text-muted">({grows.length})</span>
-                </button>
-                {open && (
-                  <div className="overflow-x-auto border-t border-line">
-                    <table className="w-full text-left text-sm">
-                      {header(false, groupedCols)}
-                      {body(grows, groupedCols)}
-                    </table>
-                  </div>
-                )}
-              </div>
-            );
-          })}
+        // One table for every group → a single horizontal scrollbar and columns
+        // that line up across groups. Group titles are full-width rows.
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            {header(false, groupedCols)}
+            {groups.map(([gval, grows]) => {
+              const open = !collapsed.has(gval);
+              return (
+                <tbody key={gval} className="divide-y divide-line border-t border-line">
+                  <tr>
+                    <td colSpan={groupedCols.length + 1} className="p-0">
+                      <button
+                        onClick={() =>
+                          setCollapsed((s) => {
+                            const n = new Set(s);
+                            if (n.has(gval)) n.delete(gval);
+                            else n.add(gval);
+                            return n;
+                          })
+                        }
+                        className="flex w-full items-center gap-2 bg-canvas/40 px-4 py-2.5 text-left text-sm font-medium text-content hover:bg-canvas"
+                      >
+                        <Icon name="chevronDown" className={cn("size-4 text-faint transition-transform", !open && "-rotate-90")} />
+                        <span className="truncate">{gval}</span>
+                        <span className="text-xs text-muted">({grows.length})</span>
+                      </button>
+                    </td>
+                  </tr>
+                  {open && grows.map((r) => renderRow(r, groupedCols))}
+                </tbody>
+              );
+            })}
+          </table>
         </div>
       ) : (
         <>
