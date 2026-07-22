@@ -135,7 +135,13 @@ export function noteHref(type: string, meta: unknown): string | null {
     return typeof m.taskId === "string" ? `/tasks/${m.taskId}` : "/tasks";
   }
   if (cat === "Attendance") return "/dashboard";
-  if (cat === "Leave") return "/leave";
+  if (cat === "Leave") {
+    // Open the specific request's detail popup: approvers land on the all-requests
+    // page, the applicant on their own list.
+    const id = typeof m.leaveRequestId === "string" ? m.leaveRequestId : null;
+    if (!id) return "/leave";
+    return `${m.list === "manage" ? "/leave/requests" : "/leave"}?req=${id}`;
+  }
   if (cat === "Announcements") {
     return typeof m.announcementId === "string" ? `/announcements/${m.announcementId}` : "/calendar";
   }

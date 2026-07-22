@@ -22,7 +22,12 @@ const REQUEST_SELECT = {
   employee: { select: { fullName: true } },
 } as const;
 
-export default async function LeaveRequestsPage() {
+export default async function LeaveRequestsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ req?: string }>;
+}) {
+  const sp = await searchParams;
   // Manager-only — the full company request list.
   const session = await requirePage("leave:manage");
   const companyId = session.companyId;
@@ -86,7 +91,7 @@ export default async function LeaveRequestsPage() {
         description="Every employee's leave & WFH requests — search, filter, sort, and approve."
         action={<AddLeaveButton employees={employees.map((e) => ({ id: e.id, name: e.fullName }))} leaveTypes={leaveTypeOpts} />}
       />
-      <AllRequests requests={details} canApprove={canApprove} leaveTypeOpts={leaveTypeOpts} />
+      <AllRequests requests={details} canApprove={canApprove} leaveTypeOpts={leaveTypeOpts} initialReqId={sp.req} />
     </div>
   );
 }

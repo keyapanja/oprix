@@ -18,12 +18,16 @@ const TONE: Record<string, { tone: "gray" | "blue" | "green" | "red"; label: str
 export function MyRequests({
   requests,
   leaveTypes,
+  initialReqId,
 }: {
   requests: LeaveDetail[];
   leaveTypes: { id: string; name: string; attachmentEnabled?: boolean }[];
+  /** From a notification deep-link (?req=<id>) — opens that request's popup. */
+  initialReqId?: string;
 }) {
-  // Track by id so an edit / attachment upload (router.refresh) updates the open modal.
-  const [selId, setSelId] = useState<string | null>(null);
+  // Track by id so an edit / attachment upload (router.refresh) updates the open
+  // modal. Seeded from a notification deep-link so the popup opens on arrival.
+  const [selId, setSelId] = useState<string | null>(initialReqId ?? null);
   const sel = selId ? requests.find((r) => r.id === selId) ?? null : null;
 
   if (requests.length === 0) {

@@ -39,17 +39,21 @@ export function AllRequests({
   requests,
   canApprove,
   leaveTypeOpts,
+  initialReqId,
 }: {
   requests: LeaveDetail[];
   canApprove: boolean;
   leaveTypeOpts: { id: string; name: string; attachmentEnabled?: boolean }[];
+  /** From a notification deep-link (?req=<id>) — opens that request's popup. */
+  initialReqId?: string;
 }) {
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("");
   const [type, setType] = useState(""); // "" = all, "WFH", or a leaveTypeId
   const [sort, setSort] = useState<SortKey>("applied");
-  // Track by id so an edit / attachment upload (router.refresh) updates the open modal.
-  const [selId, setSelId] = useState<string | null>(null);
+  // Track by id so an edit / attachment upload (router.refresh) updates the open
+  // modal. Seeded from a notification deep-link so the popup opens on arrival.
+  const [selId, setSelId] = useState<string | null>(initialReqId ?? null);
   const sel = selId ? requests.find((r) => r.id === selId) ?? null : null;
 
   const typeOptions = useMemo(

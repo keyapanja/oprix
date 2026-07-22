@@ -27,7 +27,12 @@ const REQUEST_SELECT = {
   attachments: { orderBy: { createdAt: "asc" }, select: { id: true, fileName: true, mimeType: true } },
 } as const;
 
-export default async function LeavePage() {
+export default async function LeavePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ req?: string }>;
+}) {
+  const sp = await searchParams;
   const session = await requirePage();
   const companyId = session.companyId;
   const isManager = await hasPermission(companyId, session.role, "leave:manage");
@@ -143,7 +148,7 @@ export default async function LeavePage() {
             <div className="border-b border-line px-5 py-4">
               <h3 className="text-sm font-semibold text-content">My requests</h3>
             </div>
-            <MyRequests requests={myDetails} leaveTypes={leaveTypeOpts} />
+            <MyRequests requests={myDetails} leaveTypes={leaveTypeOpts} initialReqId={sp.req} />
           </Card>
         </>
       )}

@@ -20,12 +20,21 @@ export type LeaveState = { error?: string; ok?: boolean };
 const LEAVE = "/leave";
 
 // ---- Notifications --------------------------------------------------------
-async function notifyUsers(userIds: string[], title: string, body: string): Promise<void> {
+async function notifyUsers(
+  userIds: string[],
+  title: string,
+  body: string,
+  meta?: Prisma.InputJsonValue,
+): Promise<void> {
   const targets = [...new Set(userIds)].filter(Boolean);
   if (!targets.length) return;
   // Central fan-out: in-app bell + Web Push + (pref-gated) email.
-  await notify(targets, { type: "LEAVE", title, body });
+  await notify(targets, { type: "LEAVE", title, body, meta });
 }
+
+/** Deep-link meta so clicking the notification opens the request's detail popup:
+ *  "manage" → the all-requests page (approvers), "self" → the applicant's list. */
+const reqMeta = (id: string, list: "manage" | "self"): Prisma.InputJsonValue => ({ leaveRequestId: id, list });
 
 /** WFH vs leave wording for notifications — "WFH"/"Leave" for titles (start of
  *  sentence) and "WFH"/"leave" for mid-sentence bodies. */
@@ -224,6 +233,7 @@ export async function applyLeave(
       approvers,
       `New ${kindLower(d.kind)} request`,
       `${emp?.fullName ?? "An employee"} requested ${kindLabel} for ${formatDate(start)} – ${formatDate(end)}.`,
+      reqMeta(created.id, "manage"),
     );
   } catch (e) {
     console.error("[leave] notify approvers failed:", e);
@@ -355,6 +365,7 @@ export async function approveLeave(id: string): Promise<LeaveState> {
         [empUserId],
         `${kindTitle(req.kind)} approved`,
         `Your ${kindLower(req.kind)} request (${formatDate(req.startDate)} – ${formatDate(req.endDate)}) was approved.`,
+        reqMeta(id, "self"),
       );
     }
   } catch (e) {
@@ -391,6 +402,7 @@ export async function rejectLeave(id: string): Promise<LeaveState> {
         [empUserId],
         `${kindTitle(req.kind)} rejected`,
         `Your ${kindLower(req.kind)} request (${formatDate(req.startDate)} – ${formatDate(req.endDate)}) was rejected.`,
+        reqMeta(id, "self"),
       );
     }
   } catch (e) {
@@ -484,6 +496,7 @@ export async function requestLeaveEdit(_prev: LeaveState, formData: FormData): P
       approvers,
       `${kindTitle(req.kind)} edit requested`,
       `${emp?.fullName ?? "An employee"} requested a change to a ${kindLower(req.kind)} request (proposed ${formatDate(start)} – ${formatDate(end)}).`,
+      reqMeta(id, "manage"),
     );
   } catch (e) {
     console.error("[leave] notify edit request failed:", e);
@@ -529,6 +542,7 @@ export async function approveLeaveEdit(id: string): Promise<LeaveState> {
         [empUserId],
         `${kindTitle(req.kind)} change approved`,
         `Your requested change was approved (${formatDate(dateAtUTC(p.startDate))} – ${formatDate(dateAtUTC(p.endDate))}).`,
+        reqMeta(id, "self"),
       );
     }
   } catch (e) {
@@ -556,7 +570,7 @@ export async function rejectLeaveEdit(id: string): Promise<LeaveState> {
   try {
     const empUserId = req.employee.user?.id;
     if (empUserId) {
-      await notifyUsers([empUserId], `${kindTitle(req.kind)} change rejected`, `Your requested change to a ${kindLower(req.kind)} request was rejected.`);
+      await notifyUsers([empUserId], `${kindTitle(req.kind)} change rejected`, `Your requested change to a ${kindLower(req.kind)} request was rejected.`, reqMeta(id, "self"));
     }
   } catch (e) {
     console.error("[leave] notify edit reject failed:", e);
@@ -635,6 +649,7 @@ export async function adminEditLeave(_prev: LeaveState, formData: FormData): Pro
         [empUserId],
         `${kindTitle(req.kind)} request updated`,
         `Your ${kindLower(req.kind)} request (${formatDate(start)} – ${formatDate(end)}) was updated by an administrator.`,
+        reqMeta(id, "self"),
       );
     }
   } catch (e) {
