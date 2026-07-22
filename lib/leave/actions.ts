@@ -27,6 +27,11 @@ async function notifyUsers(userIds: string[], title: string, body: string): Prom
   await notify(targets, { type: "LEAVE", title, body });
 }
 
+/** WFH vs leave wording for notifications — "WFH"/"Leave" for titles (start of
+ *  sentence) and "WFH"/"leave" for mid-sentence bodies. */
+const kindTitle = (kind: RequestKind): string => (kind === "WFH" ? "WFH" : "Leave");
+const kindLower = (kind: RequestKind): string => (kind === "WFH" ? "WFH" : "leave");
+
 /** Active users whose role can approve leave (admins / HR / team leads / configured). */
 async function leaveApproverUserIds(companyId: string, exclude?: string): Promise<string[]> {
   const roles: Role[] = [];
@@ -217,7 +222,7 @@ export async function applyLeave(
     const approvers = await leaveApproverUserIds(session.companyId, session.userId);
     await notifyUsers(
       approvers,
-      "New leave request",
+      `New ${kindLower(d.kind)} request`,
       `${emp?.fullName ?? "An employee"} requested ${kindLabel} for ${formatDate(start)} – ${formatDate(end)}.`,
     );
   } catch (e) {
@@ -322,6 +327,7 @@ export async function approveLeave(id: string): Promise<LeaveState> {
     where: { id, companyId: session.companyId },
     select: {
       status: true,
+      kind: true,
       startDate: true,
       endDate: true,
       employee: { select: { user: { select: { id: true } } } },
@@ -347,8 +353,8 @@ export async function approveLeave(id: string): Promise<LeaveState> {
     if (empUserId) {
       await notifyUsers(
         [empUserId],
-        "Leave approved",
-        `Your leave request (${formatDate(req.startDate)} – ${formatDate(req.endDate)}) was approved.`,
+        `${kindTitle(req.kind)} approved`,
+        `Your ${kindLower(req.kind)} request (${formatDate(req.startDate)} – ${formatDate(req.endDate)}) was approved.`,
       );
     }
   } catch (e) {
@@ -364,6 +370,7 @@ export async function rejectLeave(id: string): Promise<LeaveState> {
   const req = await prisma.leaveRequest.findFirst({
     where: { id, companyId: session.companyId, status: { in: ["PENDING", "MANAGER_APPROVED"] } },
     select: {
+      kind: true,
       startDate: true,
       endDate: true,
       employee: { select: { user: { select: { id: true } } } },
@@ -382,8 +389,8 @@ export async function rejectLeave(id: string): Promise<LeaveState> {
     if (empUserId) {
       await notifyUsers(
         [empUserId],
-        "Leave rejected",
-        `Your leave request (${formatDate(req.startDate)} – ${formatDate(req.endDate)}) was rejected.`,
+        `${kindTitle(req.kind)} rejected`,
+        `Your ${kindLower(req.kind)} request (${formatDate(req.startDate)} – ${formatDate(req.endDate)}) was rejected.`,
       );
     }
   } catch (e) {
@@ -475,8 +482,8 @@ export async function requestLeaveEdit(_prev: LeaveState, formData: FormData): P
     const approvers = await leaveApproverUserIds(session.companyId, session.userId);
     await notifyUsers(
       approvers,
-      "Leave edit requested",
-      `${emp?.fullName ?? "An employee"} requested a change to a ${req.kind === "WFH" ? "WFH" : "leave"} request (proposed ${formatDate(start)} – ${formatDate(end)}).`,
+      `${kindTitle(req.kind)} edit requested`,
+      `${emp?.fullName ?? "An employee"} requested a change to a ${kindLower(req.kind)} request (proposed ${formatDate(start)} – ${formatDate(end)}).`,
     );
   } catch (e) {
     console.error("[leave] notify edit request failed:", e);
@@ -490,7 +497,7 @@ export async function approveLeaveEdit(id: string): Promise<LeaveState> {
   const session = await requireCapability("leave:approve");
   const req = await prisma.leaveRequest.findFirst({
     where: { id, companyId: session.companyId },
-    select: { pendingEdit: true, employee: { select: { user: { select: { id: true } } } } },
+    select: { pendingEdit: true, kind: true, employee: { select: { user: { select: { id: true } } } } },
   });
   if (!req) return { error: "Request not found" };
   if (!req.pendingEdit) return { error: "No pending edit to approve" };
@@ -520,7 +527,7 @@ export async function approveLeaveEdit(id: string): Promise<LeaveState> {
     if (empUserId) {
       await notifyUsers(
         [empUserId],
-        "Leave change approved",
+        `${kindTitle(req.kind)} change approved`,
         `Your requested change was approved (${formatDate(dateAtUTC(p.startDate))} – ${formatDate(dateAtUTC(p.endDate))}).`,
       );
     }
@@ -536,7 +543,7 @@ export async function rejectLeaveEdit(id: string): Promise<LeaveState> {
   const session = await requireCapability("leave:approve");
   const req = await prisma.leaveRequest.findFirst({
     where: { id, companyId: session.companyId },
-    select: { pendingEdit: true, employee: { select: { user: { select: { id: true } } } } },
+    select: { pendingEdit: true, kind: true, employee: { select: { user: { select: { id: true } } } } },
   });
   if (!req) return { error: "Request not found" };
   if (!req.pendingEdit) return { error: "No pending edit to reject" };
@@ -549,7 +556,7 @@ export async function rejectLeaveEdit(id: string): Promise<LeaveState> {
   try {
     const empUserId = req.employee.user?.id;
     if (empUserId) {
-      await notifyUsers([empUserId], "Leave change rejected", "Your requested change to a leave request was rejected.");
+      await notifyUsers([empUserId], `${kindTitle(req.kind)} change rejected`, `Your requested change to a ${kindLower(req.kind)} request was rejected.`);
     }
   } catch (e) {
     console.error("[leave] notify edit reject failed:", e);
@@ -626,8 +633,8 @@ export async function adminEditLeave(_prev: LeaveState, formData: FormData): Pro
     if (empUserId && empUserId !== session.userId) {
       await notifyUsers(
         [empUserId],
-        "Leave request updated",
-        `Your ${req.kind === "WFH" ? "WFH" : "leave"} request (${formatDate(start)} – ${formatDate(end)}) was updated by an administrator.`,
+        `${kindTitle(req.kind)} request updated`,
+        `Your ${kindLower(req.kind)} request (${formatDate(start)} – ${formatDate(end)}) was updated by an administrator.`,
       );
     }
   } catch (e) {
