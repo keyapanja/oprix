@@ -5,7 +5,14 @@ import { sendPushToUsers } from "@/lib/push/send";
 import { sendNotificationEmail, appUrl } from "@/lib/email";
 import { emailEnabled, noteHref } from "@/lib/notifications/categories";
 
-type NotifyInput = { type: string; title: string; body: string; meta?: Prisma.InputJsonValue };
+type NotifyInput = {
+  type: string;
+  title: string;
+  body: string;
+  meta?: Prisma.InputJsonValue;
+  /** Set false to send in-app + push only (e.g. noisy company-wide broadcasts). */
+  email?: boolean;
+};
 
 /**
  * Single entry point for notifying users. For each recipient it:
@@ -38,7 +45,7 @@ export async function notify(userIds: string[], input: NotifyInput): Promise<voi
       type: input.type,
       meta: input.meta,
     }).catch(() => {}),
-    sendNotificationEmails(ids, input).catch(() => {}),
+    input.email === false ? Promise.resolve() : sendNotificationEmails(ids, input).catch(() => {}),
   ]);
 }
 

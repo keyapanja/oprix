@@ -876,6 +876,7 @@ model LeaveRequest {
   // The live request is untouched until an approver applies it. Null = no pending edit.
   pendingEdit     Json?
   editRequestedAt DateTime?
+  dayNoticeKey    String?   // "YYYY-MM-DD" the last day the "on leave today" notice fired (per-day dedupe)
   deletedAt       DateTime?
   deletedById     String?   // userId who moved it to trash
   createdAt       DateTime       @default(now())

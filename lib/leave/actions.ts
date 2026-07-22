@@ -15,6 +15,7 @@ import { deleteUpload } from "@/lib/uploads";
 import { dateAtUTC } from "@/lib/dates";
 import { formatDate } from "@/lib/format";
 import { notify } from "@/lib/notifications/notify";
+import { broadcastLeaveApproved } from "@/lib/leave/notices";
 
 export type LeaveState = { error?: string; ok?: boolean };
 const LEAVE = "/leave";
@@ -340,7 +341,7 @@ export async function approveLeave(id: string): Promise<LeaveState> {
       kind: true,
       startDate: true,
       endDate: true,
-      employee: { select: { user: { select: { id: true } } } },
+      employee: { select: { fullName: true, user: { select: { id: true } } } },
     },
   });
   if (!req) return { error: "Request not found" };
@@ -370,6 +371,20 @@ export async function approveLeave(id: string): Promise<LeaveState> {
     }
   } catch (e) {
     console.error("[leave] notify employee (approve) failed:", e);
+  }
+
+  // Company-wide heads-up: everyone (bar the applicant) learns they'll be away.
+  try {
+    await broadcastLeaveApproved({
+      companyId: session.companyId,
+      applicantUserId: req.employee.user?.id ?? null,
+      name: req.employee.fullName,
+      kind: req.kind,
+      startISO: req.startDate.toISOString().slice(0, 10),
+      endISO: req.endDate.toISOString().slice(0, 10),
+    });
+  } catch (e) {
+    console.error("[leave] broadcast approved failed:", e);
   }
 
   revalidatePath(LEAVE);

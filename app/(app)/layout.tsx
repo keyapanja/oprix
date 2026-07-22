@@ -6,6 +6,7 @@ import { getActiveTimers } from "@/lib/timer/data";
 import { sendEventReminders } from "@/lib/calendar/reminders";
 import { sendFormReminders } from "@/lib/forms/notify-cron";
 import { runRecurringTasks } from "@/lib/tasks/recurring-cron";
+import { sendLeaveDayNotices } from "@/lib/leave/notices";
 import { listMenuForms } from "@/lib/forms/data";
 import { Sidebar } from "@/components/shell/sidebar";
 import { Topbar } from "@/components/shell/topbar";
@@ -81,6 +82,13 @@ export default async function AppLayout({
   // Spawn any due recurring tasks (best-effort; each template claims its day atomically).
   try {
     await runRecurringTasks({ companyId: session.companyId, tz: company?.timezone ?? "Asia/Kolkata" });
+  } catch {
+    /* never break the shell */
+  }
+
+  // Day-of "X is on leave/WFH today" notices (office start + 15 min; per-day dedupe).
+  try {
+    await sendLeaveDayNotices({ companyId: session.companyId, tz: company?.timezone ?? "Asia/Kolkata" });
   } catch {
     /* never break the shell */
   }

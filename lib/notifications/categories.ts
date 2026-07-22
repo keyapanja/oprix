@@ -136,6 +136,8 @@ export function noteHref(type: string, meta: unknown): string | null {
   }
   if (cat === "Attendance") return "/dashboard";
   if (cat === "Leave") {
+    // Company-wide "who's away" awareness notices point at the calendar.
+    if (m.team === true) return "/calendar";
     // Open the specific request's detail popup: approvers land on the all-requests
     // page, the applicant on their own list.
     const id = typeof m.leaveRequestId === "string" ? m.leaveRequestId : null;

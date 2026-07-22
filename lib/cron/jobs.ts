@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { sendEventReminders } from "@/lib/calendar/reminders";
 import { sendFormReminders } from "@/lib/forms/notify-cron";
 import { runRecurringTasks } from "@/lib/tasks/recurring-cron";
+import { sendLeaveDayNotices } from "@/lib/leave/notices";
 
 export type CronSummary = {
   companies: number;
@@ -56,6 +57,12 @@ export async function runDailyJobs(): Promise<CronSummary> {
       recurringTasksCreated += await runRecurringTasks({ companyId: c.id, tz });
     } catch (e) {
       console.error(`[cron] recurring tasks failed for ${c.id}:`, e);
+    }
+
+    try {
+      await sendLeaveDayNotices({ companyId: c.id, tz });
+    } catch (e) {
+      console.error(`[cron] leave day notices failed for ${c.id}:`, e);
     }
   }
 
