@@ -7,6 +7,7 @@ import { BackLink } from "@/components/ui/back-link";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card } from "@/components/ui/card";
 import { ApplyForm } from "@/components/leave/apply-form";
+import { LeavePolicy } from "@/components/leave/leave-policy";
 
 export const metadata: Metadata = { title: "Apply for leave · Oprix" };
 
@@ -40,6 +41,7 @@ export default async function ApplyLeavePage() {
         <BackLink href="/leave">Back to leave</BackLink>
       </div>
       <PageHeader title="Apply for leave or WFH" description="Request time off or work-from-home." />
+      <LeavePolicy />
       <ApplyForm
         balances={balances.map((b) => ({
           typeId: b.typeId,
