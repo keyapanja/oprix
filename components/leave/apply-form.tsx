@@ -48,6 +48,7 @@ export function ApplyForm({
   const [resetKey, setResetKey] = useState(0);
   const [kind, setKind] = useState<"LEAVE" | "WFH">("LEAVE");
   const [typeId, setTypeId] = useState("");
+  const [exhaustedSwap, setExhaustedSwap] = useState<string | null>(null); // name of a used-up type swapped to unpaid
   const [start, setStart] = useState(initialStart);
   const [end, setEnd] = useState(initialEnd);
   const [half, setHalf] = useState(false);
@@ -59,6 +60,25 @@ export function ApplyForm({
 
   const singleDay = !!start && start === end;
   const selected = useMemo(() => balances.find((b) => b.typeId === typeId), [balances, typeId]);
+
+  // The unpaid fallback (Unpaid Leave / LWP). A paid leave type that's used up
+  // for the period can't be applied for — it's auto-swapped to this instead.
+  const unpaidType = useMemo(
+    () => balances.find((b) => /unpaid|without pay|lwp/i.test(b.name)) ?? balances.find((b) => b.unlimited),
+    [balances],
+  );
+  const isExhausted = (b: Balance) => !b.unlimited && b.remaining <= 0;
+
+  function pickType(id: string) {
+    const b = balances.find((x) => x.typeId === id);
+    if (b && isExhausted(b) && unpaidType && unpaidType.typeId !== id) {
+      setTypeId(unpaidType.typeId); // exhausted → apply as Unpaid Leave
+      setExhaustedSwap(b.name);
+    } else {
+      setTypeId(id);
+      setExhaustedSwap(null);
+    }
+  }
 
   const holidaySet = useMemo(() => new Set(holidays ?? []), [holidays]);
   const requestedDays = useMemo(() => {
@@ -100,6 +120,7 @@ export function ApplyForm({
   function resetForm() {
     setResetKey((k) => k + 1);
     setTypeId("");
+    setExhaustedSwap(null);
     setStart("");
     setEnd("");
     setHalf(false);
@@ -182,15 +203,24 @@ export function ApplyForm({
               <Combobox
                 name="leaveTypeId"
                 value={typeId}
-                onChange={setTypeId}
+                onChange={pickType}
                 placeholder="Select leave type"
-                options={balances.map((b) => ({ value: b.typeId, label: b.name }))}
+                options={balances.map((b) => ({
+                  value: b.typeId,
+                  label: isExhausted(b) ? `${b.name} · exhausted` : b.name,
+                }))}
               />
               {selected && (
                 <p className={cn("mt-1.5 text-xs font-medium", exhausted ? "text-red-600 dark:text-red-400" : "text-accent-strong")}>
                   {selected.unlimited
                     ? `No fixed limit · ${selected.used} used this ${periodWord}`
                     : `${selected.remaining} of ${selected.allowance} days remaining (per ${periodWord})`}
+                </p>
+              )}
+              {exhaustedSwap && (
+                <p className="mt-1.5 text-xs font-medium text-amber-700 dark:text-amber-300">
+                  You&apos;ve used all your {exhaustedSwap} for this year — applying as{" "}
+                  {unpaidType?.name ?? "Unpaid Leave"}.
                 </p>
               )}
             </Field>

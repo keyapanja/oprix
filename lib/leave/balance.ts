@@ -74,7 +74,9 @@ export async function computeBalances(
       description: t.description,
       allowance: t.allowanceValue,
       used,
-      remaining: Math.max(0, t.allowanceValue - used),
+      // Can go negative when more was taken than allowed (e.g. imported history) —
+      // shown as a red minus balance. The apply/approve guard clamps separately.
+      remaining: t.allowanceValue - used,
       period: t.allowancePeriod,
       unlimited: t.unlimited,
       attachmentEnabled: t.attachmentEnabled,

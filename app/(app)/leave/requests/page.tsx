@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { requirePage } from "@/lib/auth/guard";
 import { hasPermission } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/db";
+import Link from "next/link";
 import { BackLink } from "@/components/ui/back-link";
 import { PageHeader } from "@/components/ui/page-header";
 import { AllRequests } from "@/components/leave/all-requests";
@@ -25,16 +26,17 @@ const REQUEST_SELECT = {
 export default async function LeaveRequestsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ req?: string }>;
+  searchParams: Promise<{ req?: string; employee?: string }>;
 }) {
   const sp = await searchParams;
   // Manager-only — the full company request list.
   const session = await requirePage("leave:manage");
   const companyId = session.companyId;
+  const empFilter = sp.employee?.trim() || undefined; // scope to one employee (from their profile page)
 
   const [requests, leaveTypeOpts, employees, canApprove] = await Promise.all([
     prisma.leaveRequest.findMany({
-      where: { companyId },
+      where: { companyId, ...(empFilter ? { employeeId: empFilter } : {}) },
       orderBy: { createdAt: "desc" },
       select: REQUEST_SELECT,
     }),
@@ -81,15 +83,32 @@ export default async function LeaveRequestsPage({
     attachments: r.attachments,
   }));
 
+  const filterName = empFilter
+    ? employees.find((e) => e.id === empFilter)?.fullName ?? requests[0]?.employee.fullName ?? null
+    : null;
+
   return (
     <div>
       <div className="mb-4">
         <BackLink href="/leave">Back to leave</BackLink>
       </div>
       <PageHeader
-        title="Leave requests"
-        description="Every employee's leave & WFH requests — search, filter, sort, and approve."
-        action={<AddLeaveButton employees={employees.map((e) => ({ id: e.id, name: e.fullName }))} leaveTypes={leaveTypeOpts} />}
+        title={filterName ? `Leave requests · ${filterName}` : "Leave requests"}
+        description={
+          filterName
+            ? `${filterName}'s leave & WFH requests.`
+            : "Every employee's leave & WFH requests — search, filter, sort, and approve."
+        }
+        action={
+          <div className="flex items-center gap-3">
+            {filterName && (
+              <Link href="/leave/requests" className="text-sm font-medium text-accent-strong hover:underline">
+                View all
+              </Link>
+            )}
+            <AddLeaveButton employees={employees.map((e) => ({ id: e.id, name: e.fullName }))} leaveTypes={leaveTypeOpts} />
+          </div>
+        }
       />
       <AllRequests requests={details} canApprove={canApprove} leaveTypeOpts={leaveTypeOpts} initialReqId={sp.req} />
     </div>

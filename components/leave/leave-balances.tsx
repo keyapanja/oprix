@@ -15,11 +15,14 @@ export type BalanceCard = {
 export function LeaveBalances({ balances }: { balances: BalanceCard[] }) {
   if (balances.length === 0) return null;
 
+  // Most-used leave types first (by days taken this period); ties alphabetical.
+  const ordered = [...balances].sort((a, b) => b.used - a.used || a.name.localeCompare(b.name));
+
   return (
     <div className="mb-8">
       <h3 className="mb-3 text-sm font-semibold text-content">Your leave balance</h3>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {balances.map((b) => {
+        {ordered.map((b) => {
           const per = b.period === "MONTH" ? "this month" : "this year";
           const pct = b.unlimited || b.allowance <= 0
             ? 0
@@ -38,7 +41,7 @@ export function LeaveBalances({ balances }: { balances: BalanceCard[] }) {
                 </>
               ) : (
                 <>
-                  <p className="mt-2 text-2xl font-semibold leading-none text-content">
+                  <p className={cn("mt-2 text-2xl font-semibold leading-none", b.remaining < 0 ? "text-red-600 dark:text-red-400" : "text-content")}>
                     {b.remaining}
                     <span className="ml-1 text-sm font-normal text-muted">of {b.allowance} left</span>
                   </p>

@@ -290,23 +290,58 @@ export default async function EmployeeDetailPage({
         <Card>
           <CardHeader
             title="Leave"
-            action={canManageLeave ? <Link href="/leave/requests" className="text-sm font-medium text-accent-strong hover:underline">View requests</Link> : undefined}
+            action={
+              canManageLeave ? (
+                <Link
+                  href={`/leave/requests?employee=${employee.id}`}
+                  className="text-sm font-medium text-accent-strong hover:underline"
+                >
+                  View requests
+                </Link>
+              ) : undefined
+            }
           />
           <CardBody>
             {balances.length === 0 ? (
               <p className="text-sm text-muted">No leave types configured.</p>
             ) : (
-              <ul className="divide-y divide-line">
-                {balances.map((b) => (
-                  <li key={b.typeId} className="flex items-center justify-between gap-3 py-2 text-sm">
-                    <span className="text-content">{b.name}</span>
-                    <span className="text-muted">
-                      <span className="font-medium text-content">{b.used}</span> taken
-                      {b.unlimited ? " · no limit" : <> · <span className="font-medium text-content">{b.remaining}</span> left</>}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {[...balances]
+                  .sort((a, b) => b.used - a.used || a.name.localeCompare(b.name))
+                  .map((b) => {
+                    const per = b.period === "MONTH" ? "this month" : "this year";
+                    const pct =
+                      b.unlimited || b.allowance <= 0 ? 0 : Math.min(100, Math.round((b.used / b.allowance) * 100));
+                    return (
+                      <div key={b.typeId} className="rounded-xl border border-line bg-canvas p-3">
+                        <p className="truncate text-xs font-medium text-content" title={b.name}>{b.name}</p>
+                        {b.unlimited ? (
+                          <>
+                            <p className="mt-1.5 text-xl font-semibold leading-none text-content">
+                              {b.used}
+                              <span className="ml-1 text-xs font-normal text-muted">taken</span>
+                            </p>
+                            <p className="mt-1.5 text-[11px] text-muted">No fixed limit · {per}</p>
+                          </>
+                        ) : (
+                          <>
+                            <p className={cn("mt-1.5 text-xl font-semibold leading-none", b.remaining < 0 ? "text-red-600 dark:text-red-400" : "text-content")}>
+                              {b.remaining}
+                              <span className="ml-1 text-xs font-normal text-muted">of {b.allowance} left</span>
+                            </p>
+                            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface">
+                              <div
+                                className={cn("h-full rounded-full", pct >= 100 ? "bg-red-500" : "gradient-brand")}
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
+                            <p className="mt-1.5 text-[11px] text-muted">{b.used} taken · {per}</p>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+              </div>
             )}
           </CardBody>
         </Card>
