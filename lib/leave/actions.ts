@@ -7,7 +7,7 @@ import { prisma } from "@/lib/db";
 import { requireCapability } from "@/lib/auth/guard";
 import { getSession } from "@/lib/auth/session";
 import { hasPermission } from "@/lib/auth/permissions";
-import { remainingForType } from "@/lib/leave/balance";
+import { computeBalances, remainingForType } from "@/lib/leave/balance";
 import { countLeaveDays } from "@/lib/leave/count";
 import { parseHalfDayPeriod } from "@/lib/leave/half-day";
 import { parseWorkWeek } from "@/lib/leave/work-week";
@@ -804,6 +804,46 @@ export async function deleteLeaveRequest(id: string): Promise<LeaveState> {
   revalidatePath(LEAVE);
   revalidatePath("/leave/requests");
   return { ok: true };
+}
+
+// ---- Leave record (per-category usage) ------------------------------------
+export type LeaveRecordRow = {
+  name: string;
+  used: number;
+  allowance: number;
+  unlimited: boolean;
+  remaining: number;
+};
+
+/**
+ * Per-category leave usage (taken / remaining) for the employee behind a
+ * request — powers the "leave record" toggle in the detail popup. Visible to
+ * leave managers and to the request's own owner.
+ */
+export async function getLeaveRecord(
+  requestId: string,
+): Promise<{ rows: LeaveRecordRow[] } | { error: string }> {
+  const session = await getSession();
+  if (!session) return { error: "Not authenticated" };
+  const req = await prisma.leaveRequest.findFirst({
+    where: { id: requestId, companyId: session.companyId },
+    select: { employeeId: true, employee: { select: { user: { select: { id: true } } } } },
+  });
+  if (!req) return { error: "Request not found" };
+  const isOwner = !!req.employee.user?.id && req.employee.user.id === session.userId;
+  if (!isOwner && !(await hasPermission(session.companyId, session.role, "leave:manage"))) {
+    return { error: "Not authorized" };
+  }
+  const balances = await computeBalances(session.companyId, req.employeeId);
+  return {
+    rows: balances.map((b) => ({
+      name: b.name,
+      used: b.used,
+      allowance: b.allowance,
+      unlimited: b.unlimited,
+      remaining: b.remaining,
+    })),
+  };
 }
 
 // ---- Working-days configuration (company-level) ---------------------------

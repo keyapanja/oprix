@@ -12,7 +12,9 @@ import {
   approveLeave,
   rejectLeave,
   deleteLeaveRequest,
+  getLeaveRecord,
   type LeaveState,
+  type LeaveRecordRow,
 } from "@/lib/leave/actions";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
@@ -28,6 +30,7 @@ import { confirmDialog } from "@/components/ui/confirm";
 import { AttachmentGrid } from "@/components/attachments/attachment-grid";
 import { AttachmentsPanel } from "@/components/attachments/attachments-panel";
 import { formatDate, formatDateTime } from "@/lib/format";
+import { cn } from "@/lib/cn";
 
 export type LeaveDetail = {
   id: string;
@@ -84,6 +87,10 @@ export function LeaveDetailModal({
   const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [pending, startTx] = useTransition();
+  // "Leave record" toggle: lazily loads this employee's per-category usage.
+  const [recordOpen, setRecordOpen] = useState(false);
+  const [record, setRecord] = useState<LeaveRecordRow[] | null>(null);
+  const [recordBusy, setRecordBusy] = useState(false);
   const tone = STATUS_TONE[req.status] ?? STATUS_TONE.PENDING;
 
   const [state, formAction, submitting] = useActionState<LeaveState, FormData>(requestLeaveEdit, {});
@@ -208,6 +215,24 @@ export function LeaveDetailModal({
     ? leaveTypes.find((t) => t.id === req.pendingEdit?.leaveTypeId)?.name ?? "—"
     : null;
 
+  async function toggleRecord() {
+    if (recordOpen) {
+      setRecordOpen(false);
+      return;
+    }
+    setRecordOpen(true);
+    if (record || recordBusy) return; // already loaded / loading
+    setRecordBusy(true);
+    const res = await getLeaveRecord(req.id);
+    setRecordBusy(false);
+    if ("error" in res) {
+      toast.error(res.error);
+      setRecordOpen(false);
+      return;
+    }
+    setRecord(res.rows);
+  }
+
   return (
     <Modal onClose={onClose} title="Leave details">
       <div className="space-y-4">
@@ -254,6 +279,49 @@ export function LeaveDetailModal({
             </>
           )}
         </dl>
+
+        {/* Toggle: this employee's leave record (per-category taken / left). */}
+        <div className="border-t border-line pt-3">
+          <button
+            type="button"
+            onClick={toggleRecord}
+            className="flex w-full items-center justify-between gap-2 text-xs font-medium uppercase tracking-wide text-faint transition-colors hover:text-content"
+          >
+            <span>Leave record{req.employeeName ? ` · ${req.employeeName}` : ""}</span>
+            <Icon name="chevronDown" className={cn("size-4 transition-transform", recordOpen && "rotate-180")} />
+          </button>
+          {recordOpen && (
+            <div className="mt-2">
+              {recordBusy && !record ? (
+                <p className="py-2 text-sm text-muted">Loading…</p>
+              ) : record && record.length > 0 ? (
+                <ul className="divide-y divide-line overflow-hidden rounded-lg border border-line">
+                  {record.map((r) => (
+                    <li key={r.name} className="flex items-center justify-between gap-3 px-3 py-1.5 text-sm">
+                      <span className="text-content">{r.name}</span>
+                      <span className="text-muted">
+                        <span className="font-medium text-content">{r.used}</span> taken
+                        {r.unlimited ? (
+                          " · no limit"
+                        ) : (
+                          <>
+                            {" · "}
+                            <span className={cn("font-medium", r.remaining < 0 ? "text-red-600 dark:text-red-400" : "text-content")}>
+                              {r.remaining}
+                            </span>{" "}
+                            left
+                          </>
+                        )}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="py-2 text-sm text-muted">No leave types.</p>
+              )}
+            </div>
+          )}
+        </div>
 
         {canUploadAttachment ? (
           <div className="border-t border-line pt-3">
