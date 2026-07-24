@@ -150,9 +150,19 @@ const ApplySchema = z.object({
   reason: z.string().trim().max(300).optional().or(z.literal("")),
 });
 
-/** True if the employee already has a non-rejected request overlapping [start, end]. */
-async function hasOverlappingLeave(companyId: string, employeeId: string, start: Date, end: Date): Promise<boolean> {
-  const n = await prisma.leaveRequest.count({
+/** True if the employee already has a non-rejected request that overlaps in time
+ *  with [start, end]. Two half-days on **opposite** halves of the same single day
+ *  do NOT conflict (e.g. WFH first-half + leave second-half). Any full-day
+ *  involvement, or two half-days on the same half, is a conflict. */
+async function hasOverlappingLeave(
+  companyId: string,
+  employeeId: string,
+  start: Date,
+  end: Date,
+  isHalfDay: boolean,
+  halfDayPeriod: string | null,
+): Promise<boolean> {
+  const candidates = await prisma.leaveRequest.findMany({
     where: {
       companyId,
       employeeId,
@@ -160,8 +170,27 @@ async function hasOverlappingLeave(companyId: string, employeeId: string, start:
       startDate: { lte: end },
       endDate: { gte: start },
     },
+    select: { startDate: true, endDate: true, isHalfDay: true, halfDayPeriod: true },
   });
-  return n > 0;
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  const nStart = iso(start);
+  const nSingle = nStart === iso(end);
+  const nPeriod = halfDayPeriod ?? "FIRST";
+  for (const e of candidates) {
+    const eStart = iso(e.startDate);
+    const eSingle = eStart === iso(e.endDate);
+    // The only way two overlapping requests coexist: both are half-days on the
+    // same single day, on opposite halves.
+    const oppositeHalvesSameDay =
+      nSingle &&
+      eSingle &&
+      nStart === eStart &&
+      isHalfDay &&
+      e.isHalfDay &&
+      nPeriod !== (e.halfDayPeriod ?? "FIRST");
+    if (!oppositeHalvesSameDay) return true; // a genuine time overlap
+  }
+  return false;
 }
 
 export async function applyLeave(
@@ -180,13 +209,14 @@ export async function applyLeave(
   const end = dateAtUTC(d.endDate);
   if (end < start) return { error: "End date can't be before the start date" };
 
-  if (await hasOverlappingLeave(session.companyId, session.employeeId, start, end)) {
-    return { error: "You already have a leave/WFH request covering these dates." };
-  }
-
   const singleDay = d.startDate === d.endDate;
   const isHalfDay = singleDay && d.isHalfDay === "on";
   const halfDayPeriod = isHalfDay ? parseHalfDayPeriod(d.halfDayPeriod) : null;
+
+  if (await hasOverlappingLeave(session.companyId, session.employeeId, start, end, isHalfDay, halfDayPeriod)) {
+    return { error: "You already have a leave/WFH request covering these dates." };
+  }
+
   // Only working days count — weekly offs, nth-Saturday rules, and holidays in
   // the span are excluded automatically.
   const days = await countLeaveDays(session.companyId, start, end, isHalfDay);
@@ -304,7 +334,8 @@ export async function createLeaveRequest(
   if (remaining !== null && days > remaining) {
     return { error: `Only ${remaining} day(s) left for this leave type.` };
   }
-  if (await hasOverlappingLeave(session.companyId, d.employeeId, start, end)) {
+  const halfPeriod = half ? parseHalfDayPeriod(d.halfDayPeriod) : null;
+  if (await hasOverlappingLeave(session.companyId, d.employeeId, start, end, half, halfPeriod)) {
     return { error: "This employee already has a request covering these dates." };
   }
 
