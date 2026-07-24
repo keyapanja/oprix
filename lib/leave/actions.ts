@@ -310,7 +310,7 @@ export async function createLeaveRequest(
   // Tenant safety: the employee must belong to this company.
   const emp = await prisma.employee.findFirst({
     where: { id: d.employeeId, companyId: session.companyId, deletedAt: null },
-    select: { id: true },
+    select: { id: true, fullName: true, user: { select: { id: true } } },
   });
   if (!emp) return { error: "Employee not found" };
 
@@ -348,6 +348,13 @@ export async function createLeaveRequest(
     return { error: "This employee already has a request covering these dates." };
   }
 
+  // An admin raising a request for someone else is implicitly approving it, so
+  // it lands approved (no Approve/Reject step). Exception: adding it for
+  // THEMSELVES — segregation of duties still applies, so it stays pending for
+  // another approver to decide.
+  const isSelf = emp.user?.id === session.userId;
+  const autoApprove = !isSelf;
+
   const created = await prisma.leaveRequest.create({
     data: {
       companyId: session.companyId,
@@ -360,11 +367,41 @@ export async function createLeaveRequest(
       isHalfDay: half,
       halfDayPeriod: halfPeriod,
       reason: d.reason || null,
-      status: "PENDING",
+      status: autoApprove ? "HR_APPROVED" : "PENDING",
+      hrApprovedById: autoApprove ? session.userId : null,
+      decidedAt: autoApprove ? new Date() : null,
     },
     select: { id: true },
   });
+
+  // Same downstream effects as a normal approval: notify the employee and give
+  // everyone the company-wide "who's away" heads-up.
+  if (autoApprove) {
+    try {
+      const empUserId = emp.user?.id;
+      if (empUserId) {
+        await notifyUsers(
+          [empUserId],
+          `${kindTitle(kind)} approved`,
+          `A ${kindLower(kind)} request (${formatDate(start)} – ${formatDate(end)}) was added and approved for you.`,
+          reqMeta(created.id, "self"),
+        );
+      }
+      await broadcastLeaveApproved({
+        companyId: session.companyId,
+        applicantUserId: emp.user?.id ?? null,
+        name: emp.fullName,
+        kind,
+        startISO: start.toISOString().slice(0, 10),
+        endISO: end.toISOString().slice(0, 10),
+      });
+    } catch (e) {
+      console.error("[leave] admin-created auto-approve notify failed:", e);
+    }
+  }
+
   revalidatePath(LEAVE);
+  revalidatePath("/leave/requests");
   return { ok: true, id: created.id };
 }
 
