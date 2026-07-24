@@ -106,7 +106,7 @@ export function BarChart({ items, format }: { items: ChartItem[]; format?: (v: n
   const max = Math.max(1, ...items.map((i) => i.value));
   const f = format ?? ((v) => `${v}`);
   return (
-    <div className="flex h-44 items-end gap-1">
+    <div className="flex h-44 items-stretch gap-1">
       {items.map((it, i) => (
         <div key={i} className="flex min-w-0 flex-1 flex-col items-center gap-1.5">
           <div className="flex w-full flex-1 items-end">
