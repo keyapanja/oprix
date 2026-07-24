@@ -187,9 +187,17 @@ export function CalendarView({
                     );
                   })}
                   {awayCount > 2 && (
-                    <p className="px-1 text-[10px] text-faint" title={cell!.away.slice(2).map((a) => a.name).join("\n")}>
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDetail({ kind: "away", dateISO: key, away: cell!.away });
+                      }}
+                      className="w-full rounded px-1 text-left text-[10px] font-medium text-accent-strong hover:bg-canvas hover:underline"
+                    >
                       +{awayCount - 2} more away
-                    </p>
+                    </button>
                   )}
                 </div>
               </div>

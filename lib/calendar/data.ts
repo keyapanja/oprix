@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/db";
+import { parseWorkWeek, isWorkingDay } from "@/lib/leave/work-week";
 
 export type AwayEntry = {
   name: string;
@@ -46,7 +47,8 @@ export async function getMonthCalendar(
   const start = new Date(Date.UTC(year, month0, 1));
   const end = new Date(Date.UTC(year, month0 + 1, 1));
 
-  const [holidays, announcements, away] = await Promise.all([
+  const [company, holidays, announcements, away] = await Promise.all([
+    prisma.company.findUnique({ where: { id: companyId }, select: { workWeek: true } }),
     prisma.holiday.findMany({
       where: { companyId, deletedAt: null, date: { gte: start, lt: end } },
       orderBy: { date: "asc" },
@@ -83,10 +85,16 @@ export async function getMonthCalendar(
   for (const h of holidays) cell(byDay, iso(h.date)).holiday = h.name;
   for (const a of announcements) cell(byDay, iso(a.date)).announcements.push(a.title);
 
+  // Someone is only "away" on working days — a leave/WFH span skips the weekly
+  // offs, nth-Saturdays, and holidays it crosses (those aren't leave days).
+  const ww = parseWorkWeek(company?.workWeek);
+  const holidaySet = new Set(holidays.map((h) => iso(h.date)));
+
   for (const r of away) {
     const from = r.startDate < start ? start : r.startDate;
     const to = r.endDate >= end ? new Date(end.getTime() - 86_400_000) : r.endDate;
     for (let d = new Date(from); d <= to; d = new Date(d.getTime() + 86_400_000)) {
+      if (!isWorkingDay(iso(d), ww, holidaySet)) continue;
       cell(byDay, iso(d)).away.push({
         name: r.employee.fullName,
         kind: r.kind,
