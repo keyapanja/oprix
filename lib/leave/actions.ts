@@ -165,7 +165,7 @@ const ApplySchema = z.object({
   endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "End date is required"),
   isHalfDay: z.string().optional(),
   halfDayPeriod: z.string().optional(),
-  reason: z.string().trim().max(300).optional().or(z.literal("")),
+  reason: z.string().trim().max(4000).optional().or(z.literal("")),
 });
 
 /** True if the employee already has a non-rejected request that overlaps in time
@@ -310,7 +310,7 @@ const RequestSchema = z.object({
   leaveTypeId: z.string().optional().or(z.literal("")), // required only for LEAVE
   startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Start date is required"),
   endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "End date is required"),
-  reason: z.string().trim().max(300).optional().or(z.literal("")),
+  reason: z.string().trim().max(4000).optional().or(z.literal("")),
   isHalfDay: z.enum(["true", "false"]).optional(),
   halfDayPeriod: z.string().optional(),
 });
@@ -553,7 +553,7 @@ const EditSchema = z.object({
   isHalfDay: z.string().optional(),
   halfDayPeriod: z.string().optional(),
   attachmentChanged: z.string().optional(),
-  reason: z.string().trim().max(300).optional().or(z.literal("")),
+  reason: z.string().trim().max(4000).optional().or(z.literal("")),
 });
 
 export async function requestLeaveEdit(_prev: LeaveState, formData: FormData): Promise<LeaveState> {

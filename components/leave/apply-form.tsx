@@ -282,7 +282,7 @@ export function ApplyForm({
         )}
 
         <Field label="Reason" htmlFor="apply-reason">
-          <Textarea id="apply-reason" name="reason" placeholder="Optional note for your manager…" />
+          <Textarea id="apply-reason" name="reason" maxLength={4000} placeholder="Optional note for your manager…" />
         </Field>
 
         {showAttachment && (

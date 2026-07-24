@@ -494,7 +494,7 @@ export function LeaveDetailModal({
               </div>
             )}
             <Field label="Reason">
-              <Textarea name="reason" defaultValue={req.reason ?? ""} placeholder="Optional note…" />
+              <Textarea name="reason" defaultValue={req.reason ?? ""} maxLength={4000} placeholder="Optional note…" />
             </Field>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="secondary" size="sm" onClick={() => setEditing(false)}>
@@ -586,7 +586,7 @@ export function LeaveDetailModal({
               </div>
             )}
             <Field label="Reason">
-              <Textarea name="reason" defaultValue={req.reason ?? ""} placeholder="Optional note…" />
+              <Textarea name="reason" defaultValue={req.reason ?? ""} maxLength={4000} placeholder="Optional note…" />
             </Field>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="secondary" size="sm" onClick={() => setEditing(false)}>

@@ -256,7 +256,7 @@ export function RequestForm({
           )}
         </div>
         <Field label="Reason" htmlFor="lr-reason">
-          <Textarea id="lr-reason" name="reason" placeholder="Optional note…" disabled={!ready} />
+          <Textarea id="lr-reason" name="reason" maxLength={4000} placeholder="Optional note…" disabled={!ready} />
         </Field>
         {showAttachment && (
           <Field label="Attachment" hint="e.g. a medical certificate (optional)">
