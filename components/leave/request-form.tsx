@@ -1,7 +1,12 @@
 "use client";
 
 import { Fragment, useActionState, useEffect, useState, type ChangeEvent } from "react";
-import { createLeaveRequest, type LeaveState } from "@/lib/leave/actions";
+import {
+  createLeaveRequest,
+  getEmployeeBalances,
+  type LeaveState,
+  type EmployeeBalanceRow,
+} from "@/lib/leave/actions";
 import { Textarea } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
@@ -34,11 +39,65 @@ export function RequestForm({
   const [resetKey, setResetKey] = useState(0);
   const [kind, setKind] = useState<"LEAVE" | "WFH">("LEAVE");
   const [half, setHalf] = useState(false);
+  const [empId, setEmpId] = useState("");
   const [typeId, setTypeId] = useState("");
   const [files, setFiles] = useState<PickedFile[]>([]);
+  // Selected employee's per-type balances — powers the exhausted-type warnings.
+  const [balances, setBalances] = useState<EmployeeBalanceRow[] | null>(null);
+  const [balancesBusy, setBalancesBusy] = useState(false);
+  const [exhaustedSwap, setExhaustedSwap] = useState<string | null>(null);
 
   // Only leave types with attachments enabled (e.g. Sick leave) offer upload — WFH never does.
   const showAttachment = kind === "LEAVE" && !!leaveTypes.find((t) => t.id === typeId)?.attachmentEnabled;
+
+  // Load the picked employee's balances (leave types only; WFH is uncapped).
+  useEffect(() => {
+    if (!empId) {
+      setBalances(null);
+      return;
+    }
+    let live = true;
+    setBalancesBusy(true);
+    getEmployeeBalances(empId)
+      .then((res) => { if (live) setBalances("error" in res ? null : res.rows); })
+      .catch(() => { if (live) setBalances(null); })
+      .finally(() => { if (live) setBalancesBusy(false); });
+    return () => { live = false; };
+  }, [empId]);
+
+  const empName = employees.find((e) => e.id === empId)?.name ?? "This employee";
+  const unpaidType =
+    balances?.find((b) => /unpaid|without pay|lwp/i.test(b.name)) ?? balances?.find((b) => b.unlimited);
+  const balanceFor = (id: string) => balances?.find((b) => b.typeId === id);
+  const isExhausted = (b: EmployeeBalanceRow) => !b.unlimited && b.remaining <= 0;
+  const selectedBal = typeId ? balanceFor(typeId) : undefined;
+
+  function pickType(id: string) {
+    const b = balanceFor(id);
+    if (b && isExhausted(b) && unpaidType && unpaidType.typeId !== id) {
+      setTypeId(unpaidType.typeId); // exhausted → apply as Unpaid Leave
+      setExhaustedSwap(b.name);
+    } else {
+      setTypeId(id);
+      setExhaustedSwap(null);
+    }
+  }
+
+  // If balances arrive after a type was already picked, swap an exhausted one.
+  useEffect(() => {
+    if (!balances || !typeId) return;
+    const b = balanceFor(typeId);
+    if (b && isExhausted(b) && unpaidType && unpaidType.typeId !== typeId) {
+      setTypeId(unpaidType.typeId);
+      setExhaustedSwap(b.name);
+    }
+  }, [balances]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function pickEmployee(id: string) {
+    setEmpId(id);
+    setTypeId("");
+    setExhaustedSwap(null);
+  }
 
   // On success, upload any picked attachment to the new request, then reset.
   useEffect(() => {
@@ -57,7 +116,10 @@ export function RequestForm({
       setResetKey((k) => k + 1);
       setKind("LEAVE");
       setHalf(false);
+      setEmpId("");
       setTypeId("");
+      setBalances(null);
+      setExhaustedSwap(null);
       setFiles([]);
       toast.success(submittedKind === "WFH" ? "WFH request added" : "Leave request added");
       onSuccess?.();
@@ -73,6 +135,7 @@ export function RequestForm({
     setKind(k);
     if (k === "WFH") {
       setTypeId("");
+      setExhaustedSwap(null);
       setFiles([]);
     }
   }
@@ -130,6 +193,8 @@ export function RequestForm({
           <Field label="Employee" required>
             <Combobox
               name="employeeId"
+              value={empId}
+              onChange={pickEmployee}
               placeholder="Select employee"
               disabled={!ready}
               options={employees.map((e) => ({ value: e.id, label: e.name }))}
@@ -140,11 +205,25 @@ export function RequestForm({
               <Combobox
                 name="leaveTypeId"
                 value={typeId}
-                onChange={setTypeId}
+                onChange={pickType}
                 placeholder="Select type"
                 disabled={!ready}
-                options={leaveTypes.map((t) => ({ value: t.id, label: t.name }))}
+                options={leaveTypes.map((t) => {
+                  const b = balanceFor(t.id);
+                  return { value: t.id, label: b && isExhausted(b) ? `${t.name} · exhausted` : t.name };
+                })}
               />
+              {selectedBal && !selectedBal.unlimited && (
+                <p className={cn("mt-1.5 text-xs font-medium", selectedBal.remaining <= 0 ? "text-red-600 dark:text-red-400" : "text-accent-strong")}>
+                  {selectedBal.remaining} of {selectedBal.allowance} left · {selectedBal.used} taken
+                </p>
+              )}
+              {exhaustedSwap && (
+                <p className="mt-1.5 text-xs font-medium text-amber-700 dark:text-amber-300">
+                  {empName} has used all their {exhaustedSwap} — applying as {unpaidType?.name ?? "Unpaid Leave"}.
+                </p>
+              )}
+              {balancesBusy && empId && <p className="mt-1.5 text-xs text-muted">Checking balance…</p>}
             </Field>
           )}
           <Field label="Start date" required>

@@ -3,7 +3,7 @@ import type { ApprovalStatus } from "@prisma/client";
 import { requirePage } from "@/lib/auth/guard";
 import { prisma } from "@/lib/db";
 import { nowInZone, dateAtUTC } from "@/lib/dates";
-import { humanizeEnum, formatDate } from "@/lib/format";
+import { formatDate } from "@/lib/format";
 import { PageHeader } from "@/components/ui/page-header";
 import { KpiGrid, Section } from "@/components/reports/blocks";
 import { BarList, DonutChart } from "@/components/reports/charts";
@@ -20,6 +20,14 @@ const STATUS_COLOR: Record<ApprovalStatus, string> = {
   HR_APPROVED: "#10b981",
   REJECTED: "#f43f5e",
   APPROVED: "#10b981",
+};
+// Display labels — HR_APPROVED reads as plain "Approved" (single-step approval).
+const STATUS_LABEL: Record<ApprovalStatus, string> = {
+  PENDING: "Pending",
+  MANAGER_APPROVED: "Manager approved",
+  HR_APPROVED: "Approved",
+  APPROVED: "Approved",
+  REJECTED: "Rejected",
 };
 const d1 = (n: number) => Math.round(n * 10) / 10;
 
@@ -72,7 +80,7 @@ export default async function LeaveReportPage({
 
   const statusCount = new Map<ApprovalStatus, number>();
   for (const r of reqs) statusCount.set(r.status, (statusCount.get(r.status) ?? 0) + 1);
-  const statusItems = [...statusCount.entries()].map(([s, v]) => ({ label: humanizeEnum(s), value: v, color: STATUS_COLOR[s] }));
+  const statusItems = [...statusCount.entries()].map(([s, v]) => ({ label: STATUS_LABEL[s], value: v, color: STATUS_COLOR[s] }));
 
   const approvedDays = reqs.filter((r) => r.status === "HR_APPROVED").reduce((s, r) => s + r.days, 0);
   const pending = reqs.filter((r) => r.status === "PENDING").length;
@@ -87,7 +95,7 @@ export default async function LeaveReportPage({
   const iso = (d: Date) => d.toISOString().slice(0, 10);
   const exportTable = {
     headers: ["Employee", "Type", "Days", "Status", "Start", "End"],
-    rows: reqs.map((r) => [r.employee.fullName, typeOf(r), d1(r.days), humanizeEnum(r.status), iso(r.startDate), iso(r.endDate)] as (string | number)[]),
+    rows: reqs.map((r) => [r.employee.fullName, typeOf(r), d1(r.days), STATUS_LABEL[r.status], iso(r.startDate), iso(r.endDate)] as (string | number)[]),
   };
 
   return (
@@ -132,7 +140,7 @@ export default async function LeaveReportPage({
                     <td className="py-2 pr-4 font-medium text-content">{r.employee.fullName}</td>
                     <td className="py-2 pr-4 text-muted">{typeOf(r)}</td>
                     <td className="py-2 pr-4 text-right tabular-nums text-content">{d1(r.days)}{r.isHalfDay ? " ½" : ""}</td>
-                    <td className="py-2 pr-4 text-muted">{humanizeEnum(r.status)}</td>
+                    <td className="py-2 pr-4 text-muted">{STATUS_LABEL[r.status]}</td>
                     <td className="py-2 text-muted">{formatDate(iso(r.startDate))}{iso(r.startDate) !== iso(r.endDate) ? ` – ${formatDate(iso(r.endDate))}` : ""}</td>
                   </tr>
                 ))}

@@ -846,6 +846,40 @@ export async function getLeaveRecord(
   };
 }
 
+// ---- Add-for-others: an employee's balances (exhausted-type warnings) ------
+export type EmployeeBalanceRow = {
+  typeId: string;
+  name: string;
+  used: number;
+  allowance: number;
+  remaining: number;
+  unlimited: boolean;
+};
+
+/** Per-type leave balances for any employee — powers the exhausted-type
+ *  warnings in the admin add-for-others form. Managers only. */
+export async function getEmployeeBalances(
+  employeeId: string,
+): Promise<{ rows: EmployeeBalanceRow[] } | { error: string }> {
+  const session = await requireCapability("leave:manage");
+  const emp = await prisma.employee.findFirst({
+    where: { id: employeeId, companyId: session.companyId, deletedAt: null },
+    select: { id: true },
+  });
+  if (!emp) return { error: "Employee not found" };
+  const balances = await computeBalances(session.companyId, employeeId);
+  return {
+    rows: balances.map((b) => ({
+      typeId: b.typeId,
+      name: b.name,
+      used: b.used,
+      allowance: b.allowance,
+      remaining: b.remaining,
+      unlimited: b.unlimited,
+    })),
+  };
+}
+
 // ---- Working-days configuration (company-level) ---------------------------
 const WorkWeekSchema = z.object({
   workingWeekdays: z.array(z.number().int().min(0).max(6)),
