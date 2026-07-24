@@ -12,6 +12,8 @@ export function TimerBar({ timers: initial }: { timers: ActiveTimer[] }) {
   const [pending, start] = useTransition();
   const [now, setNow] = useState<number | null>(null);
   const [timers, setTimers] = useState<ActiveTimer[]>(initial);
+  // Client-only, not persisted: collapse hides the bar to just its top edge.
+  const [collapsed, setCollapsed] = useState(false);
 
   // One shared 1s tick for the whole bar; null pre-mount avoids hydration drift.
   useEffect(() => {
@@ -60,78 +62,102 @@ export function TimerBar({ timers: initial }: { timers: ActiveTimer[] }) {
 
   return (
     <div className="shrink-0 border-t-2 border-emerald-500/60 bg-emerald-50/90 shadow-[0_-6px_24px_-8px_rgba(16,185,129,0.45)] backdrop-blur dark:bg-emerald-500/10">
-      <div className="flex w-full items-center gap-3 px-6 py-3">
-        <div
-          className={
-            "flex shrink-0 items-center gap-2 rounded-full px-3 py-1 ring-1 ring-inset " +
-            (anyRunning ? "bg-emerald-500/15 ring-emerald-500/30" : "bg-amber-500/15 ring-amber-500/30")
-          }
-        >
-          {anyRunning ? (
-            <span className="relative flex size-2">
-              <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-500 opacity-75" />
-              <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
-            </span>
-          ) : (
-            <span className="flex size-2 rounded-full bg-amber-500" />
-          )}
-          <span
+      {collapsed ? (
+        // Collapsed: only the green top edge + shadow remain, with a handle to reopen.
+        <div className="flex justify-center">
+          <button
+            onClick={() => setCollapsed(false)}
+            title="Show timers"
+            aria-label="Show active timers"
+            className="inline-flex items-center gap-1.5 px-8 py-1 text-emerald-700 transition-colors hover:bg-emerald-500/10 dark:text-emerald-300"
+          >
+            <span className={"flex size-2 rounded-full " + (anyRunning ? "animate-pulse bg-emerald-500" : "bg-amber-500")} />
+            <Icon name="chevronDown" className="size-5 rotate-180" />
+          </button>
+        </div>
+      ) : (
+        <div className="flex w-full items-center gap-3 px-6 py-3">
+          <div
             className={
-              "text-xs font-bold uppercase tracking-wide " +
-              (anyRunning ? "text-emerald-700 dark:text-emerald-300" : "text-amber-700 dark:text-amber-300")
+              "flex shrink-0 items-center gap-2 rounded-full px-3 py-1 ring-1 ring-inset " +
+              (anyRunning ? "bg-emerald-500/15 ring-emerald-500/30" : "bg-amber-500/15 ring-amber-500/30")
             }
           >
-            {anyRunning ? `${runningCount} running` : `${timers.length} paused`}
-          </span>
-        </div>
+            {anyRunning ? (
+              <span className="relative flex size-2">
+                <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-500 opacity-75" />
+                <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
+              </span>
+            ) : (
+              <span className="flex size-2 rounded-full bg-amber-500" />
+            )}
+            <span
+              className={
+                "text-xs font-bold uppercase tracking-wide " +
+                (anyRunning ? "text-emerald-700 dark:text-emerald-300" : "text-amber-700 dark:text-amber-300")
+              }
+            >
+              {anyRunning ? `${runningCount} running` : `${timers.length} paused`}
+            </span>
+          </div>
 
-        <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto">
-          {timers.map((t) => {
-            const running = t.status === "RUNNING";
-            const seconds = liveSeconds(t.status, t.baseSeconds, t.runStartedAtMs, now);
-            return (
-              <div
-                key={t.taskId}
-                className="flex shrink-0 items-center gap-2.5 rounded-xl bg-surface px-3 py-1.5 shadow-sm ring-1 ring-inset ring-emerald-500/25"
-              >
-                <span className={"flex size-2 rounded-full " + (running ? "animate-pulse bg-emerald-500" : "bg-amber-500")} />
-                <Link href={`/tasks/${t.taskId}`} className="min-w-0">
-                  <span className="block max-w-[14rem] truncate text-sm font-medium text-content hover:text-accent-strong">
-                    {t.taskName}
+          <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto">
+            {timers.map((t) => {
+              const running = t.status === "RUNNING";
+              const seconds = liveSeconds(t.status, t.baseSeconds, t.runStartedAtMs, now);
+              return (
+                <div
+                  key={t.taskId}
+                  className="flex shrink-0 items-center gap-2.5 rounded-xl bg-surface px-3 py-1.5 shadow-sm ring-1 ring-inset ring-emerald-500/25"
+                >
+                  <span className={"flex size-2 rounded-full " + (running ? "animate-pulse bg-emerald-500" : "bg-amber-500")} />
+                  <Link href={`/tasks/${t.taskId}`} className="min-w-0">
+                    <span className="block max-w-[14rem] truncate text-sm font-medium text-content hover:text-accent-strong">
+                      {t.taskName}
+                    </span>
+                    <span className="block max-w-[14rem] truncate text-[11px] text-faint">
+                      {t.projectName}
+                    </span>
+                  </Link>
+                  <span className="font-display text-sm font-bold tabular-nums text-content">
+                    {fmtClock(seconds)}
                   </span>
-                  <span className="block max-w-[14rem] truncate text-[11px] text-faint">
-                    {t.projectName}
-                  </span>
-                </Link>
-                <span className="font-display text-sm font-bold tabular-nums text-content">
-                  {fmtClock(seconds)}
-                </span>
-                {running ? (
-                  <button
-                    onClick={() => act(() => pauseTimer(t.taskId))}
-                    disabled={pending}
-                    title="Pause timer"
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-amber-100 px-2.5 py-1.5 text-xs font-semibold text-amber-700 ring-1 ring-inset ring-amber-300 transition-colors hover:bg-amber-200 active:scale-[0.97] disabled:opacity-50 dark:bg-amber-500/15 dark:text-amber-300 dark:ring-amber-500/30 dark:hover:bg-amber-500/25"
-                  >
-                    <Icon name="pause" className="size-3.5" />
-                    Pause
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => act(() => startTimer(t.taskId))}
-                    disabled={pending}
-                    title="Resume timer"
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white shadow-sm ring-1 ring-inset ring-emerald-700/40 transition-colors hover:bg-emerald-700 active:scale-[0.97] disabled:opacity-50"
-                  >
-                    <Icon name="play" className="size-3.5" fill="currentColor" stroke="none" />
-                    Resume
-                  </button>
-                )}
-              </div>
-            );
-          })}
+                  {running ? (
+                    <button
+                      onClick={() => act(() => pauseTimer(t.taskId))}
+                      disabled={pending}
+                      title="Pause timer"
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-amber-100 px-2.5 py-1.5 text-xs font-semibold text-amber-700 ring-1 ring-inset ring-amber-300 transition-colors hover:bg-amber-200 active:scale-[0.97] disabled:opacity-50 dark:bg-amber-500/15 dark:text-amber-300 dark:ring-amber-500/30 dark:hover:bg-amber-500/25"
+                    >
+                      <Icon name="pause" className="size-3.5" />
+                      Pause
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => act(() => startTimer(t.taskId))}
+                      disabled={pending}
+                      title="Resume timer"
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white shadow-sm ring-1 ring-inset ring-emerald-700/40 transition-colors hover:bg-emerald-700 active:scale-[0.97] disabled:opacity-50"
+                    >
+                      <Icon name="play" className="size-3.5" fill="currentColor" stroke="none" />
+                      Resume
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          <button
+            onClick={() => setCollapsed(true)}
+            title="Hide timers"
+            aria-label="Hide timers"
+            className="inline-flex shrink-0 items-center justify-center rounded-lg p-1.5 text-emerald-700 transition-colors hover:bg-emerald-500/10 dark:text-emerald-300"
+          >
+            <Icon name="chevronDown" className="size-4" />
+          </button>
         </div>
-      </div>
+      )}
     </div>
   );
 }

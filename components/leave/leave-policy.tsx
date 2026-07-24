@@ -35,7 +35,7 @@ const SECTIONS: { title: string; items: string[] }[] = [
 
 export function LeavePolicy() {
   return (
-    <details open className="group mb-6 overflow-hidden rounded-2xl border border-line bg-surface shadow-card">
+    <details open className="group overflow-hidden rounded-2xl border border-line bg-surface shadow-card">
       <summary className="flex cursor-pointer list-none items-center gap-2.5 px-5 py-4 [&::-webkit-details-marker]:hidden">
         <Icon name="book" className="size-4 shrink-0 text-accent" />
         <span className="text-sm font-semibold text-content">Leave policy — please read before applying</span>
@@ -44,9 +44,9 @@ export function LeavePolicy() {
           className="ml-auto size-4 shrink-0 text-faint transition-transform group-open:rotate-180"
         />
       </summary>
-      <div className="grid gap-x-8 gap-y-4 border-t border-line px-5 py-4 sm:grid-cols-2">
+      <div className="space-y-4 border-t border-line px-5 py-4">
         {SECTIONS.map((s) => (
-          <div key={s.title} className="sm:last:col-span-2">
+          <div key={s.title}>
             <h4 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-faint">{s.title}</h4>
             <ul className="space-y-1.5">
               {s.items.map((t) => (

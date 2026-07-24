@@ -36,26 +36,34 @@ export default async function ApplyLeavePage() {
   const holidays = holidayRows.map((h) => h.date.toISOString().slice(0, 10));
 
   return (
-    <div className="mx-auto max-w-2xl">
+    <div className="mx-auto max-w-5xl">
       <div className="mb-4">
         <BackLink href="/leave">Back to leave</BackLink>
       </div>
       <PageHeader title="Apply for leave or WFH" description="Request time off or work-from-home." />
-      <LeavePolicy />
-      <ApplyForm
-        balances={balances.map((b) => ({
-          typeId: b.typeId,
-          name: b.name,
-          remaining: b.remaining,
-          allowance: b.allowance,
-          period: b.period,
-          unlimited: b.unlimited,
-          used: b.used,
-          attachmentEnabled: b.attachmentEnabled,
-        }))}
-        workWeek={workWeek}
-        holidays={holidays}
-      />
+      {/* Form first (main column) so it's reachable without scrolling past the
+          policy; policy sits alongside on desktop, below on mobile. */}
+      <div className="grid gap-6 lg:grid-cols-3 lg:items-start">
+        <div className="lg:col-span-2">
+          <ApplyForm
+            balances={balances.map((b) => ({
+              typeId: b.typeId,
+              name: b.name,
+              remaining: b.remaining,
+              allowance: b.allowance,
+              period: b.period,
+              unlimited: b.unlimited,
+              used: b.used,
+              attachmentEnabled: b.attachmentEnabled,
+            }))}
+            workWeek={workWeek}
+            holidays={holidays}
+          />
+        </div>
+        <div className="lg:col-span-1">
+          <LeavePolicy />
+        </div>
+      </div>
     </div>
   );
 }
