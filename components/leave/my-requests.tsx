@@ -116,7 +116,7 @@ export function MyRequests({
                   <td className="px-5 py-3 text-muted">
                     <span className="inline-flex items-center">
                       {r.startDate === r.endDate ? formatDate(r.startDate) : `${formatDate(r.startDate)} – ${formatDate(r.endDate)}`}
-                      <BackdateBadge date={r.startDate} />
+                      <BackdateBadge date={r.startDate} assignedDate={r.appliedAt} />
                     </span>
                   </td>
                   <td className="px-5 py-3 text-muted">
