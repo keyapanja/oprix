@@ -12,7 +12,7 @@ import { countLeaveDays } from "@/lib/leave/count";
 import { parseHalfDayPeriod } from "@/lib/leave/half-day";
 import { parseWorkWeek } from "@/lib/leave/work-week";
 import { deleteUpload } from "@/lib/uploads";
-import { dateAtUTC } from "@/lib/dates";
+import { dateAtUTC, nowInZone, APP_TIME_ZONE } from "@/lib/dates";
 import { formatDate } from "@/lib/format";
 import { notify } from "@/lib/notifications/notify";
 import { broadcastLeaveApproved } from "@/lib/leave/notices";
@@ -41,6 +41,24 @@ const reqMeta = (id: string, list: "manage" | "self"): Prisma.InputJsonValue => 
  *  sentence) and "WFH"/"leave" for mid-sentence bodies. */
 const kindTitle = (kind: RequestKind): string => (kind === "WFH" ? "WFH" : "Leave");
 const kindLower = (kind: RequestKind): string => (kind === "WFH" ? "WFH" : "leave");
+
+// ---- Backdated-notification pause (TEMPORARY) -----------------------------
+// While true, ADDING or APPROVING a leave/WFH whose start date is already in
+// the past sends NO notifications — no notice to the employee, and no
+// company-wide "who's away" broadcast. Flip to false to resume notifications
+// for backdated requests. Normal (today/future) requests always notify.
+const PAUSE_BACKDATED_LEAVE_NOTIFICATIONS = true;
+
+/** Backdated = start date is before today in the app timezone (matches the
+ *  "Backdate" badge shown in the request lists). */
+function isBackdatedStart(start: Date): boolean {
+  return start.toISOString().slice(0, 10) < nowInZone(APP_TIME_ZONE).dateISO;
+}
+
+/** Should this request's notifications be muted by the temporary backdated pause? */
+function backdatedNotifyPaused(start: Date): boolean {
+  return PAUSE_BACKDATED_LEAVE_NOTIFICATIONS && isBackdatedStart(start);
+}
 
 /** Active users whose role can approve leave (admins / HR / team leads / configured). */
 async function leaveApproverUserIds(companyId: string, exclude?: string): Promise<string[]> {
@@ -377,8 +395,9 @@ export async function createLeaveRequest(
   });
 
   // Same downstream effects as a normal approval: notify the employee and give
-  // everyone the company-wide "who's away" heads-up.
-  if (autoApprove) {
+  // everyone the company-wide "who's away" heads-up. Muted for backdated
+  // requests while the temporary pause is on (PAUSE_BACKDATED_LEAVE_NOTIFICATIONS).
+  if (autoApprove && !backdatedNotifyPaused(start)) {
     try {
       const empUserId = emp.user?.id;
       if (empUserId) {
@@ -438,33 +457,37 @@ export async function approveLeave(id: string): Promise<LeaveState> {
     data: { status: "HR_APPROVED", hrApprovedById: session.userId, decidedAt: new Date() },
   });
 
-  // Notify the employee.
-  try {
-    const empUserId = req.employee.user?.id;
-    if (empUserId) {
-      await notifyUsers(
-        [empUserId],
-        `${kindTitle(req.kind)} approved`,
-        `Your ${kindLower(req.kind)} request (${formatDate(req.startDate)} – ${formatDate(req.endDate)}) was approved.`,
-        reqMeta(id, "self"),
-      );
+  // TEMPORARY pause: a backdated approval fires no notifications at all (see
+  // PAUSE_BACKDATED_LEAVE_NOTIFICATIONS). Today/future approvals notify as usual.
+  if (!backdatedNotifyPaused(req.startDate)) {
+    // Notify the employee.
+    try {
+      const empUserId = req.employee.user?.id;
+      if (empUserId) {
+        await notifyUsers(
+          [empUserId],
+          `${kindTitle(req.kind)} approved`,
+          `Your ${kindLower(req.kind)} request (${formatDate(req.startDate)} – ${formatDate(req.endDate)}) was approved.`,
+          reqMeta(id, "self"),
+        );
+      }
+    } catch (e) {
+      console.error("[leave] notify employee (approve) failed:", e);
     }
-  } catch (e) {
-    console.error("[leave] notify employee (approve) failed:", e);
-  }
 
-  // Company-wide heads-up: everyone (bar the applicant) learns they'll be away.
-  try {
-    await broadcastLeaveApproved({
-      companyId: session.companyId,
-      applicantUserId: req.employee.user?.id ?? null,
-      name: req.employee.fullName,
-      kind: req.kind,
-      startISO: req.startDate.toISOString().slice(0, 10),
-      endISO: req.endDate.toISOString().slice(0, 10),
-    });
-  } catch (e) {
-    console.error("[leave] broadcast approved failed:", e);
+    // Company-wide heads-up: everyone (bar the applicant) learns they'll be away.
+    try {
+      await broadcastLeaveApproved({
+        companyId: session.companyId,
+        applicantUserId: req.employee.user?.id ?? null,
+        name: req.employee.fullName,
+        kind: req.kind,
+        startISO: req.startDate.toISOString().slice(0, 10),
+        endISO: req.endDate.toISOString().slice(0, 10),
+      });
+    } catch (e) {
+      console.error("[leave] broadcast approved failed:", e);
+    }
   }
 
   revalidatePath(LEAVE);
