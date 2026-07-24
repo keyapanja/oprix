@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { BackdateBadge } from "@/components/ui/backdate-badge";
 import { LeaveDetailModal, type LeaveDetail } from "@/components/leave/leave-detail-modal";
+import { LeaveTypeBadge } from "@/components/leave/leave-type-badge";
 import { formatDate } from "@/lib/format";
 
 const TONE: Record<string, { tone: "gray" | "blue" | "green" | "red"; label: string }> = {
@@ -52,7 +53,7 @@ export function MyRequests({
             return (
               <tr key={r.id} className="cursor-pointer hover:bg-canvas" onClick={() => setSelId(r.id)}>
                 <td className="px-5 py-3">
-                  {r.kind === "WFH" ? <Badge tone="blue">WFH</Badge> : <span className="font-medium text-content">{r.typeName ?? "Leave"}</span>}
+                  <LeaveTypeBadge kind={r.kind} typeName={r.typeName} leaveTypeId={r.leaveTypeId} />
                 </td>
                 <td className="px-5 py-3 text-muted">
                   <span className="inline-flex items-center">

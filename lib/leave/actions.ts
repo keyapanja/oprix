@@ -288,7 +288,8 @@ export async function deleteLeaveType(id: string): Promise<LeaveState> {
 // ---- Leave requests -------------------------------------------------------
 const RequestSchema = z.object({
   employeeId: z.string().min(1, "Employee is required"),
-  leaveTypeId: z.string().min(1, "Leave type is required"),
+  kind: z.nativeEnum(RequestKind).optional(), // defaults to LEAVE; "WFH" for work-from-home
+  leaveTypeId: z.string().optional().or(z.literal("")), // required only for LEAVE
   startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Start date is required"),
   endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "End date is required"),
   reason: z.string().trim().max(300).optional().or(z.literal("")),
@@ -304,35 +305,43 @@ export async function createLeaveRequest(
   const parsed = RequestSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
   const d = parsed.data;
+  const kind = d.kind ?? "LEAVE";
 
-  // Tenant safety: employee + leave type must belong to this company.
-  const [emp, type] = await Promise.all([
-    prisma.employee.findFirst({
-      where: { id: d.employeeId, companyId: session.companyId, deletedAt: null },
-      select: { id: true },
-    }),
-    prisma.leaveType.findFirst({
+  // Tenant safety: the employee must belong to this company.
+  const emp = await prisma.employee.findFirst({
+    where: { id: d.employeeId, companyId: session.companyId, deletedAt: null },
+    select: { id: true },
+  });
+  if (!emp) return { error: "Employee not found" };
+
+  // A leave needs a valid type; WFH never has one.
+  let leaveTypeId: string | null = null;
+  if (kind === "LEAVE") {
+    if (!d.leaveTypeId) return { error: "Select a leave type." };
+    const type = await prisma.leaveType.findFirst({
       where: { id: d.leaveTypeId, companyId: session.companyId },
       select: { id: true },
-    }),
-  ]);
-  if (!emp) return { error: "Employee not found" };
-  if (!type) return { error: "Leave type not found" };
+    });
+    if (!type) return { error: "Leave type not found" };
+    leaveTypeId = type.id;
+  }
 
   const start = dateAtUTC(d.startDate);
   const end = dateAtUTC(d.endDate);
   if (end < start) return { error: "End date can't be before the start date" };
   const half = d.isHalfDay === "true";
-  if (half && d.startDate !== d.endDate) return { error: "Half-day leave must be on a single day." };
+  if (half && d.startDate !== d.endDate) return { error: "Half-day requests must be on a single day." };
   const days = await countLeaveDays(session.companyId, start, end, half);
   if (days <= 0) {
     return { error: "Those dates are all non-working days (weekly offs or holidays)." };
   }
 
-  // Enforce the same balance + overlap guards as self-service apply.
-  const remaining = await remainingForType(session.companyId, d.employeeId, d.leaveTypeId);
-  if (remaining !== null && days > remaining) {
-    return { error: `Only ${remaining} day(s) left for this leave type.` };
+  // Balance guard mirrors self-service apply — leave only (WFH is uncapped).
+  if (leaveTypeId) {
+    const remaining = await remainingForType(session.companyId, d.employeeId, leaveTypeId);
+    if (remaining !== null && days > remaining) {
+      return { error: `Only ${remaining} day(s) left for this leave type.` };
+    }
   }
   const halfPeriod = half ? parseHalfDayPeriod(d.halfDayPeriod) : null;
   if (await hasOverlappingLeave(session.companyId, d.employeeId, start, end, half, halfPeriod)) {
@@ -343,12 +352,13 @@ export async function createLeaveRequest(
     data: {
       companyId: session.companyId,
       employeeId: d.employeeId,
-      leaveTypeId: d.leaveTypeId,
+      kind,
+      leaveTypeId,
       startDate: start,
       endDate: end,
       days,
       isHalfDay: half,
-      halfDayPeriod: half ? parseHalfDayPeriod(d.halfDayPeriod) : null,
+      halfDayPeriod: halfPeriod,
       reason: d.reason || null,
       status: "PENDING",
     },

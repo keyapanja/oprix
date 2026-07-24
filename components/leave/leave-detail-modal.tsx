@@ -18,6 +18,7 @@ import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icons";
 import { Badge } from "@/components/ui/badge";
+import { LeaveTypeBadge } from "@/components/leave/leave-type-badge";
 import { Field } from "@/components/ui/field";
 import { Textarea } from "@/components/ui/input";
 import { Combobox } from "@/components/ui/combobox";
@@ -219,7 +220,7 @@ export function LeaveDetailModal({
           )}
           <dt className="text-faint">Type</dt>
           <dd className="col-span-2 text-content">
-            {req.kind === "WFH" ? <Badge tone="blue">WFH</Badge> : req.typeName ?? "Leave"}
+            <LeaveTypeBadge kind={req.kind} typeName={req.typeName} leaveTypeId={req.leaveTypeId} />
           </dd>
           <dt className="text-faint">Dates</dt>
           <dd className="col-span-2 text-content">{range(req.startDate, req.endDate)}</dd>

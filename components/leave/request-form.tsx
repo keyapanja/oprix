@@ -11,6 +11,7 @@ import { Icon } from "@/components/ui/icons";
 import { toast } from "@/components/ui/toast";
 import { HALF_DAY_OPTIONS } from "@/lib/leave/half-day";
 import { FilePreviewGrid, makePicked, type PickedFile } from "@/components/attachments/file-preview-grid";
+import { cn } from "@/lib/cn";
 
 type Opt = { id: string; name: string };
 type TypeOpt = { id: string; name: string; attachmentEnabled: boolean };
@@ -31,16 +32,18 @@ export function RequestForm({
   );
   // Remount fields on success so Comboboxes/DatePickers reset too.
   const [resetKey, setResetKey] = useState(0);
+  const [kind, setKind] = useState<"LEAVE" | "WFH">("LEAVE");
   const [half, setHalf] = useState(false);
   const [typeId, setTypeId] = useState("");
   const [files, setFiles] = useState<PickedFile[]>([]);
 
-  // Only leave types with attachments enabled (e.g. Sick leave) offer upload.
-  const showAttachment = !!leaveTypes.find((t) => t.id === typeId)?.attachmentEnabled;
+  // Only leave types with attachments enabled (e.g. Sick leave) offer upload — WFH never does.
+  const showAttachment = kind === "LEAVE" && !!leaveTypes.find((t) => t.id === typeId)?.attachmentEnabled;
 
   // On success, upload any picked attachment to the new request, then reset.
   useEffect(() => {
     if (!state.ok || !state.id) return;
+    const submittedKind = kind;
     const done = async () => {
       if (files.length) {
         const up = new FormData();
@@ -52,16 +55,27 @@ export function RequestForm({
         }
       }
       setResetKey((k) => k + 1);
+      setKind("LEAVE");
       setHalf(false);
       setTypeId("");
       setFiles([]);
-      toast.success("Leave request added");
+      toast.success(submittedKind === "WFH" ? "WFH request added" : "Leave request added");
       onSuccess?.();
     };
     void done();
   }, [state]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const ready = employees.length > 0 && leaveTypes.length > 0;
+  const hasEmployees = employees.length > 0;
+  // A leave needs a type; WFH doesn't. So the form is usable for WFH even with no types.
+  const ready = hasEmployees && (kind === "WFH" || leaveTypes.length > 0);
+
+  function switchKind(k: "LEAVE" | "WFH") {
+    setKind(k);
+    if (k === "WFH") {
+      setTypeId("");
+      setFiles([]);
+    }
+  }
 
   function onFilesPicked(e: ChangeEvent<HTMLInputElement>) {
     setFiles((f) => [...f, ...makePicked(e.target.files ?? [])]);
@@ -82,9 +96,32 @@ export function RequestForm({
           {state.error}
         </div>
       )}
-      {!ready && (
-        <p className="text-sm text-muted">
-          Add at least one employee and one leave type before raising a request.
+      {!hasEmployees && (
+        <p className="text-sm text-muted">Add at least one employee before raising a request.</p>
+      )}
+
+      {/* Leave vs Work-from-home — WFH doesn't use a leave type or leave balance. */}
+      <input type="hidden" name="kind" value={kind} />
+      <div className="inline-flex rounded-xl bg-canvas p-0.5">
+        {(["LEAVE", "WFH"] as const).map((k) => (
+          <button
+            key={k}
+            type="button"
+            onClick={() => switchKind(k)}
+            disabled={!hasEmployees}
+            className={cn(
+              "rounded-lg px-4 py-1.5 text-sm font-medium transition-colors disabled:opacity-50",
+              kind === k ? "bg-surface text-content shadow-sm" : "text-muted hover:text-content",
+            )}
+          >
+            {k === "LEAVE" ? "Leave" : "Work from home"}
+          </button>
+        ))}
+      </div>
+
+      {kind === "LEAVE" && hasEmployees && leaveTypes.length === 0 && (
+        <p className="text-sm text-amber-700 dark:text-amber-300">
+          Add a leave type first, or switch to Work from home.
         </p>
       )}
 
@@ -98,16 +135,18 @@ export function RequestForm({
               options={employees.map((e) => ({ value: e.id, label: e.name }))}
             />
           </Field>
-          <Field label="Leave type" required>
-            <Combobox
-              name="leaveTypeId"
-              value={typeId}
-              onChange={setTypeId}
-              placeholder="Select type"
-              disabled={!ready}
-              options={leaveTypes.map((t) => ({ value: t.id, label: t.name }))}
-            />
-          </Field>
+          {kind === "LEAVE" && (
+            <Field label="Leave type" required>
+              <Combobox
+                name="leaveTypeId"
+                value={typeId}
+                onChange={setTypeId}
+                placeholder="Select type"
+                disabled={!ready}
+                options={leaveTypes.map((t) => ({ value: t.id, label: t.name }))}
+              />
+            </Field>
+          )}
           <Field label="Start date" required>
             <DatePicker name="startDate" disabled={!ready} />
           </Field>

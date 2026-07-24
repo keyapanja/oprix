@@ -8,6 +8,7 @@ import { Combobox } from "@/components/ui/combobox";
 import { RequestActions } from "@/components/leave/request-actions";
 import { BackdateBadge } from "@/components/ui/backdate-badge";
 import { LeaveDetailModal, type LeaveDetail } from "@/components/leave/leave-detail-modal";
+import { LeaveTypeBadge } from "@/components/leave/leave-type-badge";
 import { formatDate } from "@/lib/format";
 
 const STATUS_TONE: Record<string, { tone: "gray" | "blue" | "green" | "red"; label: string }> = {
@@ -132,11 +133,7 @@ export function AllRequests({
                   <tr key={r.id} className="cursor-pointer hover:bg-canvas" onClick={() => setSelId(r.id)}>
                     <td className="px-5 py-3 font-medium text-content">{r.employeeName}</td>
                     <td className="px-5 py-3">
-                      {r.kind === "WFH" ? (
-                        <Badge tone="blue">WFH</Badge>
-                      ) : (
-                        <span className="text-muted">{r.typeName ?? "Leave"}</span>
-                      )}
+                      <LeaveTypeBadge kind={r.kind} typeName={r.typeName} leaveTypeId={r.leaveTypeId} />
                     </td>
                     <td className="px-5 py-3 text-muted">
                       <span className="inline-flex items-center">
