@@ -348,12 +348,14 @@ export async function createLeaveRequest(
     return { error: "This employee already has a request covering these dates." };
   }
 
-  // An admin raising a request for someone else is implicitly approving it, so
-  // it lands approved (no Approve/Reject step). Exception: adding it for
-  // THEMSELVES — segregation of duties still applies, so it stays pending for
-  // another approver to decide.
+  // An approver raising a request for someone else is implicitly approving it,
+  // so it lands approved (no Approve/Reject step). It stays PENDING when:
+  //  - it's for THEMSELVES (segregation of duties — another approver decides), or
+  //  - the creator only has add-for-others rights (leave:manage) but can't
+  //    actually approve (leave:approve) — then it goes through normal approval.
   const isSelf = emp.user?.id === session.userId;
-  const autoApprove = !isSelf;
+  const canApprove = await hasPermission(session.companyId, session.role, "leave:approve");
+  const autoApprove = canApprove && !isSelf;
 
   const created = await prisma.leaveRequest.create({
     data: {
