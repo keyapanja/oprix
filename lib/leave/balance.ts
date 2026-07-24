@@ -46,10 +46,29 @@ async function usedDays(
   return agg._sum.days ?? 0;
 }
 
-/** Per-type balances for an employee, for the current period of each type. */
+/** WFH days taken this year (WFH has no leave type / allowance). */
+async function wfhDays(companyId: string, employeeId: string): Promise<number> {
+  const { start, end } = periodRange("YEAR");
+  const agg = await prisma.leaveRequest.aggregate({
+    where: {
+      companyId,
+      employeeId,
+      kind: "WFH",
+      status: { not: "REJECTED" },
+      startDate: { gte: start, lt: end },
+    },
+    _sum: { days: true },
+  });
+  return agg._sum.days ?? 0;
+}
+
+/** Per-type balances for an employee, for the current period of each type.
+ *  Pass `includeWfh` to append a "Work from home" tally (display/record views);
+ *  omit it for the apply form so WFH never shows up as a selectable leave type. */
 export async function computeBalances(
   companyId: string,
   employeeId: string,
+  opts?: { includeWfh?: boolean },
 ): Promise<LeaveBalance[]> {
   const types = await prisma.leaveType.findMany({
     where: { companyId },
@@ -80,6 +99,23 @@ export async function computeBalances(
       period: t.allowancePeriod,
       unlimited: t.unlimited,
       attachmentEnabled: t.attachmentEnabled,
+    });
+  }
+
+  // WFH isn't a leave type, but surface it as an unlimited "taken" tally for the
+  // balance / record views (opt-in — apply-form callers omit it).
+  if (opts?.includeWfh) {
+    const used = await wfhDays(companyId, employeeId);
+    out.push({
+      typeId: "__wfh__",
+      name: "Work from home",
+      description: null,
+      allowance: 0,
+      used,
+      remaining: 0,
+      period: "YEAR",
+      unlimited: true,
+      attachmentEnabled: false,
     });
   }
   return out;

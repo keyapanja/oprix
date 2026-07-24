@@ -75,7 +75,7 @@ export default async function EmployeeDetailPage({
       },
       select: { status: true, dueDate: true, submittedAt: true, completedAt: true },
     }),
-    computeBalances(session.companyId, id),
+    computeBalances(session.companyId, id, { includeWfh: true }),
     // Projects where this person is the PRIMARY assignee (not just a collaborator
     // on a few tasks) — one row per project-service they lead.
     prisma.projectService.findMany({

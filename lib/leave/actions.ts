@@ -834,7 +834,7 @@ export async function getLeaveRecord(
   if (!isOwner && !(await hasPermission(session.companyId, session.role, "leave:manage"))) {
     return { error: "Not authorized" };
   }
-  const balances = await computeBalances(session.companyId, req.employeeId);
+  const balances = await computeBalances(session.companyId, req.employeeId, { includeWfh: true });
   return {
     rows: balances.map((b) => ({
       name: b.name,

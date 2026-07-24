@@ -74,7 +74,7 @@ export default async function LeavePage({
         })
       : Promise.resolve([]),
     session.employeeId
-      ? computeBalances(companyId, session.employeeId)
+      ? computeBalances(companyId, session.employeeId, { includeWfh: true })
       : Promise.resolve([]),
   ]);
 
