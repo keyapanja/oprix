@@ -47,7 +47,7 @@ const kindLower = (kind: RequestKind): string => (kind === "WFH" ? "WFH" : "leav
 // the past sends NO notifications — no notice to the employee, and no
 // company-wide "who's away" broadcast. Flip to false to resume notifications
 // for backdated requests. Normal (today/future) requests always notify.
-const PAUSE_BACKDATED_LEAVE_NOTIFICATIONS = true;
+const PAUSE_BACKDATED_LEAVE_NOTIFICATIONS = false;
 
 /** Backdated = start date is before today in the app timezone (matches the
  *  "Backdate" badge shown in the request lists). */
