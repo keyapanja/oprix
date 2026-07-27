@@ -373,7 +373,8 @@ export async function createLeaveRequest(
   //    actually approve (leave:approve) — then it goes through normal approval.
   const isSelf = emp.user?.id === session.userId;
   const canApprove = await hasPermission(session.companyId, session.role, "leave:approve");
-  const autoApprove = canApprove && !isSelf;
+  // Super admins may approve their own, so their self-added requests auto-approve too.
+  const autoApprove = canApprove && (!isSelf || session.role === "SUPER_ADMIN");
 
   const created = await prisma.leaveRequest.create({
     data: {
@@ -447,8 +448,9 @@ export async function approveLeave(id: string): Promise<LeaveState> {
   if (req.status === "HR_APPROVED" || req.status === "APPROVED" || req.status === "REJECTED") {
     return { error: "This request has already been decided" };
   }
-  // Segregation of duties: you can't approve your own leave request.
-  if (req.employee.user?.id === session.userId) {
+  // Segregation of duties: you can't approve your own leave request — except
+  // super admins, the top authority with no one above them to approve it.
+  if (req.employee.user?.id === session.userId && session.role !== "SUPER_ADMIN") {
     return { error: "You can't approve your own leave request." };
   }
 
@@ -632,8 +634,8 @@ export async function approveLeaveEdit(id: string): Promise<LeaveState> {
   });
   if (!req) return { error: "Request not found" };
   if (!req.pendingEdit) return { error: "No pending edit to approve" };
-  // Segregation of duties: can't approve a change to your own leave.
-  if (req.employee.user?.id === session.userId) {
+  // Segregation of duties: can't approve a change to your own leave (super admins exempt).
+  if (req.employee.user?.id === session.userId && session.role !== "SUPER_ADMIN") {
     return { error: "You can't approve a change to your own leave." };
   }
 
@@ -717,7 +719,7 @@ export async function adminEditLeave(_prev: LeaveState, formData: FormData): Pro
 
   const req = await prisma.leaveRequest.findFirst({
     where: { id, companyId: session.companyId },
-    select: { kind: true, employee: { select: { user: { select: { id: true } } } } },
+    select: { status: true, kind: true, employee: { select: { user: { select: { id: true } } } } },
   });
   if (!req) return { error: "Request not found" };
 
@@ -730,8 +732,16 @@ export async function adminEditLeave(_prev: LeaveState, formData: FormData): Pro
   if (end < start) return { error: "End date can't be before the start date" };
   if (req.kind === "LEAVE" && !d.leaveTypeId) return { error: "Select a leave type." };
 
-  // Segregation of duties: you can't approve your own leave by editing it.
-  if (req.employee.user?.id === session.userId && d.status === "HR_APPROVED") {
+  // Segregation of duties: you can't APPROVE your own leave by editing it (flip
+  // your own un-approved request to approved). Editing an already-approved own
+  // request is fine, and super admins are exempt (no one above them to approve).
+  const wasApproved = req.status === "HR_APPROVED" || req.status === "APPROVED";
+  if (
+    req.employee.user?.id === session.userId &&
+    d.status === "HR_APPROVED" &&
+    !wasApproved &&
+    session.role !== "SUPER_ADMIN"
+  ) {
     return { error: "You can't approve your own leave request." };
   }
 
