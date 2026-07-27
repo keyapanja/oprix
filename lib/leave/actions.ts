@@ -42,23 +42,21 @@ const reqMeta = (id: string, list: "manage" | "self"): Prisma.InputJsonValue => 
 const kindTitle = (kind: RequestKind): string => (kind === "WFH" ? "WFH" : "Leave");
 const kindLower = (kind: RequestKind): string => (kind === "WFH" ? "WFH" : "leave");
 
-// ---- Backdated-notification policy ----------------------------------------
-// While true, ADDING or APPROVING a leave/WFH whose start date is already in
-// the past sends NO notifications — no notice to the employee, and no
-// company-wide "who's away" broadcast. Normal (today/future) requests always
-// notify. Flip to false to notify for backdated requests too.
-const PAUSE_BACKDATED_LEAVE_NOTIFICATIONS = true;
-
-/** Backdated = start date is before today in the app timezone (matches the
- *  "Backdate" badge shown in the request lists). */
-function isBackdatedStart(start: Date): boolean {
-  return start.toISOString().slice(0, 10) < nowInZone(APP_TIME_ZONE).dateISO;
+// ---- Request timing (backdated / same-day) --------------------------------
+// A request's start date relative to today (app timezone). Flags last-minute
+// and retroactive requests, and routes their notifications:
+//  • backdated (starts in the past) — approvers get a marked heads-up and the
+//    applicant still hears their own outcome, but the company-wide "who's away"
+//    broadcast is SKIPPED (no point flagging a past absence to everyone).
+//  • same-day (starts today) — marked as last-minute, but notifies normally
+//    (the person really is away today).
+//  • future — normal.
+function requestTiming(start: Date): "backdated" | "same-day" | "future" {
+  const s = start.toISOString().slice(0, 10);
+  const today = nowInZone(APP_TIME_ZONE).dateISO;
+  return s < today ? "backdated" : s === today ? "same-day" : "future";
 }
-
-/** Should this request's notifications be muted by the temporary backdated pause? */
-function backdatedNotifyPaused(start: Date): boolean {
-  return PAUSE_BACKDATED_LEAVE_NOTIFICATIONS && isBackdatedStart(start);
-}
+const isBackdatedStart = (start: Date): boolean => requestTiming(start) === "backdated";
 
 /** Active users whose role can approve leave (admins / HR / team leads / configured). */
 async function leaveApproverUserIds(companyId: string, exclude?: string): Promise<string[]> {
@@ -277,11 +275,15 @@ export async function applyLeave(
       select: { fullName: true },
     });
     const kindLabel = d.kind === "WFH" ? "work from home" : "leave";
+    const timing = requestTiming(start);
+    const prefix = timing === "backdated" ? "Backdated " : timing === "same-day" ? "Same-day " : "New ";
+    const note =
+      timing === "backdated" ? " — backdated (starts in the past)" : timing === "same-day" ? " — same-day request" : "";
     const approvers = await leaveApproverUserIds(session.companyId, session.userId);
     await notifyUsers(
       approvers,
-      `New ${kindLower(d.kind)} request`,
-      `${emp?.fullName ?? "An employee"} requested ${kindLabel} for ${formatDate(start)} – ${formatDate(end)}.`,
+      `${prefix}${kindLower(d.kind)} request`,
+      `${emp?.fullName ?? "An employee"} requested ${kindLabel} for ${formatDate(start)} – ${formatDate(end)}${note}.`,
       reqMeta(created.id, "manage"),
     );
   } catch (e) {
@@ -395,10 +397,9 @@ export async function createLeaveRequest(
     select: { id: true },
   });
 
-  // Same downstream effects as a normal approval: notify the employee and give
-  // everyone the company-wide "who's away" heads-up. Muted for backdated
-  // requests while the temporary pause is on (PAUSE_BACKDATED_LEAVE_NOTIFICATIONS).
-  if (autoApprove && !backdatedNotifyPaused(start)) {
+  // Auto-approved: the employee always hears about their own request (even
+  // backdated); the company-wide "who's away" broadcast is skipped for backdated.
+  if (autoApprove) {
     try {
       const empUserId = emp.user?.id;
       if (empUserId) {
@@ -409,14 +410,16 @@ export async function createLeaveRequest(
           reqMeta(created.id, "self"),
         );
       }
-      await broadcastLeaveApproved({
-        companyId: session.companyId,
-        applicantUserId: emp.user?.id ?? null,
-        name: emp.fullName,
-        kind,
-        startISO: start.toISOString().slice(0, 10),
-        endISO: end.toISOString().slice(0, 10),
-      });
+      if (!isBackdatedStart(start)) {
+        await broadcastLeaveApproved({
+          companyId: session.companyId,
+          applicantUserId: emp.user?.id ?? null,
+          name: emp.fullName,
+          kind,
+          startISO: start.toISOString().slice(0, 10),
+          endISO: end.toISOString().slice(0, 10),
+        });
+      }
     } catch (e) {
       console.error("[leave] admin-created auto-approve notify failed:", e);
     }
@@ -459,25 +462,24 @@ export async function approveLeave(id: string): Promise<LeaveState> {
     data: { status: "HR_APPROVED", hrApprovedById: session.userId, decidedAt: new Date() },
   });
 
-  // TEMPORARY pause: a backdated approval fires no notifications at all (see
-  // PAUSE_BACKDATED_LEAVE_NOTIFICATIONS). Today/future approvals notify as usual.
-  if (!backdatedNotifyPaused(req.startDate)) {
-    // Notify the employee.
-    try {
-      const empUserId = req.employee.user?.id;
-      if (empUserId) {
-        await notifyUsers(
-          [empUserId],
-          `${kindTitle(req.kind)} approved`,
-          `Your ${kindLower(req.kind)} request (${formatDate(req.startDate)} – ${formatDate(req.endDate)}) was approved.`,
-          reqMeta(id, "self"),
-        );
-      }
-    } catch (e) {
-      console.error("[leave] notify employee (approve) failed:", e);
+  // The applicant always hears about their own request's outcome (even backdated).
+  try {
+    const empUserId = req.employee.user?.id;
+    if (empUserId) {
+      await notifyUsers(
+        [empUserId],
+        `${kindTitle(req.kind)} approved`,
+        `Your ${kindLower(req.kind)} request (${formatDate(req.startDate)} – ${formatDate(req.endDate)}) was approved.`,
+        reqMeta(id, "self"),
+      );
     }
+  } catch (e) {
+    console.error("[leave] notify employee (approve) failed:", e);
+  }
 
-    // Company-wide heads-up: everyone (bar the applicant) learns they'll be away.
+  // Company-wide "who's away" heads-up — skipped for backdated (don't ping the
+  // whole company about a past absence); same-day/future broadcast as usual.
+  if (!isBackdatedStart(req.startDate)) {
     try {
       await broadcastLeaveApproved({
         companyId: session.companyId,
