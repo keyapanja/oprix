@@ -70,7 +70,7 @@ export const EDITABLE_ACTIONS: Action[] = [
   "report:view",
   "employee:read",
   "employee:manage",
-  "attendance:manage",
+  // "attendance:manage" hidden — the punch/attendance module is paused (see docs/PUNCH-MODULE.md).
   "leave:manage",
   "leave:approve",
   "timesheet:approve",
