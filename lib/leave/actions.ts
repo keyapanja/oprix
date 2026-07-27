@@ -42,12 +42,12 @@ const reqMeta = (id: string, list: "manage" | "self"): Prisma.InputJsonValue => 
 const kindTitle = (kind: RequestKind): string => (kind === "WFH" ? "WFH" : "Leave");
 const kindLower = (kind: RequestKind): string => (kind === "WFH" ? "WFH" : "leave");
 
-// ---- Backdated-notification pause (TEMPORARY) -----------------------------
+// ---- Backdated-notification policy ----------------------------------------
 // While true, ADDING or APPROVING a leave/WFH whose start date is already in
 // the past sends NO notifications — no notice to the employee, and no
-// company-wide "who's away" broadcast. Flip to false to resume notifications
-// for backdated requests. Normal (today/future) requests always notify.
-const PAUSE_BACKDATED_LEAVE_NOTIFICATIONS = false;
+// company-wide "who's away" broadcast. Normal (today/future) requests always
+// notify. Flip to false to notify for backdated requests too.
+const PAUSE_BACKDATED_LEAVE_NOTIFICATIONS = true;
 
 /** Backdated = start date is before today in the app timezone (matches the
  *  "Backdate" badge shown in the request lists). */
