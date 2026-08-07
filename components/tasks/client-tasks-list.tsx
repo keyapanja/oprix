@@ -61,7 +61,7 @@ export function ClientTasksList({ rows }: { rows: ClientTaskRow[] }) {
                   </td>
                   <td className="px-4 py-2.5">
                     <Link
-                      href={`/tasks/${r.id}`}
+                      href={`/client-tasks/${r.id}`}
                       className="font-medium text-content hover:text-accent-strong hover:underline"
                     >
                       {r.name}

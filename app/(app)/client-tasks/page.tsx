@@ -7,7 +7,9 @@ import { ClientTasksList } from "@/components/tasks/client-tasks-list";
 export const metadata: Metadata = { title: "Client tasks · Oprix" };
 
 export default async function ClientTasksPage() {
-  const session = await requirePage("clienttask:view");
+  // Gated like the Tasks module (task:manage) — anyone who holds tasks can see
+  // their client tasks; the list auto-scopes (admins see all, others their own).
+  const session = await requirePage("task:manage");
   const { rows, scope } = await listClientTasks(session);
 
   return (

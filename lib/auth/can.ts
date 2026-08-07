@@ -77,7 +77,8 @@ export const EDITABLE_ACTIONS: Action[] = [
   "project:manage",
   "task:manage",
   "client:manage",
-  "clienttask:view",
+  // "clienttask:view" retired — the Client tasks view now follows task:manage
+  // (every task-holder sees their own client tasks), so the toggle did nothing.
   "kb:manage",
   "form:manage",
   "payroll:manage",

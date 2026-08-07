@@ -12,6 +12,7 @@ import { getTaskTimerStates, getTaskTotals } from "@/lib/timer/data";
 import { canUseTimer } from "@/lib/timer/finalize";
 import type { TaskTimerState } from "@/lib/timer/shared";
 import { resolveTaskScope, taskScopeWhere, TASK_SCOPE_LABELS } from "@/lib/tasks/visibility";
+import { clientRaisedFilter } from "@/lib/tasks/client-tasks";
 
 export const metadata: Metadata = { title: "Tasks · Oprix" };
 
@@ -38,6 +39,9 @@ export default async function TasksPage({
     departmentId = emp?.departmentId ?? null;
   }
   const scopeWhere = taskScopeWhere(scope, session, departmentId);
+  // Client-raised tasks live in their own section (/client-tasks) — keep them
+  // out of the normal task board so the two setups stay fully separate.
+  const clientFilter = await clientRaisedFilter(session.companyId);
 
   const tasks = await prisma.task.findMany({
     where: {
@@ -45,6 +49,7 @@ export default async function TasksPage({
       AND: [
         { project: { companyId: session.companyId, deletedAt: null } },
         scopeWhere,
+        { NOT: clientFilter },
         ...(assigneeId ? [{ assignees: { some: { employeeId: assigneeId } } }] : []),
       ],
     },

@@ -47,10 +47,12 @@ export const NAV: NavItem[] = [
     ],
   },
   {
+    // Visible to every task-holder (task:manage), like Tasks — the client-tasks
+    // list scopes itself so the assigned BM sees their own, admins see all.
     label: "Client tasks",
     href: "/client-tasks",
     icon: "userGroup",
-    action: "clienttask:view",
+    action: "task:manage",
   },
   {
     label: "Reports",
