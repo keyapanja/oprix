@@ -3,6 +3,8 @@ import { requirePortal } from "@/lib/auth/guard";
 import { prisma } from "@/lib/db";
 import { companyHasPortalForms } from "@/lib/forms/data";
 import { PortalHeader } from "@/components/portal/portal-header";
+import { Toaster } from "@/components/ui/toast";
+import { ConfirmHost } from "@/components/ui/confirm";
 
 // The client portal is a separate shell from the internal app: no sidebar,
 // punch-in, or timers — and every route under it is scoped to one client.
@@ -26,6 +28,11 @@ export default async function PortalLayout({ children }: { children: React.React
       <main className="mx-auto max-w-6xl px-6 py-8">
         <div className="animate-rise">{children}</div>
       </main>
+      {/* Interactive hosts — the portal is a separate shell from the internal
+          app, so it needs its own toast + confirm-dialog mounts (used by the
+          task edit/withdraw controls and the team manager). */}
+      <Toaster />
+      <ConfirmHost />
     </div>
   );
 }
