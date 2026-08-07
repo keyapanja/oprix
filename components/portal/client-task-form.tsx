@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, type ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
 import { clientCreateTask } from "@/lib/portal/actions";
 import { Card } from "@/components/ui/card";
@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Icon } from "@/components/ui/icons";
+import { FilePreviewGrid, makePicked, type PickedFile } from "@/components/attachments/file-preview-grid";
 import { toast } from "@/components/ui/toast";
 import { humanizeEnum } from "@/lib/format";
 
@@ -38,6 +39,7 @@ export function ClientTaskForm({
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState("MEDIUM");
   const [dueDate, setDueDate] = useState("");
+  const [files, setFiles] = useState<PickedFile[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
@@ -45,11 +47,27 @@ export function ClientTaskForm({
   const sel = projects.find((p) => p.id === selId) ?? null;
   const bmName = sel?.bmName ?? null;
 
+  function onFilesPicked(e: ChangeEvent<HTMLInputElement>) {
+    setFiles((f) => [...f, ...makePicked(e.target.files ?? [])]);
+    e.target.value = "";
+  }
+  function removeFile(i: number) {
+    setFiles((f) => {
+      const p = f[i];
+      if (p?.preview) URL.revokeObjectURL(p.preview);
+      return f.filter((_, idx) => idx !== i);
+    });
+  }
+
   function reset() {
     setName("");
     setDescription("");
     setPriority("MEDIUM");
     setDueDate("");
+    setFiles((f) => {
+      f.forEach((p) => p.preview && URL.revokeObjectURL(p.preview));
+      return [];
+    });
     setError(null);
   }
 
@@ -67,7 +85,29 @@ export function ClientTaskForm({
         dueDate: dueDate || null,
       });
       if (res.error) return setError(res.error);
-      toast.success("Task sent to your Business Manager");
+
+      // Upload any attachments to the just-created task. The task is already
+      // sent, so a failed upload is surfaced (toast) but doesn't block success.
+      let uploadFailed = false;
+      if (files.length && res.taskId) {
+        try {
+          const fd = new FormData();
+          for (const p of files) fd.append("files", p.file);
+          const up = await fetch(`/api/portal/tasks/${res.taskId}/attachments`, { method: "POST", body: fd });
+          if (!up.ok) {
+            uploadFailed = true;
+            const j = await up.json().catch(() => null);
+            const why =
+              up.status === 413 ? "the file is too large" : j?.error || up.statusText || `HTTP ${up.status}`;
+            toast.error(`Task sent, but the file upload failed: ${why}.`);
+          }
+        } catch {
+          uploadFailed = true;
+          toast.error("Task sent, but the file upload failed.");
+        }
+      }
+
+      if (!uploadFailed) toast.success("Task sent to your Business Manager");
       reset();
       setOpen(false);
       router.refresh();
@@ -128,6 +168,16 @@ export function ClientTaskForm({
         </Field>
         <Field label="Details" htmlFor="ct-desc" className="sm:col-span-2">
           <Textarea id="ct-desc" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Any context, links, or requirements…" />
+        </Field>
+        <Field label="Attachments" hint="Share briefs, screenshots or reference files" className="sm:col-span-2">
+          <div>
+            <FilePreviewGrid files={files} onRemove={removeFile} />
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-canvas px-3 py-2 text-sm font-medium text-content ring-1 ring-inset ring-line transition-colors hover:bg-surface">
+              <Icon name="plus" className="size-4" />
+              Add files
+              <input type="file" multiple className="hidden" onChange={onFilesPicked} />
+            </label>
+          </div>
         </Field>
         <Field label="Priority">
           <Combobox value={priority} onChange={setPriority} options={PRIORITIES.map((p) => ({ value: p, label: humanizeEnum(p) }))} />

@@ -38,7 +38,14 @@ export async function proxy(req: NextRequest) {
   // The extension API authenticates with bearer tokens (no session cookie) and
   // sets its own CORS — let it through untouched, including OPTIONS preflight.
   // Without this, no-cookie API calls would be 302'd to /login.
-  if (pathname.startsWith("/api/ext/") || pathname.startsWith("/api/cron")) {
+  // /api/portal/* is the client-portal's own API namespace (e.g. task-attachment
+  // uploads): clients are otherwise confined to /portal/* below and couldn't
+  // reach any /api route — each handler re-checks the portal session + ownership.
+  if (
+    pathname.startsWith("/api/ext/") ||
+    pathname.startsWith("/api/cron") ||
+    pathname.startsWith("/api/portal/")
+  ) {
     return NextResponse.next();
   }
 
