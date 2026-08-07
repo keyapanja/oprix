@@ -8,7 +8,16 @@ import { Icon } from "@/components/ui/icons";
 import { categorize, CATEGORY_STYLES, type ClientNote } from "@/lib/notifications/categories";
 import { cn } from "@/lib/cn";
 
-export function NotificationBell({ items, unread }: { items: ClientNote[]; unread: number }) {
+export function NotificationBell({
+  items,
+  unread,
+  viewAllHref = "/notifications",
+}: {
+  items: ClientNote[];
+  unread: number;
+  /** "View all" target — the portal passes its own /portal/notifications page. */
+  viewAllHref?: string;
+}) {
   const [open, setOpen] = useState(false);
   const [shown, setShown] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -131,7 +140,7 @@ export function NotificationBell({ items, unread }: { items: ClientNote[]; unrea
 
               <div className="border-t border-line p-3">
                 <Link
-                  href="/notifications"
+                  href={viewAllHref}
                   onClick={() => setOpen(false)}
                   className="flex items-center justify-center gap-2 rounded-xl bg-canvas px-4 py-2.5 text-sm font-medium text-content transition-colors hover:bg-surface"
                 >

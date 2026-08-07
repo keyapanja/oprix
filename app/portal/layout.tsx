@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { requirePortal } from "@/lib/auth/guard";
 import { prisma } from "@/lib/db";
 import { companyHasPortalForms } from "@/lib/forms/data";
+import { getPortalNotifications } from "@/lib/portal/data";
 import { PortalHeader } from "@/components/portal/portal-header";
 import { Toaster } from "@/components/ui/toast";
 import { ConfirmHost } from "@/components/ui/confirm";
@@ -21,10 +22,18 @@ export default async function PortalLayout({ children }: { children: React.React
   const companyName = client.company?.name ?? "Oprix";
   const clientName = client.companyName || client.name;
   const showForms = await companyHasPortalForms(session.companyId);
+  const { items: notifications, unread } = await getPortalNotifications(session.userId);
 
   return (
     <div className="min-h-dvh bg-canvas">
-      <PortalHeader companyName={companyName} clientName={clientName} email={session.email} showForms={showForms} />
+      <PortalHeader
+        companyName={companyName}
+        clientName={clientName}
+        email={session.email}
+        showForms={showForms}
+        notifications={notifications}
+        unread={unread}
+      />
       <main className="mx-auto max-w-6xl px-6 py-8">
         <div className="animate-rise">{children}</div>
       </main>

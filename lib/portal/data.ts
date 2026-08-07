@@ -1,5 +1,42 @@
 import "server-only";
 import { prisma } from "@/lib/db";
+import { formatNoteTime, type ClientNote } from "@/lib/notifications/categories";
+
+/** Where a client notification points inside the portal (never internal routes). */
+function portalNoteHref(type: string, meta: unknown): string | null {
+  const m = (meta && typeof meta === "object" ? meta : {}) as Record<string, unknown>;
+  if (typeof m.taskId === "string") return `/portal/tasks/${m.taskId}`;
+  if (type.includes("DELIVERABLE")) return "/portal/deliverables";
+  if (typeof m.projectId === "string") return `/portal/projects/${m.projectId}`;
+  return null;
+}
+
+/** The signed-in client's notifications + unread count for the portal bell/page. */
+export async function getPortalNotifications(
+  userId: string,
+): Promise<{ items: ClientNote[]; unread: number }> {
+  const [rows, unread] = await Promise.all([
+    prisma.notification.findMany({
+      where: { userId },
+      orderBy: { createdAt: "desc" },
+      take: 40,
+      select: { id: true, title: true, body: true, type: true, meta: true, isRead: true, createdAt: true },
+    }),
+    prisma.notification.count({ where: { userId, isRead: false } }),
+  ]);
+  return {
+    unread,
+    items: rows.map((n) => ({
+      id: n.id,
+      title: n.title,
+      body: n.body,
+      type: n.type,
+      href: portalNoteHref(n.type, n.meta),
+      time: formatNoteTime(n.createdAt),
+      isRead: n.isRead,
+    })),
+  };
+}
 
 // Every read here is scoped to one client (clientId + companyId). This is the
 // single place portal data is fetched, so the isolation boundary lives in one

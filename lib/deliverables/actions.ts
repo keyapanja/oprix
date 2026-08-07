@@ -4,6 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireCapability } from "@/lib/auth/guard";
+import { notifyProjectClient } from "@/lib/portal/notify";
 
 export type DeliverableState = { ok?: boolean; error?: string };
 
@@ -35,7 +36,7 @@ export async function publishDeliverable(
   const project = await ownedProject(session.companyId, projectId);
   if (!project) return { error: "Project not found" };
 
-  await prisma.deliverable.create({
+  const created = await prisma.deliverable.create({
     data: {
       projectId: project.id,
       name: d.name,
@@ -44,6 +45,13 @@ export async function publishDeliverable(
       status: "SUBMITTED",
       submittedById: session.userId,
     },
+    select: { id: true },
+  });
+  await notifyProjectClient(project.id, {
+    type: "DELIVERABLE_READY",
+    title: "A new deliverable is ready for your review",
+    body: `“${d.name}” was shared for your review.`,
+    meta: { deliverableId: created.id, projectId: project.id },
   });
   revalidatePath(`/projects/${project.id}`);
   return { ok: true };
@@ -79,6 +87,12 @@ export async function updateDeliverable(
       submittedById: session.userId,
       submittedAt: new Date(),
     },
+  });
+  await notifyProjectClient(existing.projectId, {
+    type: "DELIVERABLE_READY",
+    title: "An updated deliverable is ready for your review",
+    body: `“${d.name}” was re-shared for your review.`,
+    meta: { deliverableId: existing.id, projectId: existing.projectId },
   });
   revalidatePath(`/projects/${existing.projectId}`);
   return { ok: true };

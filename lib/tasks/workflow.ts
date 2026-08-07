@@ -8,6 +8,7 @@ import { logTaskActivity, actorLabel } from "@/lib/activity";
 import { finalizeTaskTimer, finalizeAllTaskTimers } from "@/lib/timer/finalize";
 import { submitForReviewFor } from "@/lib/tasks/workflow-core";
 import { notify as notifyUsers } from "@/lib/notifications/notify";
+import { notifyProjectClient } from "@/lib/portal/notify";
 
 export type WorkflowState = { ok?: boolean; error?: string };
 
@@ -109,6 +110,13 @@ export async function sendToClientReview(taskId: string): Promise<WorkflowState>
   const actor = await actorLabel(session.userId);
   await logTaskActivity(session, taskId, "approved internally — sent for client review");
   await notify(assigneeUserIds(task), "Sent for client review", `${actor} sent “${task.name}” for client review`, taskId, session.userId);
+  // Tell the client their review is needed (in-app bell in the portal).
+  await notifyProjectClient(task.projectId, {
+    type: "TASK_CLIENT_REVIEW",
+    title: "A task is ready for your review",
+    body: `“${task.name}” is waiting for your review.`,
+    meta: { taskId: task.id, projectId: task.projectId },
+  });
   revalidatePath(`/tasks/${taskId}`);
   revalidatePath("/tasks");
   return { ok: true };

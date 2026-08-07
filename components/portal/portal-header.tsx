@@ -6,6 +6,8 @@ import { useState, useRef, useEffect } from "react";
 import { logoutAction } from "@/lib/auth/actions";
 import { Icon } from "@/components/ui/icons";
 import { ThemeToggle } from "@/components/shell/theme-toggle";
+import { NotificationBell } from "@/components/shell/notification-bell";
+import type { ClientNote } from "@/lib/notifications/categories";
 import { cn } from "@/lib/cn";
 
 export function PortalHeader({
@@ -13,11 +15,15 @@ export function PortalHeader({
   clientName,
   email,
   showForms,
+  notifications,
+  unread,
 }: {
   companyName: string;
   clientName: string;
   email: string;
   showForms?: boolean;
+  notifications: ClientNote[];
+  unread: number;
 }) {
   const NAV = [
     { label: "Overview", href: "/portal" },
@@ -73,6 +79,7 @@ export function PortalHeader({
         </nav>
 
         <div className="ml-auto flex items-center gap-1.5">
+          <NotificationBell items={notifications} unread={unread} viewAllHref="/portal/notifications" />
           <ThemeToggle />
           <div className="mx-1 h-6 w-px bg-line-strong" />
           <div className="relative" ref={ref}>
