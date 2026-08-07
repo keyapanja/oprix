@@ -48,14 +48,20 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     return NextResponse.json({ error: "File is missing on disk" }, { status: 404 });
   }
 
-  return new NextResponse(new Uint8Array(data), {
-    headers: {
-      "Content-Type": att.mimeType || "application/octet-stream",
-      "Content-Disposition": `inline; filename="${encodeURIComponent(att.fileName)}"`,
-      "Content-Length": String(data.length),
-      "Cache-Control": "private, max-age=0, must-revalidate",
-      "X-Content-Type-Options": "nosniff",
-      "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox",
-    },
-  });
+  const headers: Record<string, string> = {
+    "Content-Type": att.mimeType || "application/octet-stream",
+    "Content-Disposition": `inline; filename="${encodeURIComponent(att.fileName)}"`,
+    "Content-Length": String(data.length),
+    "Cache-Control": "private, max-age=0, must-revalidate",
+    "X-Content-Type-Options": "nosniff",
+  };
+  // Potentially-scriptable inline types (e.g. SVG / HTML) get a hardened sandbox
+  // CSP so a malicious upload can't run scripts on our origin when opened. PDFs
+  // are excluded — `sandbox` blocks the browser's built-in PDF viewer, and a
+  // PDF's own scripts execute only in that isolated viewer, never against our
+  // page or cookies (Content-Type + nosniff keep it from being reinterpreted).
+  if (att.mimeType !== "application/pdf") {
+    headers["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'; sandbox";
+  }
+  return new NextResponse(new Uint8Array(data), { headers });
 }

@@ -361,7 +361,7 @@ export function NewTaskForm({
 
       <div className="flex justify-end gap-3">
         <Button variant="secondary" onClick={() => router.push("/tasks")}>Cancel</Button>
-        <Button onClick={submit} disabled={pending}>{pending ? "Creating…" : "Create task"}</Button>
+        <Button onClick={submit} disabled={pending}>{pending ? "Creating task…" : "Create task"}</Button>
       </div>
     </div>
   );
