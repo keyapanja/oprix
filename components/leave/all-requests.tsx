@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Combobox } from "@/components/ui/combobox";
+import { DatePicker } from "@/components/ui/date-picker";
 import { RequestActions } from "@/components/leave/request-actions";
 import { BackdateBadge } from "@/components/ui/backdate-badge";
 import { LeaveDetailModal, type LeaveDetail } from "@/components/leave/leave-detail-modal";
@@ -34,7 +35,41 @@ const SORT_OPTS = [
 ];
 type SortKey = "applied" | "start" | "days" | "employee" | "status";
 
+const DATE_OPTS = [
+  { value: "thisMonth", label: "This month" },
+  { value: "lastMonth", label: "Last month" },
+  { value: "thisQuarter", label: "This quarter" },
+  { value: "thisYear", label: "This year" },
+  { value: "custom", label: "Custom range" },
+];
+
 const isApproved = (s: string) => s === "HR_APPROVED" || s === "APPROVED" || s === "MANAGER_APPROVED";
+
+/** Local YYYY-MM-DD for a Date. */
+function ymd(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** Inclusive [from,to] (YYYY-MM-DD) for a preset key; null for all-time / custom. */
+function presetRange(preset: string): { from: string; to: string } | null {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = now.getMonth();
+  switch (preset) {
+    case "thisMonth":
+      return { from: ymd(new Date(y, m, 1)), to: ymd(new Date(y, m + 1, 0)) };
+    case "lastMonth":
+      return { from: ymd(new Date(y, m - 1, 1)), to: ymd(new Date(y, m, 0)) };
+    case "thisQuarter": {
+      const sm = Math.floor(m / 3) * 3;
+      return { from: ymd(new Date(y, sm, 1)), to: ymd(new Date(y, sm + 3, 0)) };
+    }
+    case "thisYear":
+      return { from: ymd(new Date(y, 0, 1)), to: ymd(new Date(y, 11, 31)) };
+    default:
+      return null;
+  }
+}
 
 export function AllRequests({
   requests,
@@ -52,6 +87,9 @@ export function AllRequests({
   const [status, setStatus] = useState("");
   const [type, setType] = useState(""); // "" = all, "WFH", or a leaveTypeId
   const [sort, setSort] = useState<SortKey>("applied");
+  const [dateRange, setDateRange] = useState(""); // "" = all time, a preset key, or "custom"
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
   // Track by id so an edit / attachment upload (router.refresh) updates the open
   // modal. Seeded from a notification deep-link so the popup opens on arrival.
   const [selId, setSelId] = useState<string | null>(initialReqId ?? null);
@@ -64,6 +102,13 @@ export function AllRequests({
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
+    // A leave counts as "in range" if its span overlaps the window at all.
+    const range =
+      dateRange === "custom"
+        ? customFrom || customTo
+          ? { from: customFrom || "0000-01-01", to: customTo || "9999-12-31" }
+          : null
+        : presetRange(dateRange);
     const rows = requests.filter((r) => {
       if (needle && !`${r.employeeName ?? ""} ${r.reason ?? ""}`.toLowerCase().includes(needle)) return false;
       if (status === "PENDING" && r.status !== "PENDING") return false;
@@ -71,6 +116,11 @@ export function AllRequests({
       if (status === "REJECTED" && r.status !== "REJECTED") return false;
       if (type === "WFH" && r.kind !== "WFH") return false;
       if (type && type !== "WFH" && r.leaveTypeId !== type) return false;
+      if (range) {
+        const s = r.startDate.slice(0, 10);
+        const e = r.endDate.slice(0, 10);
+        if (!(s <= range.to && e >= range.from)) return false;
+      }
       return true;
     });
     return [...rows].sort((a, b) => {
@@ -87,7 +137,7 @@ export function AllRequests({
           return a.appliedAt < b.appliedAt ? 1 : -1;
       }
     });
-  }, [requests, q, status, type, sort]);
+  }, [requests, q, status, type, sort, dateRange, customFrom, customTo]);
 
   return (
     <div className="space-y-4">
@@ -102,12 +152,28 @@ export function AllRequests({
           <Combobox options={typeOptions} value={type} onChange={setType} placeholder="All types" emptyLabel="All types" />
         </div>
         <div className="w-44">
+          <Combobox options={DATE_OPTS} value={dateRange} onChange={(v) => setDateRange(v || "")} placeholder="All time" emptyLabel="All time" />
+        </div>
+        <div className="w-44">
           <Combobox options={SORT_OPTS} value={sort} onChange={(v) => setSort((v || "applied") as SortKey)} placeholder="Sort" />
         </div>
         <p className="shrink-0 text-sm text-muted">
           {filtered.length} request{filtered.length === 1 ? "" : "s"}
         </p>
       </div>
+
+      {dateRange === "custom" && (
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-sm font-medium text-muted">From</span>
+          <div className="w-44">
+            <DatePicker value={customFrom} onChange={setCustomFrom} placeholder="Start date" />
+          </div>
+          <span className="text-sm font-medium text-muted">to</span>
+          <div className="w-44">
+            <DatePicker value={customTo} onChange={setCustomTo} placeholder="End date" />
+          </div>
+        </div>
+      )}
 
       <Card className="overflow-hidden">
         {filtered.length === 0 ? (
