@@ -198,6 +198,93 @@ export async function clientCreateTask(input: ClientTaskInput): Promise<PortalAc
   return { ok: true, taskId: task.id };
 }
 
+// ---- Editing / withdrawing a client-raised task ----------------------------
+
+/** Load a task the client is allowed to manage — one they raised, on their own
+ *  project. Ownership + the client-raised gate live in the WHERE. */
+function loadOwnClientTask(clientId: string, companyId: string, taskId: string) {
+  return prisma.task.findFirst({
+    where: {
+      id: taskId,
+      deletedAt: null,
+      clientRaised: true,
+      project: { clientId, companyId, deletedAt: null },
+    },
+    select: {
+      id: true,
+      name: true,
+      projectId: true,
+      assignees: { select: { employee: { select: { user: { select: { id: true } } } } } },
+    },
+  });
+}
+
+const ClientTaskEditZ = z.object({
+  name: z.string().trim().min(1, "Give the task a name").max(200),
+  description: z.string().trim().max(5000).optional().nullable(),
+  priority: z.nativeEnum(Priority).default("MEDIUM"),
+  dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
+});
+export type ClientTaskEditInput = z.infer<typeof ClientTaskEditZ>;
+
+/** The client edits a task they raised (title, details, priority, due date). */
+export async function clientUpdateTask(taskId: string, input: ClientTaskEditInput): Promise<PortalActionState> {
+  const session = await requirePortalAction();
+  const parsed = ClientTaskEditZ.safeParse(input);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  const d = parsed.data;
+
+  const task = await loadOwnClientTask(session.clientId, session.companyId, taskId);
+  if (!task) return { error: "Task not found" };
+
+  await prisma.task.update({
+    where: { id: task.id },
+    data: {
+      name: d.name,
+      description: d.description ?? null,
+      priority: d.priority,
+      dueDate: d.dueDate ? dateAtUTC(d.dueDate) : null,
+    },
+  });
+
+  await logTaskActivity(session, task.id, "Client updated the task details");
+  await notifyInternal(
+    task.assignees.map((a) => a.employee.user?.id),
+    "TASK",
+    "Client updated a task",
+    `The client updated “${d.name}”.`,
+    { taskId: task.id },
+  );
+
+  revalidatePath(`/portal/tasks/${task.id}`);
+  revalidatePath(`/portal/projects/${task.projectId}`);
+  return { ok: true };
+}
+
+/** The client withdraws (soft-deletes) a task they raised. */
+export async function clientDeleteTask(taskId: string): Promise<PortalActionState> {
+  const session = await requirePortalAction();
+  const task = await loadOwnClientTask(session.clientId, session.companyId, taskId);
+  if (!task) return { error: "Task not found" };
+
+  await prisma.task.update({
+    where: { id: task.id },
+    data: { deletedAt: new Date(), deletedById: session.userId },
+  });
+
+  await notifyInternal(
+    task.assignees.map((a) => a.employee.user?.id),
+    "TASK",
+    "Client withdrew a task",
+    `The client withdrew “${task.name}”.`,
+    { taskId: task.id },
+  );
+
+  revalidatePath(`/portal/projects/${task.projectId}`);
+  revalidatePath("/portal");
+  return { ok: true };
+}
+
 // ---- Tasks in CLIENT_REVIEW ------------------------------------------------
 
 function loadClientTask(clientId: string, companyId: string, taskId: string) {

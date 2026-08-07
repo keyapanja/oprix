@@ -1,15 +1,16 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { requirePortal } from "@/lib/auth/guard";
-import { getClientTask } from "@/lib/portal/data";
+import { getClientTask, getClientTaskActivity } from "@/lib/portal/data";
 import { safeHref, isHttpUrl } from "@/lib/url";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Icon } from "@/components/ui/icons";
 import { BackLink } from "@/components/ui/back-link";
 import { LinkifiedText } from "@/components/ui/linkified-text";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatDateTime } from "@/lib/format";
 import { ReviewControls } from "@/components/portal/review-controls";
+import { ClientTaskActions } from "@/components/portal/client-task-actions";
 
 export const metadata: Metadata = { title: "Task · Client Portal" };
 
@@ -29,9 +30,11 @@ export default async function PortalTaskDetailPage({ params }: { params: Promise
 
   const task = await getClientTask(session.clientId, session.companyId, id);
   if (!task) notFound();
+  const activity = await getClientTaskActivity(session.companyId, task.id);
 
   const pill = taskPill(task.status);
   const inReview = task.status === "CLIENT_REVIEW";
+  const dueISO = task.dueDate ? task.dueDate.toISOString().slice(0, 10) : null;
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -82,6 +85,49 @@ export default async function PortalTaskDetailPage({ params }: { params: Promise
           <ReviewControls kind="task" id={task.id} />
         </Card>
       )}
+
+      {/* Edit / withdraw — only for tasks the client raised. */}
+      {task.clientRaised && (
+        <ClientTaskActions
+          task={{
+            id: task.id,
+            name: task.name,
+            description: task.description,
+            priority: task.priority,
+            dueDate: dueISO,
+            projectId: task.project.id,
+          }}
+        />
+      )}
+
+      {/* History */}
+      <Card>
+        <div className="border-b border-line px-5 py-3">
+          <h2 className="text-sm font-semibold text-content">History</h2>
+        </div>
+        <div className="max-h-[28rem] overflow-y-auto p-5">
+          {activity.length === 0 ? (
+            <p className="text-sm text-muted">No activity yet.</p>
+          ) : (
+            <ul className="space-y-3">
+              {activity.map((a) => {
+                const actor = (a.meta as { actor?: string } | null)?.actor ?? "Someone";
+                return (
+                  <li key={a.id} className="flex gap-3 text-sm">
+                    <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-brand-500" />
+                    <div>
+                      <p className="text-content">
+                        <span className="font-medium">{actor}</span> {a.action}
+                      </p>
+                      <p className="text-xs text-faint">{formatDateTime(a.createdAt)}</p>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      </Card>
     </div>
   );
 }

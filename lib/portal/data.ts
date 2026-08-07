@@ -102,12 +102,25 @@ export async function getClientTask(clientId: string, companyId: string, taskId:
       name: true,
       description: true,
       status: true,
+      priority: true,
       finalLink: true,
       dueDate: true,
       createdById: true,
+      clientRaised: true, // the client raised it → they can edit/withdraw it
       service: { select: { name: true } },
       project: { select: { id: true, name: true } },
     },
+  });
+}
+
+/** Change history for a task the client owns. Ownership is verified separately
+ *  via getClientTask (a foreign id there returns null before this is called). */
+export async function getClientTaskActivity(companyId: string, taskId: string) {
+  return prisma.activityLog.findMany({
+    where: { companyId, entityType: "TASK", entityId: taskId },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+    select: { id: true, action: true, meta: true, createdAt: true },
   });
 }
 
