@@ -146,6 +146,11 @@ export async function getClientTask(clientId: string, companyId: string, taskId:
       clientRaised: true, // the client raised it → they can edit/withdraw it
       service: { select: { name: true } },
       project: { select: { id: true, name: true } },
+      attachments: {
+        where: { inline: false },
+        orderBy: { createdAt: "desc" },
+        select: { id: true, fileName: true, mimeType: true, sizeBytes: true },
+      },
     },
   });
 }

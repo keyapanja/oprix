@@ -11,6 +11,7 @@ import { LinkifiedText } from "@/components/ui/linkified-text";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { ReviewControls } from "@/components/portal/review-controls";
 import { ClientTaskActions } from "@/components/portal/client-task-actions";
+import { PortalAttachments } from "@/components/portal/portal-attachments";
 
 export const metadata: Metadata = { title: "Task · Client Portal" };
 
@@ -58,6 +59,13 @@ export default async function PortalTaskDetailPage({ params }: { params: Promise
           <div className="mt-4 border-t border-line pt-4">
             <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-faint">Details</p>
             <LinkifiedText text={task.description} className="text-sm leading-relaxed text-content" />
+          </div>
+        )}
+
+        {task.attachments.length > 0 && (
+          <div className="mt-4 border-t border-line pt-4">
+            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-faint">Attachments</p>
+            <PortalAttachments attachments={task.attachments} canManage={task.clientRaised} />
           </div>
         )}
       </Card>
