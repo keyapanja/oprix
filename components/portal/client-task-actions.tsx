@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, type ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
 import { clientUpdateTask, clientDeleteTask } from "@/lib/portal/actions";
 import { Card } from "@/components/ui/card";
@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Icon } from "@/components/ui/icons";
+import { FilePreviewGrid, makePicked, type PickedFile } from "@/components/attachments/file-preview-grid";
 import { toast } from "@/components/ui/toast";
 import { confirmDialog } from "@/components/ui/confirm";
 import { humanizeEnum } from "@/lib/format";
@@ -36,9 +37,33 @@ export function ClientTaskActions({ task }: { task: Task }) {
   const [description, setDescription] = useState(task.description ?? "");
   const [priority, setPriority] = useState(task.priority);
   const [dueDate, setDueDate] = useState(task.dueDate ?? "");
+  const [files, setFiles] = useState<PickedFile[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const [busy, setBusy] = useState(false);
+
+  function onFilesPicked(e: ChangeEvent<HTMLInputElement>) {
+    setFiles((f) => [...f, ...makePicked(e.target.files ?? [])]);
+    e.target.value = "";
+  }
+  function removeFile(i: number) {
+    setFiles((f) => {
+      const p = f[i];
+      if (p?.preview) URL.revokeObjectURL(p.preview);
+      return f.filter((_, idx) => idx !== i);
+    });
+  }
+  function clearFiles() {
+    setFiles((f) => {
+      f.forEach((p) => p.preview && URL.revokeObjectURL(p.preview));
+      return [];
+    });
+  }
+  function cancelEdit() {
+    clearFiles();
+    setEditing(false);
+    setError(null);
+  }
 
   function save() {
     setError(null);
@@ -51,7 +76,29 @@ export function ClientTaskActions({ task }: { task: Task }) {
         dueDate: dueDate || null,
       });
       if (res.error) return setError(res.error);
-      toast.success("Task updated");
+
+      // Upload any newly-added files onto the existing task.
+      let uploadFailed = false;
+      if (files.length) {
+        try {
+          const fd = new FormData();
+          for (const p of files) fd.append("files", p.file);
+          const up = await fetch(`/api/portal/tasks/${task.id}/attachments`, { method: "POST", body: fd });
+          if (!up.ok) {
+            uploadFailed = true;
+            const j = await up.json().catch(() => null);
+            const why =
+              up.status === 413 ? "the file is too large" : j?.error || up.statusText || `HTTP ${up.status}`;
+            toast.error(`Saved, but the file upload failed: ${why}.`);
+          }
+        } catch {
+          uploadFailed = true;
+          toast.error("Saved, but the file upload failed.");
+        }
+      }
+
+      if (!uploadFailed) toast.success("Task updated");
+      clearFiles();
       setEditing(false);
       router.refresh();
     });
@@ -103,6 +150,16 @@ export function ClientTaskActions({ task }: { task: Task }) {
         <Field label="Details" htmlFor="cte-desc" className="sm:col-span-2">
           <Textarea id="cte-desc" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Any context, links, or requirements…" />
         </Field>
+        <Field label="Attachments" hint="Add more briefs, screenshots or reference files" className="sm:col-span-2">
+          <div>
+            <FilePreviewGrid files={files} onRemove={removeFile} />
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-canvas px-3 py-2 text-sm font-medium text-content ring-1 ring-inset ring-line transition-colors hover:bg-surface">
+              <Icon name="plus" className="size-4" />
+              Add files
+              <input type="file" multiple className="hidden" onChange={onFilesPicked} />
+            </label>
+          </div>
+        </Field>
         <Field label="Priority">
           <Combobox value={priority} onChange={setPriority} options={PRIORITIES.map((p) => ({ value: p, label: humanizeEnum(p) }))} />
         </Field>
@@ -111,7 +168,7 @@ export function ClientTaskActions({ task }: { task: Task }) {
         </Field>
       </div>
       <div className="mt-5 flex justify-end gap-3">
-        <Button variant="secondary" onClick={() => { setEditing(false); setError(null); }} disabled={pending}>
+        <Button variant="secondary" onClick={cancelEdit} disabled={pending}>
           Cancel
         </Button>
         <Button onClick={save} disabled={pending || !name.trim()}>

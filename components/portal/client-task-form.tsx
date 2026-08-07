@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition, type ChangeEvent } from "react";
+import { useEffect, useState, useTransition, type ChangeEvent } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { clientCreateTask } from "@/lib/portal/actions";
 import { Card } from "@/components/ui/card";
@@ -71,6 +72,27 @@ export function ClientTaskForm({
     setError(null);
   }
 
+  function close() {
+    reset();
+    setOpen(false);
+  }
+
+  // Escape closes the modal; lock background scroll while it's open.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") close();
+    };
+    document.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
   function submit() {
     setError(null);
     if (!selId) return setError("Pick a project.");
@@ -114,89 +136,99 @@ export function ClientTaskForm({
     });
   }
 
-  if (!open) {
-    // On a project page with no BM, explain instead of offering the button.
-    if (fixed && !bmName) {
-      return (
-        <Card className="p-4 text-sm text-muted">
-          A Business Manager hasn&apos;t been assigned to this project yet, so you can&apos;t raise a task here. Your team will set one up.
-        </Card>
-      );
-    }
+  // On a project page with no BM, explain instead of offering the button.
+  if (fixed && !bmName) {
     return (
-      <Button onClick={() => setOpen(true)}>
-        <Icon name="plus" className="size-4" /> Raise a task
-      </Button>
+      <Card className="p-4 text-sm text-muted">
+        A Business Manager hasn&apos;t been assigned to this project yet, so you can&apos;t raise a task here. Your team will set one up.
+      </Card>
     );
   }
 
   return (
-    <Card className="p-5">
-      <div className="mb-4 flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-content">Raise a task</h3>
-        <button type="button" onClick={() => { reset(); setOpen(false); }} className="text-faint hover:text-content" aria-label="Close">
-          <Icon name="x" className="size-4" />
-        </button>
-      </div>
+    <>
+      <Button onClick={() => setOpen(true)}>
+        <Icon name="plus" className="size-4" /> Raise a task
+      </Button>
 
-      {error && (
-        <div className="mb-4 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 ring-1 ring-inset ring-red-200 dark:bg-red-500/15 dark:text-red-300 dark:ring-red-500/25">
-          {error}
-        </div>
-      )}
+      {open &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 backdrop-blur-sm sm:items-center"
+            onMouseDown={close}
+            role="dialog"
+            aria-modal="true"
+          >
+            <Card className="my-4 w-full max-w-2xl p-5 sm:my-0" onMouseDown={(e) => e.stopPropagation()}>
+              <div className="mb-4 flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-content">Raise a task</h3>
+                <button type="button" onClick={close} className="text-faint hover:text-content" aria-label="Close">
+                  <Icon name="x" className="size-4" />
+                </button>
+              </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Project" required>
-          {fixed ? (
-            <div className="rounded-xl bg-canvas px-3 py-2 text-sm text-muted ring-1 ring-inset ring-line">{sel?.name ?? "—"}</div>
-          ) : (
-            <Combobox
-              value={selId}
-              onChange={setSelId}
-              placeholder="Select a project"
-              options={projects.map((p) => ({ value: p.id, label: p.name }))}
-            />
-          )}
-        </Field>
-        <Field label="Assigned to">
-          <div className="rounded-xl bg-canvas px-3 py-2 text-sm text-muted ring-1 ring-inset ring-line">
-            {bmName ?? "No Business Manager yet"}
-          </div>
-        </Field>
-        <Field label="Task" htmlFor="ct-name" required className="sm:col-span-2">
-          <Input id="ct-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="What do you need done?" />
-        </Field>
-        <Field label="Details" htmlFor="ct-desc" className="sm:col-span-2">
-          <Textarea id="ct-desc" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Any context, links, or requirements…" />
-        </Field>
-        <Field label="Attachments" hint="Share briefs, screenshots or reference files" className="sm:col-span-2">
-          <div>
-            <FilePreviewGrid files={files} onRemove={removeFile} />
-            <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-canvas px-3 py-2 text-sm font-medium text-content ring-1 ring-inset ring-line transition-colors hover:bg-surface">
-              <Icon name="plus" className="size-4" />
-              Add files
-              <input type="file" multiple className="hidden" onChange={onFilesPicked} />
-            </label>
-          </div>
-        </Field>
-        <Field label="Priority">
-          <Combobox value={priority} onChange={setPriority} options={PRIORITIES.map((p) => ({ value: p, label: humanizeEnum(p) }))} />
-        </Field>
-        <Field label="Due date">
-          <DatePicker value={dueDate} onChange={setDueDate} />
-        </Field>
-      </div>
+              {error && (
+                <div className="mb-4 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 ring-1 ring-inset ring-red-200 dark:bg-red-500/15 dark:text-red-300 dark:ring-red-500/25">
+                  {error}
+                </div>
+              )}
 
-      {selId && !bmName && (
-        <p className="mt-3 text-sm text-amber-700 dark:text-amber-300">
-          This project doesn&apos;t have a Business Manager yet — pick another project, or ask your team to assign one.
-        </p>
-      )}
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Project" required>
+                  {fixed ? (
+                    <div className="rounded-xl bg-canvas px-3 py-2 text-sm text-muted ring-1 ring-inset ring-line">{sel?.name ?? "—"}</div>
+                  ) : (
+                    <Combobox
+                      value={selId}
+                      onChange={setSelId}
+                      placeholder="Select a project"
+                      options={projects.map((p) => ({ value: p.id, label: p.name }))}
+                    />
+                  )}
+                </Field>
+                <Field label="Assigned to">
+                  <div className="rounded-xl bg-canvas px-3 py-2 text-sm text-muted ring-1 ring-inset ring-line">
+                    {bmName ?? "No Business Manager yet"}
+                  </div>
+                </Field>
+                <Field label="Task" htmlFor="ct-name" required className="sm:col-span-2">
+                  <Input id="ct-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="What do you need done?" />
+                </Field>
+                <Field label="Details" htmlFor="ct-desc" className="sm:col-span-2">
+                  <Textarea id="ct-desc" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Any context, links, or requirements…" />
+                </Field>
+                <Field label="Attachments" hint="Share briefs, screenshots or reference files" className="sm:col-span-2">
+                  <div>
+                    <FilePreviewGrid files={files} onRemove={removeFile} />
+                    <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-canvas px-3 py-2 text-sm font-medium text-content ring-1 ring-inset ring-line transition-colors hover:bg-surface">
+                      <Icon name="plus" className="size-4" />
+                      Add files
+                      <input type="file" multiple className="hidden" onChange={onFilesPicked} />
+                    </label>
+                  </div>
+                </Field>
+                <Field label="Priority">
+                  <Combobox value={priority} onChange={setPriority} options={PRIORITIES.map((p) => ({ value: p, label: humanizeEnum(p) }))} />
+                </Field>
+                <Field label="Due date">
+                  <DatePicker value={dueDate} onChange={setDueDate} />
+                </Field>
+              </div>
 
-      <div className="mt-5 flex justify-end gap-3">
-        <Button variant="secondary" onClick={() => { reset(); setOpen(false); }}>Cancel</Button>
-        <Button onClick={submit} disabled={pending || !name.trim() || !bmName || !selId}>{pending ? "Sending…" : "Send task"}</Button>
-      </div>
-    </Card>
+              {selId && !bmName && (
+                <p className="mt-3 text-sm text-amber-700 dark:text-amber-300">
+                  This project doesn&apos;t have a Business Manager yet — pick another project, or ask your team to assign one.
+                </p>
+              )}
+
+              <div className="mt-5 flex justify-end gap-3">
+                <Button variant="secondary" onClick={close}>Cancel</Button>
+                <Button onClick={submit} disabled={pending || !name.trim() || !bmName || !selId}>{pending ? "Sending…" : "Send task"}</Button>
+              </div>
+            </Card>
+          </div>,
+          document.body,
+        )}
+    </>
   );
 }
