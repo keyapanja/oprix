@@ -117,11 +117,13 @@ export async function addClientContact(
 export type InviteState = { ok?: boolean; delivered?: boolean; error?: string };
 
 /**
- * Provision (or re-issue) a CLIENT-role login for a client and email the
- * set-password link. Mirrors the employee invite flow. The invite goes to the
- * client's email; an override can be supplied (and is saved) when none is set.
+ * Provision (or re-issue) a CLIENT-role portal login under a client and email
+ * the set-password link. A client can have several logins that all share the
+ * same clientId — this covers both the *first* login and any additional team
+ * members. It's the admin-side twin of the portal's own `inviteTeamMember`
+ * (which the client's primary contact uses from inside the portal).
  */
-export async function inviteClient(clientId: string, email?: string): Promise<InviteState> {
+export async function inviteClientTeamMember(clientId: string, email: string): Promise<InviteState> {
   const session = await requireCapability("client:manage");
 
   const client = await prisma.client.findFirst({
@@ -130,34 +132,21 @@ export async function inviteClient(clientId: string, email?: string): Promise<In
   });
   if (!client) return { error: "Client not found" };
 
-  const inviteEmail = (email?.trim() || client.email || "").trim().toLowerCase();
-  if (!z.string().email().safeParse(inviteEmail).success) {
-    return { error: "Add an email address to invite this client." };
-  }
+  const inviteEmail = (email || "").trim().toLowerCase();
+  if (!z.string().email().safeParse(inviteEmail).success) return { error: "Enter a valid email address." };
 
-  // Already has a working login?
+  // Reuse the row only if this email already belongs to *this* client (a pending
+  // or revoked login → resend/re-activate). Any other account owning it blocks.
   const existing = await prisma.user.findFirst({
-    where: { companyId: session.companyId, clientId: client.id },
-    select: { id: true, passwordHash: true },
+    where: { companyId: session.companyId, email: inviteEmail },
+    select: { id: true, clientId: true, passwordHash: true, isActive: true },
   });
-  if (existing?.passwordHash) return { error: "This client already has portal access." };
-
-  // Email must not collide with a different account in the company.
-  const clash = await prisma.user.findFirst({
-    where: { companyId: session.companyId, email: inviteEmail, NOT: { clientId: client.id } },
-    select: { id: true },
-  });
-  if (clash) return { error: "Another account already uses that email." };
-
-  // Save the email onto the client if it didn't have one.
-  if (!client.email) {
-    await prisma.client.update({ where: { id: client.id }, data: { email: inviteEmail } });
+  if (existing && existing.clientId !== client.id) {
+    return { error: "That email is already used by another account in this workspace." };
   }
-
-  const company = await prisma.company.findUnique({
-    where: { id: session.companyId },
-    select: { name: true },
-  });
+  if (existing && existing.passwordHash && existing.isActive) {
+    return { error: "That person already has portal access." };
+  }
 
   const token = randomBytes(32).toString("hex");
   const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
@@ -181,6 +170,16 @@ export async function inviteClient(clientId: string, email?: string): Promise<In
     });
   }
 
+  // Seed the client's own email from the first login when none is on file.
+  if (!client.email) {
+    await prisma.client.update({ where: { id: client.id }, data: { email: inviteEmail } });
+  }
+
+  const company = await prisma.company.findUnique({
+    where: { id: session.companyId },
+    select: { name: true },
+  });
+
   let delivered = false;
   try {
     const res = await sendInviteEmail({
@@ -191,9 +190,34 @@ export async function inviteClient(clientId: string, email?: string): Promise<In
     });
     delivered = res.delivered;
   } catch (e) {
-    console.error("[invite-client] email failed:", e);
+    console.error("[invite-client-team] email failed:", e);
   }
 
   revalidatePath(`/clients/${client.id}`);
   return { ok: true, delivered };
+}
+
+/**
+ * Revoke a client portal login. The client's primary (earliest) login is
+ * protected here — removing that one means revoking the whole client, which is
+ * a different, more deliberate action.
+ */
+export async function removeClientTeamMember(clientId: string, userId: string): Promise<ClientState> {
+  const session = await requireCapability("client:manage");
+
+  const logins = await prisma.user.findMany({
+    where: { clientId, companyId: session.companyId, role: "CLIENT", isActive: true },
+    orderBy: { createdAt: "asc" },
+    select: { id: true },
+  });
+  const primaryId = logins[0]?.id ?? null;
+  if (!logins.some((u) => u.id === userId)) return { error: "Team member not found." };
+  if (userId === primaryId) return { error: "The primary contact can't be removed here." };
+
+  await prisma.user.updateMany({
+    where: { id: userId, clientId, companyId: session.companyId, role: "CLIENT" },
+    data: { isActive: false, setupToken: null },
+  });
+  revalidatePath(`/clients/${clientId}`);
+  return { ok: true };
 }

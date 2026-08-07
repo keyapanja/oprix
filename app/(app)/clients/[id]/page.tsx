@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { humanizeEnum, formatDate, formatDateTime } from "@/lib/format";
 import { PROJECT_STATUS_TONE } from "@/lib/status";
 import { ContactForm } from "@/components/clients/contact-form";
-import { PortalAccess, type PortalStatus } from "@/components/clients/portal-access";
+import { ClientPortalTeam, type PortalMember } from "@/components/clients/client-portal-team";
 import { BackLink } from "@/components/ui/back-link";
 
 export const metadata: Metadata = { title: "Client · Oprix" };
@@ -31,18 +31,24 @@ export default async function ClientDetailPage({
         select: { id: true, name: true, status: true, dueDate: true },
       },
       users: {
-        where: { role: "CLIENT" },
-        select: { passwordHash: true, lastLoginAt: true },
+        where: { role: "CLIENT", isActive: true },
+        orderBy: { createdAt: "asc" },
+        select: { id: true, email: true, passwordHash: true, lastLoginAt: true },
       },
     },
   });
 
   if (!client) notFound();
 
-  // Portal login status for this client (the User row carries no PII to the client).
-  const portalUser = client.users[0] ?? null;
-  const portalStatus: PortalStatus = !portalUser ? "none" : portalUser.passwordHash ? "active" : "pending";
-  const lastLogin = portalUser?.lastLoginAt ? formatDateTime(portalUser.lastLoginAt) : null;
+  // Everyone from the client's side who can sign in. The earliest login is the
+  // primary contact (mirrors the portal's own team view); they can invite more.
+  const members: PortalMember[] = client.users.map((u, i) => ({
+    id: u.id,
+    email: u.email,
+    accepted: !!u.passwordHash,
+    isPrimary: i === 0,
+    lastLogin: u.lastLoginAt ? formatDateTime(u.lastLoginAt) : null,
+  }));
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -61,12 +67,7 @@ export default async function ClientDetailPage({
       </Card>
 
       <Card className="mb-6 p-6">
-        <PortalAccess
-          clientId={client.id}
-          clientEmail={client.email}
-          status={portalStatus}
-          lastLogin={lastLogin}
-        />
+        <ClientPortalTeam clientId={client.id} clientEmail={client.email} members={members} />
       </Card>
 
       <div className="grid gap-6 lg:grid-cols-2">
