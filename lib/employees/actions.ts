@@ -135,7 +135,7 @@ export async function createEmployee(
   });
 
   revalidatePath("/employees");
-  redirect("/employees");
+  redirect(`/employees/${employee.id}`); // land on the new hire's detail page
 }
 
 export async function updateEmployee(
