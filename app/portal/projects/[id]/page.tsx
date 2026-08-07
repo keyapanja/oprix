@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requirePortal } from "@/lib/auth/guard";
 import { getClientProject, progressOf } from "@/lib/portal/data";
@@ -37,8 +38,10 @@ export default async function PortalProjectDetailPage({ params }: { params: Prom
 
   const bm = await getProjectManager(project.id);
   const progress = progressOf(project.tasks);
-  const clientTasks = project.tasks.filter((t) => t.clientVisible);
+  // project.tasks is already scoped to client-facing tasks (see getClientProject).
+  // Split them once: those awaiting the client's review vs. everything else.
   const pendingTasks = project.tasks.filter((t) => t.status === "CLIENT_REVIEW");
+  const otherTasks = project.tasks.filter((t) => t.status !== "CLIENT_REVIEW");
   const pendingDeliverables = project.deliverables.filter((d) => d.status === "SUBMITTED");
   const pastDeliverables = project.deliverables.filter((d) => d.status !== "SUBMITTED");
   const needsReview = pendingTasks.length + pendingDeliverables.length;
@@ -101,30 +104,6 @@ export default async function PortalProjectDetailPage({ params }: { params: Prom
         />
       </div>
 
-      {/* Tasks you and your manager are working on */}
-      {clientTasks.length > 0 && (
-        <section className="space-y-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-faint">Your tasks</h2>
-          <Card className="divide-y divide-line overflow-hidden">
-            {clientTasks.map((t) => {
-              const pill = taskPill(t.status);
-              return (
-                <div key={t.id} className="flex items-center justify-between gap-3 px-4 py-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-content">{t.name}</p>
-                    <p className="text-xs text-faint">
-                      {t.createdById === session.userId ? "Raised by you" : "From your team"}
-                      {t.dueDate ? ` · Due ${formatDate(t.dueDate)}` : ""}
-                    </p>
-                  </div>
-                  <Badge tone={pill.tone}>{pill.label}</Badge>
-                </div>
-              );
-            })}
-          </Card>
-        </section>
-      )}
-
       {/* Awaiting your review */}
       {needsReview > 0 && (
         <section className="space-y-3">
@@ -136,7 +115,9 @@ export default async function PortalProjectDetailPage({ params }: { params: Prom
             <Card key={t.id} className="p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="font-medium text-content">{t.name}</p>
+                  <Link href={`/portal/tasks/${t.id}`} className="font-medium text-content hover:text-accent-strong hover:underline">
+                    {t.name}
+                  </Link>
                   {t.service?.name && <p className="text-xs text-muted">{t.service.name}</p>}
                 </div>
                 {t.finalLink &&
@@ -165,28 +146,42 @@ export default async function PortalProjectDetailPage({ params }: { params: Prom
         </section>
       )}
 
-      <div className="space-y-6">
-        <div className="space-y-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-faint">Work</h2>
-          {project.tasks.length === 0 ? (
-            <Card className="px-5 py-10 text-center text-sm text-muted">No tasks yet.</Card>
-          ) : (
-            <Card className="divide-y divide-line overflow-hidden">
-              {project.tasks.map((t) => {
-                const pill = taskPill(t.status);
-                return (
-                  <div key={t.id} className="flex items-center justify-between gap-3 px-4 py-3">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-content">{t.name}</p>
-                      {t.service?.name && <p className="text-xs text-faint">{t.service.name}</p>}
-                    </div>
-                    <Badge tone={pill.tone}>{pill.label}</Badge>
+      {/* All the tasks the client can see (review-pending ones live above) —
+          one list, each row opens the task. */}
+      <div className="space-y-3">
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-faint">Tasks</h2>
+        {project.tasks.length === 0 ? (
+          <Card className="px-5 py-10 text-center text-sm text-muted">No tasks yet.</Card>
+        ) : otherTasks.length === 0 ? (
+          <Card className="px-5 py-10 text-center text-sm text-muted">
+            Everything is up for your review above.
+          </Card>
+        ) : (
+          <Card className="divide-y divide-line overflow-hidden">
+            {otherTasks.map((t) => {
+              const pill = taskPill(t.status);
+              return (
+                <Link
+                  key={t.id}
+                  href={`/portal/tasks/${t.id}`}
+                  className="flex items-center justify-between gap-3 px-4 py-3 transition-colors hover:bg-canvas"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-content">{t.name}</p>
+                    <p className="text-xs text-faint">
+                      {t.createdById === session.userId ? "Raised by you" : "From your team"}
+                      {t.dueDate ? ` · Due ${formatDate(t.dueDate)}` : ""}
+                    </p>
                   </div>
-                );
-              })}
-            </Card>
-          )}
-        </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <Badge tone={pill.tone}>{pill.label}</Badge>
+                    <Icon name="chevronRight" className="size-4 text-faint" />
+                  </div>
+                </Link>
+              );
+            })}
+          </Card>
+        )}
       </div>
 
       {/* Deliverables history */}

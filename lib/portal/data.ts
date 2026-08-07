@@ -28,7 +28,11 @@ export async function listClientProjects(clientId: string, companyId: string) {
       startDate: true,
       type: true,
       dueDate: true,
-      tasks: { where: { deletedAt: null }, select: { status: true } },
+      // Progress reflects the client-facing tasks only (matches the detail page).
+      tasks: {
+        where: { deletedAt: null, OR: [{ clientVisible: true }, { status: "CLIENT_REVIEW" }] },
+        select: { status: true },
+      },
     },
   });
   return projects.map(({ tasks, ...p }) => ({ ...p, progress: progressOf(tasks) }));
@@ -48,7 +52,10 @@ export async function getClientProject(clientId: string, companyId: string, proj
       type: true,
       dueDate: true,
       tasks: {
-        where: { deletedAt: null },
+        // Only tasks meant for the client: those explicitly shared with them, or
+        // sitting in their review queue. Internal-only tasks never reach the
+        // portal — and progress below is computed from this same client-facing set.
+        where: { deletedAt: null, OR: [{ clientVisible: true }, { status: "CLIENT_REVIEW" }] },
         orderBy: { createdAt: "asc" },
         // No timers / cost — progress only, plus client-visible flag + due date
         // for the tasks the client and their manager exchange.
@@ -76,6 +83,30 @@ export async function getClientProject(clientId: string, companyId: string, proj
           decidedAt: true,
         },
       },
+    },
+  });
+}
+
+/** One client-facing task, for the portal task detail page. Ownership + the
+ *  client-facing gate live in the WHERE, so a foreign/internal id returns null. */
+export async function getClientTask(clientId: string, companyId: string, taskId: string) {
+  return prisma.task.findFirst({
+    where: {
+      id: taskId,
+      deletedAt: null,
+      project: { clientId, companyId, deletedAt: null },
+      OR: [{ clientVisible: true }, { status: "CLIENT_REVIEW" }],
+    },
+    select: {
+      id: true,
+      name: true,
+      description: true,
+      status: true,
+      finalLink: true,
+      dueDate: true,
+      createdById: true,
+      service: { select: { name: true } },
+      project: { select: { id: true, name: true } },
     },
   });
 }
