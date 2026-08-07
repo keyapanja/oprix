@@ -26,6 +26,7 @@ export function Combobox({
   searchPlaceholder = "Search…",
   emptyLabel,
   disabled,
+  leadingIcon,
 }: {
   options: ComboOption[];
   name?: string;
@@ -38,6 +39,9 @@ export function Combobox({
   /** When set, an explicit "clear" row with this label is shown (value = ""). */
   emptyLabel?: string;
   disabled?: boolean;
+  /** Optional icon name shown at the start of the trigger — signals what the
+   *  control filters (e.g. a calendar for a date filter). */
+  leadingIcon?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -180,8 +184,11 @@ export function Combobox({
         onClick={() => setOpen((o) => !o)}
         className="flex h-10 w-full items-center justify-between gap-2 rounded-xl bg-surface px-3.5 text-left text-sm ring-1 ring-inset ring-line-strong shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-50"
       >
-        <span className={cn("truncate", selected ? "text-content" : "text-faint")}>
-          {selected ? selected.label : placeholder}
+        <span className="flex min-w-0 items-center gap-2">
+          {leadingIcon && <Icon name={leadingIcon} className="size-4 shrink-0 text-faint" />}
+          <span className={cn("truncate", selected ? "text-content" : "text-faint")}>
+            {selected ? selected.label : placeholder}
+          </span>
         </span>
         <Icon name="chevronDown" className="size-4 shrink-0 text-faint" />
       </button>

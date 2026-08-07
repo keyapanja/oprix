@@ -152,7 +152,14 @@ export function AllRequests({
           <Combobox options={typeOptions} value={type} onChange={setType} placeholder="All types" emptyLabel="All types" />
         </div>
         <div className="w-44">
-          <Combobox options={DATE_OPTS} value={dateRange} onChange={(v) => setDateRange(v || "")} placeholder="All time" emptyLabel="All time" />
+          <Combobox
+            options={DATE_OPTS}
+            value={dateRange}
+            onChange={(v) => setDateRange(v || "")}
+            placeholder="Any dates"
+            emptyLabel="All time"
+            leadingIcon="calendarDays"
+          />
         </div>
         <div className="w-44">
           <Combobox options={SORT_OPTS} value={sort} onChange={(v) => setSort((v || "applied") as SortKey)} placeholder="Sort" />
