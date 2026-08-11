@@ -8,7 +8,9 @@ import { ROLE_LABELS } from "@/lib/auth/can";
 import { Combobox } from "@/components/ui/combobox";
 import { toast } from "@/components/ui/toast";
 
-const BASE: Role[] = ["EMPLOYEE", "TEAM_LEAD", "PROJECT_MANAGER", "HR_MANAGER"];
+// Team Lead is retired — leadership is expressed via Department Head (set per
+// department in Organization → Departments), not an assignable role.
+const BASE: Role[] = ["EMPLOYEE", "PROJECT_MANAGER", "HR_MANAGER"];
 
 /** Inline role picker for an employee, gated to roles:manage on the server. */
 export function EmployeeRole({

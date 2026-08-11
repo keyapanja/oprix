@@ -5,7 +5,7 @@ import { useState, useTransition } from "react";
 import type { Role } from "@prisma/client";
 import { setRolePermission } from "@/lib/permissions/actions";
 import {
-  EDITABLE_ROLES,
+  PERMISSION_ROLES,
   EDITABLE_ACTIONS,
   ACTION_LABELS,
   ROLE_LABELS,
@@ -18,7 +18,7 @@ import { cn } from "@/lib/cn";
 export function PermissionsMatrix({ initial }: { initial: Record<string, string[]> }) {
   const [granted, setGranted] = useState<Record<string, Set<string>>>(() => {
     const m: Record<string, Set<string>> = {};
-    for (const role of EDITABLE_ROLES) m[role] = new Set(initial[role] ?? []);
+    for (const role of PERMISSION_ROLES) m[role] = new Set(initial[role] ?? []);
     return m;
   });
   const [pending, start] = useTransition();
@@ -49,7 +49,8 @@ export function PermissionsMatrix({ initial }: { initial: Record<string, string[
         <h3 className="text-sm font-semibold text-content">Roles &amp; permissions</h3>
         <p className="mt-0.5 text-sm text-muted">
           Control what each role can access. Changes apply immediately. Super Admin
-          always has full access.
+          always has full access. <span className="font-medium text-content">Department Head</span> isn&apos;t a
+          role — it grants extra access to whoever heads a department (set per department), on top of their own role.
         </p>
       </div>
 
@@ -59,7 +60,7 @@ export function PermissionsMatrix({ initial }: { initial: Record<string, string[
             <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wider text-faint">
               <th className="px-5 py-3">Permission</th>
               <th className="px-3 py-3 text-center">Super Admin</th>
-              {EDITABLE_ROLES.map((r) => (
+              {PERMISSION_ROLES.map((r) => (
                 <th key={r} className="px-3 py-3 text-center">{ROLE_LABELS[r] ?? r}</th>
               ))}
             </tr>
@@ -76,7 +77,7 @@ export function PermissionsMatrix({ initial }: { initial: Record<string, string[
                   <td className="px-3 py-3 text-center">
                     <Cell on disabled />
                   </td>
-                  {EDITABLE_ROLES.map((role) => (
+                  {PERMISSION_ROLES.map((role) => (
                     <td key={role} className="px-3 py-3 text-center">
                       <Cell
                         on={granted[role].has(action)}

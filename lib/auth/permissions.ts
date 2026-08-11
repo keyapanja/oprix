@@ -5,7 +5,7 @@ import { prisma } from "@/lib/db";
 import {
   DEFAULT_PERMISSIONS,
   EDITABLE_ACTIONS,
-  EDITABLE_ROLES,
+  PERMISSION_ROLES,
   type Action,
 } from "@/lib/auth/can";
 
@@ -61,7 +61,7 @@ export async function listPermissions(companyId: string, role: Role): Promise<Ac
 export async function ensureSeeded(companyId: string): Promise<void> {
   if (await prisma.rolePermission.count({ where: { companyId } })) return;
   const data: { companyId: string; role: Role; action: string }[] = [];
-  for (const role of EDITABLE_ROLES) {
+  for (const role of PERMISSION_ROLES) {
     for (const a of DEFAULT_PERMISSIONS[role]) {
       if (EDITABLE_ACTIONS.includes(a)) data.push({ companyId, role, action: a });
     }
@@ -77,11 +77,11 @@ export async function getAccessMatrix(
 ): Promise<Record<string, string[]>> {
   await ensureSeeded(companyId);
   const rows = await prisma.rolePermission.findMany({
-    where: { companyId, role: { in: EDITABLE_ROLES } },
+    where: { companyId, role: { in: PERMISSION_ROLES } },
     select: { role: true, action: true },
   });
   const map: Record<string, string[]> = {};
-  for (const role of EDITABLE_ROLES) map[role] = [];
+  for (const role of PERMISSION_ROLES) map[role] = [];
   for (const r of rows) {
     if (EDITABLE_ACTIONS.includes(r.action as Action)) map[r.role].push(r.action);
   }

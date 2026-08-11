@@ -58,11 +58,25 @@ export function can(role: Role, action: Action): boolean {
 
 // ---- Presentation for the Roles & Permissions matrix -----------------------
 
-/** Roles whose access is editable (Super Admin is always full; Client is portal-only). */
+/** Real, assignable roles whose task-visibility scope is editable (Super Admin is
+ *  always full; Client is portal-only; Team Lead is retired — see PERMISSION_ROLES). */
 export const EDITABLE_ROLES: Role[] = [
   "HR_MANAGER",
   "PROJECT_MANAGER",
-  "TEAM_LEAD",
+  "EMPLOYEE",
+];
+
+/**
+ * Columns of the Access (capabilities) matrix: the editable roles plus the
+ * "Department Head" bucket — capabilities that apply to whoever heads a
+ * department, on top of their own role. That bucket is stored internally under
+ * the retired TEAM_LEAD slot (so no schema change), and shown as "Department
+ * Head" via ROLE_LABELS; department heads inherit it in the guard layer.
+ */
+export const PERMISSION_ROLES: Role[] = [
+  "HR_MANAGER",
+  "PROJECT_MANAGER",
+  "TEAM_LEAD", // = "Department Head" bucket (not an assignable role)
   "EMPLOYEE",
 ];
 
@@ -94,7 +108,7 @@ export const ACTION_LABELS: Partial<Record<Action, { label: string; description:
   "attendance:manage": { label: "Manage attendance", description: "Mark / edit attendance" },
   "leave:manage": { label: "Manage leave", description: "Leave types and requests" },
   "leave:approve": { label: "Approve leave", description: "Approve / reject leave" },
-  "leave:team-notify": { label: "Team leave alerts", description: "Get notified when someone they manage applies for leave / WFH" },
+  "leave:team-notify": { label: "Team leave alerts", description: "Notify the department head when someone in their department applies for leave / WFH" },
   "timesheet:approve": { label: "Approve timesheets", description: "Approve submitted hours" },
   "project:manage": { label: "Manage projects", description: "Create and manage projects" },
   "task:manage": { label: "Manage tasks", description: "Create and move tasks" },
@@ -110,7 +124,7 @@ export const ROLE_LABELS: Partial<Record<Role, string>> = {
   SUPER_ADMIN: "Super Admin",
   HR_MANAGER: "HR Manager",
   PROJECT_MANAGER: "Project Manager",
-  TEAM_LEAD: "Team Lead",
+  TEAM_LEAD: "Department Head", // retired role slot, repurposed as the Dept Head bucket
   EMPLOYEE: "Employee",
   CLIENT: "Client",
 };

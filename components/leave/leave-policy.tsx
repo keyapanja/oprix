@@ -19,7 +19,7 @@ const SECTIONS: { title: string; items: string[] }[] = [
       "1-day leave: apply at least 2 days in advance.",
       "2+ day leave: apply at least 15 days in advance.",
       "Late or last-minute requests without a valid reason will be rejected.",
-      "All leave is subject to Team Lead + HR approval.",
+      "All leave is subject to Department Head + HR approval.",
       "No leave is allowed during probation or notice period.",
     ],
   },

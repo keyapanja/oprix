@@ -212,10 +212,12 @@ export async function updateEmployee(
   redirect(`/employees/${employeeId}`);
 }
 
-const ASSIGNABLE_ROLES: Role[] = ["EMPLOYEE", "TEAM_LEAD", "PROJECT_MANAGER", "HR_MANAGER", "SUPER_ADMIN"];
+// Team Lead is retired (leadership is expressed via Department Head), so it's not
+// assignable — a crafted request can't set it either.
+const ASSIGNABLE_ROLES: Role[] = ["EMPLOYEE", "PROJECT_MANAGER", "HR_MANAGER", "SUPER_ADMIN"];
 
 /**
- * Set an employee's access role (HR Manager, Project Manager, Team Lead, …).
+ * Set an employee's access role (HR Manager, Project Manager, Employee, …).
  * Gated by `roles:manage`. Guardrails: you can't change your own role, and only
  * a Super Admin can grant or remove the Super Admin role.
  */

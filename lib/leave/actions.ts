@@ -61,7 +61,7 @@ const isBackdatedStart = (start: Date): boolean => requestTiming(start) === "bac
 /** Active users whose role can approve leave (admins / HR / team leads / configured). */
 async function leaveApproverUserIds(companyId: string, exclude?: string): Promise<string[]> {
   const roles: Role[] = [];
-  for (const role of ["SUPER_ADMIN", "HR_MANAGER", "PROJECT_MANAGER", "TEAM_LEAD", "EMPLOYEE"] as Role[]) {
+  for (const role of ["SUPER_ADMIN", "HR_MANAGER", "PROJECT_MANAGER", "EMPLOYEE"] as Role[]) {
     if (await hasPermission(companyId, role, "leave:approve")) roles.push(role);
   }
   if (!roles.length) return [];
@@ -73,25 +73,27 @@ async function leaveApproverUserIds(companyId: string, exclude?: string): Promis
 }
 
 /**
- * The applicant's reporting manager (their assigned team lead), but only when
- * that manager's role opts into team-leave alerts — the "Team leave alerts"
- * toggle in Organization → Access. So a lead is told when someone they manage
- * takes leave, without duplicating anyone already excluded (approvers/applicant).
+ * The head of the applicant's department — notified when someone in their
+ * department takes leave, but only when the "Team leave alerts" capability is
+ * enabled for department heads (Organization → Access → Department Head column,
+ * stored under the retired TEAM_LEAD slot). Deduped against anyone already
+ * excluded (approvers/applicant), so a head applying for their own leave, or one
+ * who is also an approver, isn't notified twice.
  */
-async function teamLeadNotifyUserIds(
+async function deptHeadNotifyUserIds(
   companyId: string,
   applicantEmployeeId: string,
   exclude: (string | null | undefined)[],
 ): Promise<string[]> {
+  if (!(await hasPermission(companyId, "TEAM_LEAD", "leave:team-notify"))) return [];
   const emp = await prisma.employee.findUnique({
     where: { id: applicantEmployeeId },
-    select: { manager: { select: { user: { select: { id: true, role: true, isActive: true } } } } },
+    select: { department: { select: { head: { select: { user: { select: { id: true, isActive: true } } } } } } },
   });
-  const mgr = emp?.manager?.user;
-  if (!mgr || !mgr.isActive) return [];
-  if (exclude.includes(mgr.id)) return [];
-  if (!(await hasPermission(companyId, mgr.role, "leave:team-notify"))) return [];
-  return [mgr.id];
+  const head = emp?.department?.head?.user;
+  if (!head || !head.isActive) return [];
+  if (exclude.includes(head.id)) return [];
+  return [head.id];
 }
 
 // ---- Leave types ----------------------------------------------------------
@@ -308,14 +310,14 @@ export async function applyLeave(
       `${emp?.fullName ?? "An employee"} requested ${kindLabel} for ${formatDate(start)} – ${formatDate(end)}${note}.`,
       reqMeta(created.id, "manage"),
     );
-    // Also ping the applicant's team lead (if their role opts in) — deduped
-    // against anyone already notified above. Links to the calendar (accessible
-    // to leads who can't open the approvals page).
-    const leads = await teamLeadNotifyUserIds(session.companyId, session.employeeId, [...approvers, session.userId]);
+    // Also ping the applicant's department head (if the alert is enabled for
+    // department heads) — deduped against anyone already notified above. Links to
+    // the calendar (accessible to heads who can't open the approvals page).
+    const heads = await deptHeadNotifyUserIds(session.companyId, session.employeeId, [...approvers, session.userId]);
     await notifyUsers(
-      leads,
-      `Team ${kindLower(d.kind)} request`,
-      `${emp?.fullName ?? "A team member"} from your team requested ${kindLabel} for ${formatDate(start)} – ${formatDate(end)}${note}.`,
+      heads,
+      `Department ${kindLower(d.kind)} request`,
+      `${emp?.fullName ?? "Someone"} from your department requested ${kindLabel} for ${formatDate(start)} – ${formatDate(end)}${note}.`,
       { team: true },
     );
   } catch (e) {
@@ -457,19 +459,20 @@ export async function createLeaveRequest(
     }
   }
 
-  // Inform the team member's reporting lead (if their role opts in), whoever
-  // filed it and whatever the outcome — deduped against the creator + applicant.
+  // Inform the applicant's department head (if the alert is enabled for
+  // department heads), whoever filed it and whatever the outcome — deduped
+  // against the creator + applicant.
   try {
     const kindLabel = kind === "WFH" ? "work from home" : "leave";
-    const leads = await teamLeadNotifyUserIds(session.companyId, d.employeeId, [session.userId, emp.user?.id]);
+    const heads = await deptHeadNotifyUserIds(session.companyId, d.employeeId, [session.userId, emp.user?.id]);
     await notifyUsers(
-      leads,
-      `Team ${kindLower(kind)} request`,
-      `${emp.fullName} from your team has ${kindLabel} for ${formatDate(start)} – ${formatDate(end)}.`,
+      heads,
+      `Department ${kindLower(kind)} request`,
+      `${emp.fullName} from your department has ${kindLabel} for ${formatDate(start)} – ${formatDate(end)}.`,
       { team: true },
     );
   } catch (e) {
-    console.error("[leave] notify team lead failed:", e);
+    console.error("[leave] notify department head failed:", e);
   }
 
   revalidatePath(LEAVE);
