@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import type { Role } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { requireCapability } from "@/lib/auth/guard";
-import { EDITABLE_ROLES, EDITABLE_ACTIONS, type Action } from "@/lib/auth/can";
+import { EDITABLE_ROLES, PERMISSION_ROLES, EDITABLE_ACTIONS, type Action } from "@/lib/auth/can";
 import { ensureSeeded } from "@/lib/auth/permissions";
 import { TASK_SCOPES, SCOPE_PREFIX, scopeAction, type TaskScope } from "@/lib/tasks/visibility";
 
@@ -38,8 +38,9 @@ export async function setRolePermission(
 ): Promise<PermState> {
   const session = await requireCapability("roles:manage");
 
-  // Super Admin is always full; only the editable roles/actions can change.
-  if (!EDITABLE_ROLES.includes(role)) return { error: "That role's access can't be changed." };
+  // Super Admin is always full; the editable roles + the Department Head bucket
+  // (PERMISSION_ROLES) can change.
+  if (!PERMISSION_ROLES.includes(role)) return { error: "That role's access can't be changed." };
   if (!EDITABLE_ACTIONS.includes(action as Action)) return { error: "Unknown permission." };
 
   await ensureSeeded(session.companyId);
