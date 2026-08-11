@@ -139,6 +139,19 @@ export function AllRequests({
     });
   }, [requests, q, status, type, sort, dateRange, customFrom, customTo]);
 
+  // Totals for the current view — days taken, split by kind (rejected excluded,
+  // since those weren't actually taken).
+  const summary = useMemo(() => {
+    let leaveDays = 0;
+    let wfhDays = 0;
+    for (const r of filtered) {
+      if (r.status === "REJECTED") continue;
+      if (r.kind === "WFH") wfhDays += r.days;
+      else leaveDays += r.days;
+    }
+    return { leaveDays, wfhDays };
+  }, [filtered]);
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
@@ -183,6 +196,17 @@ export function AllRequests({
       )}
 
       <Card className="overflow-hidden">
+        {filtered.length > 0 && (
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 border-b border-line bg-canvas/40 px-5 py-3 text-sm">
+            <span className="font-medium text-content">Summary</span>
+            <span className="text-muted">
+              Leave <span className="font-semibold text-content">{summary.leaveDays}</span> {summary.leaveDays === 1 ? "day" : "days"}
+            </span>
+            <span className="text-muted">
+              WFH <span className="font-semibold text-content">{summary.wfhDays}</span> {summary.wfhDays === 1 ? "day" : "days"}
+            </span>
+          </div>
+        )}
         {filtered.length === 0 ? (
           <p className="px-5 py-16 text-center text-sm text-muted">
             {requests.length === 0 ? "No requests yet." : "No requests match these filters."}

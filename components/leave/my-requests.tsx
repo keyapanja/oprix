@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Combobox } from "@/components/ui/combobox";
+import { DatePicker } from "@/components/ui/date-picker";
 import { BackdateBadge } from "@/components/ui/backdate-badge";
 import { LeaveDetailModal, type LeaveDetail } from "@/components/leave/leave-detail-modal";
 import { LeaveTypeBadge } from "@/components/leave/leave-type-badge";
@@ -27,7 +28,41 @@ const SORT_OPTS = [
   { value: "asc", label: "Oldest first" },
 ];
 
+const DATE_OPTS = [
+  { value: "thisMonth", label: "This month" },
+  { value: "lastMonth", label: "Last month" },
+  { value: "thisQuarter", label: "This quarter" },
+  { value: "thisYear", label: "This year" },
+  { value: "custom", label: "Custom range" },
+];
+
 const isApproved = (s: string) => s === "HR_APPROVED" || s === "APPROVED" || s === "MANAGER_APPROVED";
+
+/** Local YYYY-MM-DD for a Date. */
+function ymd(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** Inclusive [from,to] (YYYY-MM-DD) for a preset key; null for all-time / custom. */
+function presetRange(preset: string): { from: string; to: string } | null {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = now.getMonth();
+  switch (preset) {
+    case "thisMonth":
+      return { from: ymd(new Date(y, m, 1)), to: ymd(new Date(y, m + 1, 0)) };
+    case "lastMonth":
+      return { from: ymd(new Date(y, m - 1, 1)), to: ymd(new Date(y, m, 0)) };
+    case "thisQuarter": {
+      const sm = Math.floor(m / 3) * 3;
+      return { from: ymd(new Date(y, sm, 1)), to: ymd(new Date(y, sm + 3, 0)) };
+    }
+    case "thisYear":
+      return { from: ymd(new Date(y, 0, 1)), to: ymd(new Date(y, 11, 31)) };
+    default:
+      return null;
+  }
+}
 
 /** Employee's own leave/WFH requests — each row opens the detail modal.
  *  Defaults to newest leave-date first; filterable by type & status. */
@@ -44,6 +79,9 @@ export function MyRequests({
   const [status, setStatus] = useState("");
   const [type, setType] = useState(""); // "" = all, "WFH", or a leaveTypeId
   const [sort, setSort] = useState("desc"); // by leave (start) date; newest first
+  const [dateRange, setDateRange] = useState(""); // "" = all time, a preset key, or "custom"
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
   // Track by id so an edit / attachment upload (router.refresh) updates the open
   // modal. Seeded from a notification deep-link so the popup opens on arrival.
   const [selId, setSelId] = useState<string | null>(initialReqId ?? null);
@@ -55,12 +93,24 @@ export function MyRequests({
   );
 
   const filtered = useMemo(() => {
+    // A leave matches the window when its span overlaps it at all.
+    const range =
+      dateRange === "custom"
+        ? customFrom || customTo
+          ? { from: customFrom || "0000-01-01", to: customTo || "9999-12-31" }
+          : null
+        : presetRange(dateRange);
     const rows = requests.filter((r) => {
       if (status === "PENDING" && r.status !== "PENDING") return false;
       if (status === "APPROVED" && !isApproved(r.status)) return false;
       if (status === "REJECTED" && r.status !== "REJECTED") return false;
       if (type === "WFH" && r.kind !== "WFH") return false;
       if (type && type !== "WFH" && r.leaveTypeId !== type) return false;
+      if (range) {
+        const s = r.startDate.slice(0, 10);
+        const e = r.endDate.slice(0, 10);
+        if (!(s <= range.to && e >= range.from)) return false;
+      }
       return true;
     });
     const dir = sort === "asc" ? 1 : -1;
@@ -69,7 +119,19 @@ export function MyRequests({
       // Tiebreak within the same date by when it was applied (same direction).
       return (a.appliedAt < b.appliedAt ? -1 : 1) * dir;
     });
-  }, [requests, status, type, sort]);
+  }, [requests, status, type, sort, dateRange, customFrom, customTo]);
+
+  // Totals for the current view — days taken, split by kind (rejected excluded).
+  const summary = useMemo(() => {
+    let leaveDays = 0;
+    let wfhDays = 0;
+    for (const r of filtered) {
+      if (r.status === "REJECTED") continue;
+      if (r.kind === "WFH") wfhDays += r.days;
+      else leaveDays += r.days;
+    }
+    return { leaveDays, wfhDays };
+  }, [filtered]);
 
   if (requests.length === 0) {
     return <p className="px-5 py-8 text-center text-sm text-muted">No requests yet.</p>;
@@ -84,6 +146,16 @@ export function MyRequests({
         <div className="w-44">
           <Combobox options={typeOptions} value={type} onChange={setType} placeholder="All types" emptyLabel="All types" />
         </div>
+        <div className="w-44">
+          <Combobox
+            options={DATE_OPTS}
+            value={dateRange}
+            onChange={(v) => setDateRange(v || "")}
+            placeholder="Any dates"
+            emptyLabel="All time"
+            leadingIcon="calendarDays"
+          />
+        </div>
         <div className="w-40">
           <Combobox options={SORT_OPTS} value={sort} onChange={(v) => setSort(v || "desc")} placeholder="Sort by date" />
         </div>
@@ -91,6 +163,31 @@ export function MyRequests({
           {filtered.length} request{filtered.length === 1 ? "" : "s"}
         </p>
       </div>
+
+      {dateRange === "custom" && (
+        <div className="flex flex-wrap items-center gap-3 border-b border-line px-5 py-3">
+          <span className="text-sm font-medium text-muted">From</span>
+          <div className="w-44">
+            <DatePicker value={customFrom} onChange={setCustomFrom} placeholder="Start date" />
+          </div>
+          <span className="text-sm font-medium text-muted">to</span>
+          <div className="w-44">
+            <DatePicker value={customTo} onChange={setCustomTo} placeholder="End date" />
+          </div>
+        </div>
+      )}
+
+      {filtered.length > 0 && (
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 border-b border-line bg-canvas/40 px-5 py-2.5 text-sm">
+          <span className="font-medium text-content">Summary</span>
+          <span className="text-muted">
+            Leave <span className="font-semibold text-content">{summary.leaveDays}</span> {summary.leaveDays === 1 ? "day" : "days"}
+          </span>
+          <span className="text-muted">
+            WFH <span className="font-semibold text-content">{summary.wfhDays}</span> {summary.wfhDays === 1 ? "day" : "days"}
+          </span>
+        </div>
+      )}
 
       {filtered.length === 0 ? (
         <p className="px-5 py-8 text-center text-sm text-muted">No requests match these filters.</p>
