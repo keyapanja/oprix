@@ -7,6 +7,7 @@ export type AwayEntry = {
   kind: "LEAVE" | "WFH";
   type: string | null;
   isHalfDay: boolean;
+  halfDayPeriod: string | null; // "FIRST" | "SECOND" — which half, when isHalfDay
 };
 export type DayCell = { holiday?: string; away: AwayEntry[]; announcements: string[] };
 export type LeaveEntry = {
@@ -14,6 +15,7 @@ export type LeaveEntry = {
   kind: "LEAVE" | "WFH";
   type: string | null;
   isHalfDay: boolean;
+  halfDayPeriod: string | null; // "FIRST" | "SECOND" — which half, when isHalfDay
   startISO: string;
   endISO: string;
 };
@@ -72,6 +74,7 @@ export async function getMonthCalendar(
       select: {
         kind: true,
         isHalfDay: true,
+        halfDayPeriod: true,
         startDate: true,
         endDate: true,
         employee: { select: { fullName: true } },
@@ -100,6 +103,7 @@ export async function getMonthCalendar(
         kind: r.kind,
         type: r.leaveType?.name ?? null,
         isHalfDay: r.isHalfDay,
+        halfDayPeriod: r.halfDayPeriod,
       });
     }
   }
@@ -137,6 +141,7 @@ export async function getMonthCalendar(
         kind: r.kind,
         type: r.leaveType?.name ?? null,
         isHalfDay: r.isHalfDay,
+        halfDayPeriod: r.halfDayPeriod,
         startISO: iso(r.startDate),
         endISO: iso(r.endDate),
       }))

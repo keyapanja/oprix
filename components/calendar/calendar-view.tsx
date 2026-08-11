@@ -10,6 +10,7 @@ import { AnnouncementActions } from "@/components/calendar/announcement-actions"
 import { HolidayActions } from "@/components/calendar/holiday-actions";
 import { CalendarDetailModal, type CalendarDetail } from "@/components/calendar/detail-modal";
 import { formatDate } from "@/lib/format";
+import { halfDayLabel } from "@/lib/leave/half-day";
 import { cn } from "@/lib/cn";
 
 type Balance = {
@@ -180,7 +181,7 @@ export function CalendarView({
                       <p
                         key={idx}
                         className="truncate rounded bg-blue-100 px-1 py-0.5 text-[10px] font-medium text-blue-700 dark:bg-blue-500/20 dark:text-blue-300"
-                        title={`${a.name} — ${a.kind === "WFH" ? "Working from home" : "On leave"}${a.isHalfDay ? " (half day)" : ""}`}
+                        title={`${a.name} — ${a.kind === "WFH" ? "Working from home" : "On leave"}${a.isHalfDay ? ` (${halfDayLabel(a.halfDayPeriod) ?? "half day"})` : ""}`}
                       >
                         {first} is on {a.kind === "WFH" ? "WFH" : "leave"}{a.isHalfDay ? " (½)" : ""}
                       </p>
@@ -223,7 +224,7 @@ export function CalendarView({
                     <span className="font-medium text-content">{l.name}</span>
                     <span className="text-muted">
                       {l.kind === "WFH" ? "Working from home" : l.type ?? "Leave"}
-                      {l.isHalfDay ? " · half day" : ""}
+                      {l.isHalfDay ? ` · ${halfDayLabel(l.halfDayPeriod) ?? "half day"}` : ""}
                     </span>
                     <span className="ml-auto text-xs text-faint">
                       {l.startISO === l.endISO

@@ -4,6 +4,7 @@ import { Modal } from "@/components/ui/modal";
 import { AttachmentGrid } from "@/components/attachments/attachment-grid";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { renderMarkdown } from "@/lib/kb/markdown";
+import { halfDayLabel } from "@/lib/leave/half-day";
 
 export type CalendarDetail =
   | { kind: "holiday"; title: string; dateISO: string }
@@ -19,7 +20,7 @@ export type CalendarDetail =
   | {
       kind: "away";
       dateISO: string;
-      away: { name: string; kind: "LEAVE" | "WFH"; type: string | null; isHalfDay: boolean }[];
+      away: { name: string; kind: "LEAVE" | "WFH"; type: string | null; isHalfDay: boolean; halfDayPeriod: string | null }[];
     };
 
 /** Read-only detail popup for a calendar holiday, announcement, or who's-away list. */
@@ -40,7 +41,7 @@ export function CalendarDetailModal({ item, onClose }: { item: CalendarDetail; o
                   <span className="font-medium text-content">{a.name}</span>
                   <span className="ml-auto text-muted">
                     {a.kind === "WFH" ? "WFH" : a.type ?? "Leave"}
-                    {a.isHalfDay ? " · ½ day" : ""}
+                    {a.isHalfDay ? ` · ${halfDayLabel(a.halfDayPeriod) ?? "½ day"}` : ""}
                   </span>
                 </li>
               ))}
