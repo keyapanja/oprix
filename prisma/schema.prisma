@@ -434,6 +434,7 @@ model Employee {
   employeeCode    String
   fullName        String
   email           String
+  personalEmail   String?   // self-service secondary/personal contact email
   phone           String?
   photoKey        String?
   dateOfBirth     DateTime?

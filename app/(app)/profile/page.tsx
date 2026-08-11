@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Card } from "@/components/ui/card";
 import { Avatar } from "@/components/ui/avatar";
 import { ProfileEditForm } from "@/components/profile/profile-edit-form";
+import { PersonalDetailsForm } from "@/components/profile/personal-details-form";
 import { ChangePasswordForm } from "@/components/profile/change-password-form";
 
 export const metadata: Metadata = { title: "My profile · Oprix" };
@@ -25,8 +26,12 @@ export default async function ProfilePage() {
         select: {
           id: true,
           fullName: true,
+          phone: true,
+          personalEmail: true,
+          dateOfBirth: true,
           department: { select: { name: true } },
           designation: { select: { name: true } },
+          emergencyContacts: { select: { name: true, relationship: true, phone: true } },
         },
       },
     },
@@ -61,6 +66,27 @@ export default async function ProfilePage() {
           fullName={fullName}
         />
       </Card>
+
+      {user.employee && (
+        <Card className="mt-6 p-6">
+          <h2 className="text-lg font-semibold text-content">Personal details</h2>
+          <p className="mb-5 mt-1 text-sm text-muted">
+            Your own contact info and emergency contacts — keep these up to date yourself.
+          </p>
+          <PersonalDetailsForm
+            initial={{
+              phone: user.employee.phone ?? "",
+              personalEmail: user.employee.personalEmail ?? "",
+              dateOfBirth: user.employee.dateOfBirth ? user.employee.dateOfBirth.toISOString().slice(0, 10) : "",
+              contacts: user.employee.emergencyContacts.map((c) => ({
+                name: c.name,
+                relationship: c.relationship ?? "",
+                phone: c.phone,
+              })),
+            }}
+          />
+        </Card>
+      )}
 
       <Card className="mt-6 p-6">
         <h2 className="text-lg font-semibold text-content">Password</h2>

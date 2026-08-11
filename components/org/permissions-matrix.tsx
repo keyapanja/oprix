@@ -49,8 +49,8 @@ export function PermissionsMatrix({ initial }: { initial: Record<string, string[
         <h3 className="text-sm font-semibold text-content">Roles &amp; permissions</h3>
         <p className="mt-0.5 text-sm text-muted">
           Control what each role can access. Changes apply immediately. Super Admin
-          always has full access. <span className="font-medium text-content">Department Head</span> isn&apos;t a
-          role — it grants extra access to whoever heads a department (set per department), on top of their own role.
+          always has full access. <span className="font-medium text-content">Department Head</span>{" "}
+          isn&apos;t a role — it grants extra access to whoever heads a department (set per department), on top of their own role.
         </p>
       </div>
 
