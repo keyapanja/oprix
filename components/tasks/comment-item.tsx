@@ -11,7 +11,6 @@ import { confirmDialog } from "@/components/ui/confirm";
 import { CommentEditor } from "@/components/tasks/comment-editor";
 import { AttachmentLightbox, type LightboxItem } from "@/components/attachments/attachment-lightbox";
 import { renderMarkdown } from "@/lib/kb/markdown";
-import { splitCommentImages } from "@/lib/tasks/comment-content";
 
 type Person = { id: string; name: string };
 
@@ -39,10 +38,6 @@ export function CommentItem({
   const [text, setText] = useState(body);
   const [preview, setPreview] = useState<LightboxItem | null>(null);
   const [pending, start] = useTransition();
-
-  // A posted comment shows its text, then its images as a thumbnail row (same
-  // preview size as the composer) — not blown-up inline images.
-  const { text: bodyText, images: bodyImages } = splitCommentImages(body);
 
   function save() {
     const t = text.trim();
@@ -131,31 +126,22 @@ export function CommentItem({
             </div>
           </div>
         ) : (
-          <div className="mt-0.5 space-y-2">
-            {bodyText && (
-              <div
-                className="comment-body text-sm text-content [&_ol]:my-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-1 [&_ul]:my-1 [&_ul]:list-disc [&_ul]:pl-5"
-                // Safe: renderMarkdown escapes all input first, then layers a fixed
-                // Markdown subset (img srcs allowlisted to /… and http(s)).
-                dangerouslySetInnerHTML={{ __html: renderMarkdown(bodyText) }}
-              />
-            )}
-            {bodyImages.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {bodyImages.map((img, i) => (
-                  <button
-                    key={`${img.url}-${i}`}
-                    type="button"
-                    onClick={() => setPreview({ fileName: img.alt, mimeType: "image/*", href: img.url })}
-                    className="size-16 overflow-hidden rounded-lg ring-1 ring-inset ring-line-strong transition-opacity hover:opacity-90"
-                    aria-label={`Open ${img.alt}`}
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={img.url} alt={img.alt} className="h-full w-full cursor-zoom-in object-cover" />
-                  </button>
-                ))}
-              </div>
-            )}
+          <div className="mt-0.5">
+            {/* Render the whole body inline — images sit where they were pasted.
+                Safe: renderMarkdown escapes all input first, then layers a fixed
+                Markdown subset (img srcs allowlisted to /… and http(s)). Clicking
+                an inline image opens it in the lightbox (event delegation). */}
+            <div
+              className="comment-body text-sm text-content [&_img]:my-1.5 [&_img]:block [&_img]:max-h-60 [&_img]:w-auto [&_img]:cursor-zoom-in [&_img]:rounded-lg [&_img]:ring-1 [&_img]:ring-inset [&_img]:ring-line-strong [&_ol]:my-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-1 [&_ul]:my-1 [&_ul]:list-disc [&_ul]:pl-5"
+              onClick={(e) => {
+                const t = e.target as HTMLElement;
+                if (t.tagName === "IMG") {
+                  const img = t as HTMLImageElement;
+                  setPreview({ fileName: img.alt || "image", mimeType: "image/*", href: img.src });
+                }
+              }}
+              dangerouslySetInnerHTML={{ __html: renderMarkdown(body) }}
+            />
           </div>
         )}
       </div>

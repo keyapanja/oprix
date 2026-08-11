@@ -4,13 +4,10 @@ import { useEffect, useRef, useState, type ChangeEvent, type ClipboardEvent, typ
 import { toast } from "@/components/ui/toast";
 import { renderMarkdown } from "@/lib/kb/markdown";
 import { htmlToMarkdown } from "@/components/kb/rich-text-editor";
-import { AttachmentLightbox, type LightboxItem } from "@/components/attachments/attachment-lightbox";
 import { Icon } from "@/components/ui/icons";
-import { splitCommentImages } from "@/lib/tasks/comment-content";
 import { cn } from "@/lib/cn";
 
 type Person = { id: string; name: string };
-type Img = { url: string; name: string };
 
 // Keep alt text from breaking Markdown link syntax.
 const cleanAlt = (s: string) => s.replace(/[[\]()]/g, "").trim();
@@ -19,9 +16,10 @@ const cleanAlt = (s: string) => s.replace(/[[\]()]/g, "").trim();
  * Compact rich-text comment editor. Text is a contentEditable that serializes to
  * Markdown (reusing the KB editor's htmlToMarkdown + the XSS-safe renderMarkdown),
  * with **bold / italic / lists / links** and @-mentions. Images — pasted from the
- * clipboard or picked with the image button — upload to `uploadUrl` and appear as
- * **thumbnail chips** above the text (not inline); on submit they're appended to
- * the body as ![](…). The combined Markdown is emitted through `onChange`.
+ * clipboard or picked with the image button — upload to `uploadUrl` and are
+ * inserted **inline at the caret**, so they land exactly where you put them (and
+ * serialize to ![](…) at that position). The combined Markdown flows through
+ * `onChange`. Remove an inline image the same way as any content (Backspace).
  */
 export function CommentEditor({
   value,
@@ -42,45 +40,57 @@ export function CommentEditor({
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const inited = useRef(false);
-  const imagesRef = useRef<Img[]>([]);
-  const [images, setImages] = useState<Img[]>([]);
   const [empty, setEmpty] = useState(!value?.trim());
   const [uploading, setUploading] = useState(false);
-  const [preview, setPreview] = useState<LightboxItem | null>(null);
   const [mQuery, setMQuery] = useState<string | null>(null);
   const [mActive, setMActive] = useState(0);
 
-  // Seed once from the initial Markdown: text into the editor, images into chips.
+  // Seed once from the initial Markdown — images render inline, in place.
   useEffect(() => {
     const el = ref.current;
     if (el && !inited.current) {
-      const { text, images: found } = splitCommentImages(value);
-      const imgs: Img[] = found.map((im) => ({ url: im.url, name: im.alt }));
-      el.innerHTML = text ? renderMarkdown(text) : "";
-      imagesRef.current = imgs;
-      setImages(imgs);
-      setEmpty(!text.trim() && imgs.length === 0);
+      el.innerHTML = value?.trim() ? renderMarkdown(value) : "";
+      setEmpty(!el.textContent?.trim() && !el.querySelector("img"));
       inited.current = true;
       if (autoFocus) el.focus();
     }
   }, [value, autoFocus]);
 
-  // Emit the combined Markdown: text, then each image as ![](…).
-  function emit(imgs: Img[]) {
+  // Serialize the contentEditable (text + inline images) to Markdown.
+  function emit() {
     const el = ref.current;
-    const textMd = el ? htmlToMarkdown(el) : "";
-    const imgMd = imgs.map((i) => `![${cleanAlt(i.name)}](${i.url})`).join("\n\n");
-    onChange([textMd, imgMd].filter((s) => s && s.trim()).join("\n\n"));
-    setEmpty(!el?.textContent?.trim() && imgs.length === 0);
+    if (!el) return;
+    onChange(htmlToMarkdown(el));
+    setEmpty(!el.textContent?.trim() && !el.querySelector("img"));
   }
 
-  function updateImages(next: Img[]) {
-    imagesRef.current = next;
-    setImages(next);
-    emit(next);
+  // ---- image upload (button + paste) → insert inline at the caret ----------
+  function insertImageAtCaret(url: string, name: string) {
+    const el = ref.current;
+    if (!el) return;
+    el.focus();
+    const sel = window.getSelection();
+    const img = document.createElement("img");
+    img.setAttribute("src", url); // relative /api/… path is preserved for Markdown
+    img.setAttribute("alt", cleanAlt(name) || "image");
+
+    let range: Range;
+    if (sel && sel.rangeCount && sel.anchorNode && el.contains(sel.anchorNode)) {
+      range = sel.getRangeAt(0);
+    } else {
+      range = document.createRange();
+      range.selectNodeContents(el);
+      range.collapse(false); // end of the editor
+    }
+    range.deleteContents();
+    range.insertNode(img);
+    range.setStartAfter(img);
+    range.collapse(true);
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+    emit();
   }
 
-  // ---- image upload (button + paste) --------------------------------------
   async function uploadImage(file: File) {
     if (!file.type.startsWith("image/")) return;
     setUploading(true);
@@ -94,7 +104,7 @@ export function CommentEditor({
         return;
       }
       const j = (await res.json()) as { url?: string };
-      if (j.url) updateImages([...imagesRef.current, { url: j.url, name: file.name || "image" }]);
+      if (j.url) insertImageAtCaret(j.url, file.name || "image");
     } catch {
       toast.error("Image upload failed");
     } finally {
@@ -119,10 +129,6 @@ export function CommentEditor({
     const files = Array.from(e.target.files ?? []);
     e.target.value = "";
     for (const f of files) void uploadImage(f);
-  }
-
-  function removeImage(i: number) {
-    updateImages(imagesRef.current.filter((_, idx) => idx !== i));
   }
 
   // ---- @-mentions ----------------------------------------------------------
@@ -179,7 +185,7 @@ export function CommentEditor({
     sel.removeAllRanges();
     sel.addRange(range);
     setMQuery(null);
-    emit(imagesRef.current);
+    emit();
     ref.current?.focus();
   }
 
@@ -215,7 +221,7 @@ export function CommentEditor({
   function exec(cmd: string, val?: string) {
     ref.current?.focus();
     document.execCommand(cmd, false, val);
-    emit(imagesRef.current);
+    emit();
   }
 
   function addLink() {
@@ -244,90 +250,61 @@ export function CommentEditor({
   return (
     <div className="relative">
       <div className="overflow-hidden rounded-xl bg-surface ring-1 ring-inset ring-line-strong focus-within:ring-2 focus-within:ring-brand-500">
-      <div className="flex flex-wrap items-center gap-0.5 border-b border-line bg-canvas/60 px-1.5 py-1">
-        <Btn onClick={() => exec("bold")} title="Bold (Ctrl+B)">
-          <span className="font-bold">B</span>
-        </Btn>
-        <Btn onClick={() => exec("italic")} title="Italic (Ctrl+I)">
-          <span className="italic">I</span>
-        </Btn>
-        <Btn onClick={() => exec("insertUnorderedList")} title="Bulleted list">
-          <span className="text-base leading-none">•</span>
-        </Btn>
-        <Btn onClick={() => exec("insertOrderedList")} title="Numbered list">
-          <span className="text-xs font-semibold">1.</span>
-        </Btn>
-        <Btn onClick={addLink} title="Link">
-          <Icon name="link" className="size-4" />
-        </Btn>
-        <label
-          title="Insert image"
-          className={cn(
-            "flex h-7 min-w-7 cursor-pointer items-center justify-center rounded-md px-1.5 text-muted transition-colors hover:bg-surface hover:text-content",
-            uploading && "pointer-events-none opacity-50",
-          )}
-        >
-          <Icon name="image" className={cn("size-4", uploading && "animate-pulse")} />
-          <input type="file" accept="image/*" multiple className="hidden" onChange={onPickImage} disabled={uploading} />
-        </label>
-      </div>
-
-      {/* Thumbnail chips for attached images (paste / pick) */}
-      {(images.length > 0 || uploading) && (
-        <div className="flex flex-wrap gap-2 px-3 pt-2.5">
-          {images.map((img, i) => (
-            <div key={`${img.url}-${i}`} className="group relative size-16 overflow-hidden rounded-lg ring-1 ring-inset ring-line-strong">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={img.url}
-                alt={img.name}
-                onClick={() => setPreview({ fileName: img.name, mimeType: "image/*", href: img.url })}
-                className="h-full w-full cursor-zoom-in object-cover"
-              />
-              <button
-                type="button"
-                onClick={() => removeImage(i)}
-                className="absolute right-0.5 top-0.5 flex size-5 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition-opacity group-hover:opacity-100"
-                aria-label={`Remove ${img.name}`}
-              >
-                <Icon name="x" className="size-3" />
-              </button>
-            </div>
-          ))}
-          {uploading && (
-            <div className="flex size-16 items-center justify-center rounded-lg text-faint ring-1 ring-inset ring-line">
-              <Icon name="image" className="size-5 animate-pulse" />
-            </div>
-          )}
+        <div className="flex flex-wrap items-center gap-0.5 border-b border-line bg-canvas/60 px-1.5 py-1">
+          <Btn onClick={() => exec("bold")} title="Bold (Ctrl+B)">
+            <span className="font-bold">B</span>
+          </Btn>
+          <Btn onClick={() => exec("italic")} title="Italic (Ctrl+I)">
+            <span className="italic">I</span>
+          </Btn>
+          <Btn onClick={() => exec("insertUnorderedList")} title="Bulleted list">
+            <span className="text-base leading-none">•</span>
+          </Btn>
+          <Btn onClick={() => exec("insertOrderedList")} title="Numbered list">
+            <span className="text-xs font-semibold">1.</span>
+          </Btn>
+          <Btn onClick={addLink} title="Link">
+            <Icon name="link" className="size-4" />
+          </Btn>
+          <label
+            title="Insert image at the cursor"
+            className={cn(
+              "flex h-7 min-w-7 cursor-pointer items-center justify-center rounded-md px-1.5 text-muted transition-colors hover:bg-surface hover:text-content",
+              uploading && "pointer-events-none opacity-50",
+            )}
+          >
+            <Icon name="image" className={cn("size-4", uploading && "animate-pulse")} />
+            <input type="file" accept="image/*" multiple className="hidden" onChange={onPickImage} disabled={uploading} />
+          </label>
         </div>
-      )}
 
-      <div className="relative">
-        {empty && <p className="pointer-events-none absolute left-3 top-2.5 text-sm text-faint">{placeholder}</p>}
-        <div
-          ref={ref}
-          contentEditable
-          suppressContentEditableWarning
-          role="textbox"
-          aria-multiline="true"
-          onInput={() => {
-            emit(imagesRef.current);
-            updateMention();
-          }}
-          onKeyDown={onKeyDown}
-          onKeyUp={updateMention}
-          onMouseUp={updateMention}
-          onPaste={onPaste}
-          onBlur={() => setTimeout(() => setMQuery(null), 150)}
-          className={cn(
-            "min-h-[60px] max-h-80 overflow-y-auto px-3 py-2 text-sm leading-relaxed text-content focus:outline-none",
-            "[&_strong]:font-semibold [&_em]:italic",
-            "[&_ul]:my-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-0.5",
-            "[&_a]:text-accent-strong [&_a]:underline",
-            "[&_code]:rounded [&_code]:bg-canvas [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-[0.85em]",
-          )}
-        />
-      </div>
+        <div className="relative">
+          {empty && <p className="pointer-events-none absolute left-3 top-2.5 text-sm text-faint">{placeholder}</p>}
+          <div
+            ref={ref}
+            contentEditable
+            suppressContentEditableWarning
+            role="textbox"
+            aria-multiline="true"
+            onInput={() => {
+              emit();
+              updateMention();
+            }}
+            onKeyDown={onKeyDown}
+            onKeyUp={updateMention}
+            onMouseUp={updateMention}
+            onPaste={onPaste}
+            onBlur={() => setTimeout(() => setMQuery(null), 150)}
+            className={cn(
+              "min-h-[60px] max-h-80 overflow-y-auto px-3 py-2 text-sm leading-relaxed text-content focus:outline-none",
+              "[&_strong]:font-semibold [&_em]:italic",
+              "[&_ul]:my-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-0.5",
+              "[&_a]:text-accent-strong [&_a]:underline",
+              "[&_code]:rounded [&_code]:bg-canvas [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-[0.85em]",
+              "[&_img]:my-1.5 [&_img]:block [&_img]:max-h-48 [&_img]:w-auto [&_img]:rounded-lg [&_img]:ring-1 [&_img]:ring-inset [&_img]:ring-line-strong",
+            )}
+          />
+        </div>
       </div>
 
       {mOpen && (
@@ -355,8 +332,6 @@ export function CommentEditor({
           ))}
         </ul>
       )}
-
-      {preview && <AttachmentLightbox item={preview} onClose={() => setPreview(null)} />}
     </div>
   );
 }
