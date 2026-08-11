@@ -72,6 +72,28 @@ async function leaveApproverUserIds(companyId: string, exclude?: string): Promis
   return users.map((u) => u.id).filter((id) => id !== exclude);
 }
 
+/**
+ * The applicant's reporting manager (their assigned team lead), but only when
+ * that manager's role opts into team-leave alerts — the "Team leave alerts"
+ * toggle in Organization → Access. So a lead is told when someone they manage
+ * takes leave, without duplicating anyone already excluded (approvers/applicant).
+ */
+async function teamLeadNotifyUserIds(
+  companyId: string,
+  applicantEmployeeId: string,
+  exclude: (string | null | undefined)[],
+): Promise<string[]> {
+  const emp = await prisma.employee.findUnique({
+    where: { id: applicantEmployeeId },
+    select: { manager: { select: { user: { select: { id: true, role: true, isActive: true } } } } },
+  });
+  const mgr = emp?.manager?.user;
+  if (!mgr || !mgr.isActive) return [];
+  if (exclude.includes(mgr.id)) return [];
+  if (!(await hasPermission(companyId, mgr.role, "leave:team-notify"))) return [];
+  return [mgr.id];
+}
+
 // ---- Leave types ----------------------------------------------------------
 const LeaveTypeSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(60),
@@ -286,6 +308,16 @@ export async function applyLeave(
       `${emp?.fullName ?? "An employee"} requested ${kindLabel} for ${formatDate(start)} – ${formatDate(end)}${note}.`,
       reqMeta(created.id, "manage"),
     );
+    // Also ping the applicant's team lead (if their role opts in) — deduped
+    // against anyone already notified above. Links to the calendar (accessible
+    // to leads who can't open the approvals page).
+    const leads = await teamLeadNotifyUserIds(session.companyId, session.employeeId, [...approvers, session.userId]);
+    await notifyUsers(
+      leads,
+      `Team ${kindLower(d.kind)} request`,
+      `${emp?.fullName ?? "A team member"} from your team requested ${kindLabel} for ${formatDate(start)} – ${formatDate(end)}${note}.`,
+      { team: true },
+    );
   } catch (e) {
     console.error("[leave] notify approvers failed:", e);
   }
@@ -423,6 +455,21 @@ export async function createLeaveRequest(
     } catch (e) {
       console.error("[leave] admin-created auto-approve notify failed:", e);
     }
+  }
+
+  // Inform the team member's reporting lead (if their role opts in), whoever
+  // filed it and whatever the outcome — deduped against the creator + applicant.
+  try {
+    const kindLabel = kind === "WFH" ? "work from home" : "leave";
+    const leads = await teamLeadNotifyUserIds(session.companyId, d.employeeId, [session.userId, emp.user?.id]);
+    await notifyUsers(
+      leads,
+      `Team ${kindLower(kind)} request`,
+      `${emp.fullName} from your team has ${kindLabel} for ${formatDate(start)} – ${formatDate(end)}.`,
+      { team: true },
+    );
+  } catch (e) {
+    console.error("[leave] notify team lead failed:", e);
   }
 
   revalidatePath(LEAVE);

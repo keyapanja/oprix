@@ -15,6 +15,7 @@ export type Action =
   | "attendance:manage"
   | "leave:manage"
   | "leave:approve"
+  | "leave:team-notify"
   | "payroll:manage"
   | "project:manage"
   | "task:manage"
@@ -30,7 +31,7 @@ export type Action =
 export const DEFAULT_PERMISSIONS: Record<Role, Action[]> = {
   SUPER_ADMIN: [
     "org:manage", "roles:manage", "employee:manage", "employee:read",
-    "attendance:manage", "leave:manage", "leave:approve", "payroll:manage",
+    "attendance:manage", "leave:manage", "leave:approve", "leave:team-notify", "payroll:manage",
     "project:manage", "task:manage", "timesheet:approve", "client:manage",
     "kb:manage", "form:manage", "report:view", "self:service", "clienttask:view",
   ],
@@ -43,7 +44,7 @@ export const DEFAULT_PERMISSIONS: Record<Role, Action[]> = {
     "client:manage", "report:view", "self:service",
   ],
   TEAM_LEAD: [
-    "employee:read", "task:manage", "leave:approve", "timesheet:approve",
+    "employee:read", "task:manage", "leave:approve", "leave:team-notify", "timesheet:approve",
     "self:service",
   ],
   EMPLOYEE: ["task:manage", "self:service"],
@@ -73,6 +74,7 @@ export const EDITABLE_ACTIONS: Action[] = [
   // "attendance:manage" hidden — the punch/attendance module is paused (see docs/PUNCH-MODULE.md).
   "leave:manage",
   "leave:approve",
+  "leave:team-notify",
   "timesheet:approve",
   "project:manage",
   "task:manage",
@@ -92,6 +94,7 @@ export const ACTION_LABELS: Partial<Record<Action, { label: string; description:
   "attendance:manage": { label: "Manage attendance", description: "Mark / edit attendance" },
   "leave:manage": { label: "Manage leave", description: "Leave types and requests" },
   "leave:approve": { label: "Approve leave", description: "Approve / reject leave" },
+  "leave:team-notify": { label: "Team leave alerts", description: "Get notified when someone they manage applies for leave / WFH" },
   "timesheet:approve": { label: "Approve timesheets", description: "Approve submitted hours" },
   "project:manage": { label: "Manage projects", description: "Create and manage projects" },
   "task:manage": { label: "Manage tasks", description: "Create and move tasks" },
