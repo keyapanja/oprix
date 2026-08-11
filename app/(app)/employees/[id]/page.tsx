@@ -16,6 +16,7 @@ import { ResendInvite } from "@/components/employees/resend-invite";
 import { EmployeeRole } from "@/components/employees/employee-role";
 import { AppraisalEdit } from "@/components/employees/appraisal-edit";
 import { computeBalances } from "@/lib/leave/balance";
+import { clientRaisedFilter } from "@/lib/tasks/client-tasks";
 import { ROLE_LABELS } from "@/lib/auth/can";
 import { cn } from "@/lib/cn";
 
@@ -65,13 +66,18 @@ export default async function EmployeeDetailPage({
 
   if (!employee) notFound();
 
-  // Work summary: tasks assigned to this person + their leave balances.
+  // Work summary: tasks assigned to this person + their leave balances. Client-
+  // raised tasks live in their own section (/client-tasks) and are excluded from
+  // the normal board, so keep them out of these counts too — otherwise the tiles
+  // link to a board that doesn't show them.
+  const clientFilter = await clientRaisedFilter(session.companyId);
   const [assignedTasks, balances, primaryServices] = await Promise.all([
     prisma.task.findMany({
       where: {
         deletedAt: null,
         project: { companyId: session.companyId, deletedAt: null },
         assignees: { some: { employeeId: id } },
+        NOT: clientFilter,
       },
       select: { status: true, dueDate: true, submittedAt: true, completedAt: true },
     }),
