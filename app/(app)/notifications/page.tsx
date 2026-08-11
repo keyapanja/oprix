@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requirePage } from "@/lib/auth/guard";
+import { hasPermission } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/db";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,7 @@ export const metadata: Metadata = { title: "Notifications · Oprix" };
 
 export default async function NotificationsPage() {
   const session = await requirePage(); // any signed-in user
+  const canSend = await hasPermission(session.companyId, session.role, "employee:manage");
 
   const rows = await prisma.notification.findMany({
     where: { userId: session.userId },
@@ -36,12 +38,22 @@ export default async function NotificationsPage() {
         title="Notifications"
         description={`${notes.length} ${notes.length === 1 ? "notification" : "notifications"}.`}
         action={
-          <Link href="/profile/notifications">
-            <Button variant="secondary">
-              <Icon name="bell" className="size-4" />
-              Notification settings
-            </Button>
-          </Link>
+          <div className="flex items-center gap-2">
+            {canSend && (
+              <Link href="/notifications/send">
+                <Button>
+                  <Icon name="bell" className="size-4" />
+                  Send notification
+                </Button>
+              </Link>
+            )}
+            <Link href="/profile/notifications">
+              <Button variant="secondary">
+                <Icon name="bell" className="size-4" />
+                Notification settings
+              </Button>
+            </Link>
+          </div>
         }
       />
       <NotificationsList notes={notes} />

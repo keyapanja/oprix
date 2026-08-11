@@ -103,7 +103,12 @@ export const NAV: NavItem[] = [
       { label: "Settings", href: "/payroll/settings", action: "payroll:manage" },
     ],
   },
-  { label: "Notifications", href: "/notifications", icon: "bell" },
+  {
+    label: "Notifications",
+    href: "/notifications",
+    icon: "bell",
+    children: [{ label: "Send notification", href: "/notifications/send", action: "employee:manage" }],
+  },
   { label: "Calendar", href: "/calendar", icon: "calendarDays", action: "self:service" },
   {
     label: "Leave",
