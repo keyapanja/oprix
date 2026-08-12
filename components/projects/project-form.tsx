@@ -40,8 +40,12 @@ export function ProjectForm({ clients, services }: { clients: Opt[]; services: O
   const q = query.trim().toLowerCase();
 
   function onFilesPicked(e: ChangeEvent<HTMLInputElement>) {
-    setFiles((f) => [...f, ...Array.from(e.target.files ?? [])]);
+    // Read the FileList synchronously: resetting e.target.value below empties
+    // e.target.files, and React may run the state updater only afterwards — so
+    // capture first, then reset, then append (otherwise the 2nd+ pick adds nothing).
+    const picked = Array.from(e.target.files ?? []);
     e.target.value = "";
+    setFiles((f) => [...f, ...picked]);
   }
   function removeFile(i: number) {
     setFiles((f) => f.filter((_, idx) => idx !== i));

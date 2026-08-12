@@ -77,8 +77,12 @@ function AnnouncementForm() {
   const [key, setKey] = useState(0); // remounts the editor on reset
 
   function onFilesPicked(e: ChangeEvent<HTMLInputElement>) {
-    setFiles((f) => [...f, ...makePicked(e.target.files ?? [])]);
+    // Read the FileList synchronously: resetting e.target.value below empties
+    // e.target.files, and React may run the state updater only afterwards — so
+    // capture first, then reset, then append (otherwise the 2nd+ pick adds nothing).
+    const picked = makePicked(e.target.files ?? []);
     e.target.value = "";
+    setFiles((f) => [...f, ...picked]);
   }
   function removeFile(i: number) {
     setFiles((f) => {
