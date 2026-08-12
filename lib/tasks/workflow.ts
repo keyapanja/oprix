@@ -65,10 +65,15 @@ export async function submitForReview(taskId: string, finalLink: string): Promis
   return res;
 }
 
-/** Reviewer requests changes → Redo. The submitted link is archived to history and cleared. */
-export async function requestChanges(taskId: string): Promise<WorkflowState> {
+/** Reviewer requests changes → Redo. The reviewer's note (what needs to change)
+ *  is stored on the task so the worker sees it, and the submitted link is
+ *  archived to history and cleared. */
+export async function requestChanges(taskId: string, note: string): Promise<WorkflowState> {
   const session = await getSession();
   if (!session) return { error: "Not authenticated" };
+  const changes = (note ?? "").trim();
+  if (!changes) return { error: "Describe the changes that are needed." };
+  if (changes.length > 2000) return { error: "Keep the change request under 2000 characters." };
   const task = await loadTask(session, taskId);
   if (!task) return { error: "Task not found" };
   const { isElevated, isReviewer } = await ctx(session, task);
@@ -79,15 +84,21 @@ export async function requestChanges(taskId: string): Promise<WorkflowState> {
   }
 
   await finalizeTaskTimer(session.companyId, session.userId, taskId);
-  await prisma.task.update({ where: { id: taskId }, data: { status: "REDO", finalLink: null, submittedAt: null } });
+  await prisma.task.update({
+    where: { id: taskId },
+    data: { status: "REDO", finalLink: null, submittedAt: null, changeRequest: changes },
+  });
 
   const actor = await actorLabel(session.userId);
-  await logTaskActivity(
-    session,
+  const prevLink = task.finalLink ? ` (previous link: ${task.finalLink})` : "";
+  await logTaskActivity(session, taskId, `requested changes: ${changes}${prevLink}`);
+  await notify(
+    assigneeUserIds(task),
+    "Changes requested",
+    `${actor} requested changes on “${task.name}”: ${changes}`,
     taskId,
-    task.finalLink ? `requested changes (previous link: ${task.finalLink})` : "requested changes",
+    session.userId,
   );
-  await notify(assigneeUserIds(task), "Changes requested", `${actor} requested changes on “${task.name}”`, taskId, session.userId);
   revalidatePath(`/tasks/${taskId}`);
   revalidatePath("/tasks");
   return { ok: true };

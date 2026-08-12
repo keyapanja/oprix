@@ -48,7 +48,8 @@ export async function submitForReviewFor(
   await finalizeAllTaskTimers(session.companyId, taskId);
   await prisma.task.update({
     where: { id: taskId },
-    data: { status: "REVIEW", finalLink: value, submittedAt: new Date() },
+    // Clear any outstanding change request — this fresh submission addresses it.
+    data: { status: "REVIEW", finalLink: value, submittedAt: new Date(), changeRequest: null },
   });
 
   const actor = await actorLabel(session.userId);

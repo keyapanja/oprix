@@ -59,6 +59,7 @@ export async function TaskDetail({
       checklistEnabled: true,
       clientVisible: true,
       finalLink: true,
+      changeRequest: true,
       dueDate: true,
       clientDeadline: true,
       createdAt: true,
@@ -294,6 +295,7 @@ export async function TaskDetail({
               taskId={task.id}
               status={task.status}
               finalLink={task.finalLink}
+              changeRequest={task.changeRequest}
               canSubmit={canSubmit}
               canReview={canReview}
             />
