@@ -86,7 +86,9 @@ export async function requestChanges(taskId: string, note: string): Promise<Work
   await finalizeTaskTimer(session.companyId, session.userId, taskId);
   await prisma.task.update({
     where: { id: taskId },
-    data: { status: "REDO", finalLink: null, submittedAt: null, changeRequest: changes },
+    // Move the current submission to previousLink so the worker keeps a reference
+    // to what they submitted while they redo it; finalLink clears (not "current").
+    data: { status: "REDO", finalLink: null, previousLink: task.finalLink, submittedAt: null, changeRequest: changes },
   });
 
   const actor = await actorLabel(session.userId);

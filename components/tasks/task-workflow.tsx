@@ -20,6 +20,7 @@ export function TaskWorkflow({
   taskId,
   status,
   finalLink,
+  previousLink,
   changeRequest,
   canSubmit,
   canReview,
@@ -27,6 +28,7 @@ export function TaskWorkflow({
   taskId: string;
   status: TaskStatus;
   finalLink: string | null;
+  previousLink: string | null;
   changeRequest: string | null;
   canSubmit: boolean;
   canReview: boolean;
@@ -112,6 +114,32 @@ export function TaskWorkflow({
             <div className="flex items-center gap-2 rounded-lg bg-canvas px-3 py-2 text-sm font-medium text-content ring-1 ring-inset ring-line">
               <Icon name="check" className="size-4 shrink-0 text-faint" />
               <span className="break-words">{finalLink}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* The submission that was sent back on "request changes" — a reference
+          for the worker (and anyone viewing) while the task is redone. */}
+      {status === "REDO" && previousLink && (
+        <div>
+          <p className="mb-1 text-xs font-medium uppercase tracking-wide text-faint">
+            {isHttpUrl(previousLink) ? "Previously submitted link" : "Previously submitted status"}
+          </p>
+          {isHttpUrl(previousLink) ? (
+            <a
+              href={safeHref(previousLink)}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-2 rounded-lg bg-canvas px-3 py-2 text-sm font-medium text-accent-strong ring-1 ring-inset ring-line hover:bg-surface"
+            >
+              <Icon name="folder" className="size-4 shrink-0" />
+              <span className="truncate">{previousLink}</span>
+            </a>
+          ) : (
+            <div className="flex items-center gap-2 rounded-lg bg-canvas px-3 py-2 text-sm font-medium text-content ring-1 ring-inset ring-line">
+              <Icon name="check" className="size-4 shrink-0 text-faint" />
+              <span className="break-words">{previousLink}</span>
             </div>
           )}
         </div>

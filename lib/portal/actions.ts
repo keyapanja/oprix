@@ -295,6 +295,7 @@ function loadClientTask(clientId: string, companyId: string, taskId: string) {
       id: true,
       name: true,
       status: true,
+      finalLink: true,
       projectId: true,
       createdById: true,
       assignees: { select: { employee: { select: { user: { select: { id: true } } } } } },
@@ -340,9 +341,13 @@ export async function clientRequestTaskChanges(
   if (!task) return { error: "Task not found" };
   if (task.status !== "CLIENT_REVIEW") return { error: "This task isn't awaiting your review." };
 
-  // Back to the team; clear the submitted link so they re-submit a fresh one,
-  // and store the client's note so the worker sees exactly what to change.
-  await prisma.task.update({ where: { id: task.id }, data: { status: "REDO", finalLink: null, changeRequest: fb } });
+  // Back to the team; clear the submitted link so they re-submit a fresh one
+  // (keeping it as previousLink for reference), and store the client's note so
+  // the worker sees exactly what to change.
+  await prisma.task.update({
+    where: { id: task.id },
+    data: { status: "REDO", finalLink: null, previousLink: task.finalLink, changeRequest: fb },
+  });
 
   await logTaskActivity(session, task.id, `Client requested changes: ${fb}`);
   await notifyInternal(
