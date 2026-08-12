@@ -90,8 +90,10 @@ export async function requestChanges(taskId: string, note: string): Promise<Work
   });
 
   const actor = await actorLabel(session.userId);
+  // Keep history concise — the full note lives in the callout + notification, so
+  // the log records just the action (plus the link being sent back for redo).
   const prevLink = task.finalLink ? ` (previous link: ${task.finalLink})` : "";
-  await logTaskActivity(session, taskId, `requested changes: ${changes}${prevLink}`);
+  await logTaskActivity(session, taskId, `requested changes${prevLink}`);
   await notify(
     assigneeUserIds(task),
     "Changes requested",
