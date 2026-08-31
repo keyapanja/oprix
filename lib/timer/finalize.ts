@@ -131,9 +131,15 @@ export async function pauseTaskTimer(
 
 /**
  * A single uninterrupted run longer than this is treated as forgotten rather
- * than worked. Deliberately generous — it should never clip a real long day.
+ * than worked.
+ *
+ * Note this sits at roughly one working day, so it can clip a genuine case:
+ * someone who runs one task's timer straight through without ever pausing gets
+ * capped here and loses the excess. That's the intended trade — a forgotten
+ * timer costs more than an occasional trimmed hour — but raise it if people
+ * legitimately track single unbroken stretches longer than this.
  */
-export const MAX_RUN_HOURS = 10;
+export const MAX_RUN_HOURS = 8;
 
 /**
  * Safety net for timers nobody stopped: pause any run that has been going for
