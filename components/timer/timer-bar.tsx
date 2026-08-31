@@ -65,12 +65,31 @@ export function TimerBar({ timers: initial }: { timers: ActiveTimer[] }) {
     return () => setRunningTimerNames([]);
   }, [runningKey]);
 
-  // No beforeunload guard here on purpose. Browsers hard-code the unload prompt
-  // ("Leave site? Changes you made may not be saved") and ignore any custom
-  // string, so it could never say a timer was running — it just nagged on every
-  // reload without explaining why. The worded warning lives on sign-out instead,
-  // backed by the server-side auto-pause, which also covers the cases a browser
-  // prompt never could: crashes, force-quits and closed laptops.
+  // Stop the reflex tab-close/reload while the clock is ticking.
+  //
+  // Be aware of what this can and cannot do: browsers hard-code the unload
+  // dialog ("Leave site? Changes you made may not be saved") and ignore any
+  // custom string, so it CANNOT say a timer is running — it only interrupts.
+  // Kept anyway because interrupting is the point; the person then sees the
+  // green timer bar still ticking behind the dialog. It fires on ordinary
+  // reloads too, which browsers give us no way to tell apart from a close.
+  //
+  // The worded warning lives on sign-out, and the server-side auto-pause
+  // (autoPauseStaleTimers) still backstops what no browser prompt can catch:
+  // crashes, force-quits and closed laptops.
+  //
+  // Narrow by design: never fires on in-app navigation (Next's client router
+  // doesn't unload the document), and unregisters as soon as the last timer
+  // pauses — so it's silent unless time is genuinely being banked.
+  useEffect(() => {
+    if (!anyRunning) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = ""; // legacy browsers still gate on this being set
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [anyRunning]);
 
   if (timers.length === 0) return null;
 
