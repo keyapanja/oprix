@@ -9,7 +9,7 @@ import { getSession } from "@/lib/auth/session";
 import { hasPermission } from "@/lib/auth/permissions";
 import { computeBalances, remainingForType } from "@/lib/leave/balance";
 import { countLeaveDays } from "@/lib/leave/count";
-import { parseHalfDayPeriod } from "@/lib/leave/half-day";
+import { parseHalfDayPeriod, halfDayLabel } from "@/lib/leave/half-day";
 import { parseWorkWeek } from "@/lib/leave/work-week";
 import { deleteUpload } from "@/lib/uploads";
 import { dateAtUTC, nowInZone, APP_TIME_ZONE } from "@/lib/dates";
@@ -41,6 +41,29 @@ const reqMeta = (id: string, list: "manage" | "self"): Prisma.InputJsonValue => 
  *  sentence) and "WFH"/"leave" for mid-sentence bodies. */
 const kindTitle = (kind: RequestKind): string => (kind === "WFH" ? "WFH" : "Leave");
 const kindLower = (kind: RequestKind): string => (kind === "WFH" ? "WFH" : "leave");
+
+/**
+ * What was actually requested, for notification bodies: the leave type's own
+ * name when there is one ("Casual Leave"), otherwise the generic kind, plus the
+ * half-day period when it's a half day — so a department head can see the type
+ * and which half without opening the app.
+ *
+ * Stays a single inline phrase on purpose: notification bodies are HTML-escaped
+ * into one <p> by sendNotificationEmail, so line breaks would be swallowed.
+ * Falls back to the generic wording if the type is missing, so a WFH request or
+ * a type that was since deleted still reads correctly.
+ */
+function requestDetail(opts: {
+  kind: RequestKind;
+  typeName?: string | null;
+  isHalfDay: boolean;
+  halfDayPeriod?: string | null;
+}): string {
+  const base = opts.kind === "WFH" ? "work from home" : opts.typeName?.trim() || "leave";
+  if (!opts.isHalfDay) return base;
+  const half = halfDayLabel(opts.halfDayPeriod)?.toLowerCase();
+  return half ? `${base} (half day, ${half})` : `${base} (half day)`;
+}
 
 // ---- Request timing (backdated / same-day) --------------------------------
 // A request's start date relative to today (app timezone). Flags last-minute
@@ -289,7 +312,9 @@ export async function applyLeave(
       reason: d.reason || null,
       status: "PENDING",
     },
-    select: { id: true },
+    // leaveType comes back with the row so the notification can name it without
+    // a second lookup (null for WFH, which has no type).
+    select: { id: true, leaveType: { select: { name: true } } },
   });
 
   // Notify everyone who can approve leave.
@@ -298,16 +323,23 @@ export async function applyLeave(
       where: { id: session.employeeId },
       select: { fullName: true },
     });
-    const kindLabel = d.kind === "WFH" ? "work from home" : "leave";
     const timing = requestTiming(start);
     const prefix = timing === "backdated" ? "Backdated " : timing === "same-day" ? "Same-day " : "New ";
     const note =
       timing === "backdated" ? " — backdated (starts in the past)" : timing === "same-day" ? " — same-day request" : "";
+    // Leave type + which half of the day, shared by both notices below so the
+    // approver and the department head read exactly the same description.
+    const detail = requestDetail({
+      kind: d.kind,
+      typeName: created.leaveType?.name,
+      isHalfDay,
+      halfDayPeriod,
+    });
     const approvers = await leaveApproverUserIds(session.companyId, session.userId);
     await notifyUsers(
       approvers,
       `${prefix}${kindLower(d.kind)} request`,
-      `${emp?.fullName ?? "An employee"} requested ${kindLabel} for ${formatDate(start)} – ${formatDate(end)}${note}.`,
+      `${emp?.fullName ?? "An employee"} requested ${detail} for ${formatDate(start)} – ${formatDate(end)}${note}.`,
       reqMeta(created.id, "manage"),
     );
     // Also ping the applicant's department head (if the alert is enabled for
@@ -317,7 +349,7 @@ export async function applyLeave(
     await notifyUsers(
       heads,
       `Department ${kindLower(d.kind)} request`,
-      `${emp?.fullName ?? "Someone"} from your department requested ${kindLabel} for ${formatDate(start)} – ${formatDate(end)}${note}.`,
+      `${emp?.fullName ?? "Someone"} from your department requested ${detail} for ${formatDate(start)} – ${formatDate(end)}${note}.`,
       { team: true },
     );
   } catch (e) {
@@ -428,7 +460,9 @@ export async function createLeaveRequest(
       hrApprovedById: autoApprove ? session.userId : null,
       decidedAt: autoApprove ? new Date() : null,
     },
-    select: { id: true },
+    // leaveType comes back with the row so the notification can name it without
+    // a second lookup (null for WFH, which has no type).
+    select: { id: true, leaveType: { select: { name: true } } },
   });
 
   // Auto-approved: the employee always hears about their own request (even
@@ -463,12 +497,17 @@ export async function createLeaveRequest(
   // department heads), whoever filed it and whatever the outcome — deduped
   // against the creator + applicant.
   try {
-    const kindLabel = kind === "WFH" ? "work from home" : "leave";
     const heads = await deptHeadNotifyUserIds(session.companyId, d.employeeId, [session.userId, emp.user?.id]);
+    const detail = requestDetail({
+      kind,
+      typeName: created.leaveType?.name,
+      isHalfDay: half,
+      halfDayPeriod: halfPeriod,
+    });
     await notifyUsers(
       heads,
       `Department ${kindLower(kind)} request`,
-      `${emp.fullName} from your department has ${kindLabel} for ${formatDate(start)} – ${formatDate(end)}.`,
+      `${emp.fullName} from your department has ${detail} for ${formatDate(start)} – ${formatDate(end)}.`,
       { team: true },
     );
   } catch (e) {
