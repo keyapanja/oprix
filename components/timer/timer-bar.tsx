@@ -65,25 +65,12 @@ export function TimerBar({ timers: initial }: { timers: ActiveTimer[] }) {
     return () => setRunningTimerNames([]);
   }, [runningKey]);
 
-  // Catch an actual tab/window close or reload while the clock is still ticking
-  // — otherwise a forgotten timer keeps accruing overnight and through the
-  // weekend. Browsers deliberately show their own generic "Leave site?" wording
-  // and ignore any custom string (Chrome 51+, Firefox 44+, Safari 9.1+), so this
-  // is a blunt safety net; the task-specific message lives on sign-out, which is
-  // the path people actually take at the end of the day.
-  //
-  // Scope is narrow by design: this never fires on in-app navigation (Next's
-  // client router doesn't unload the document) and unregisters the moment the
-  // last timer pauses, so nothing else in the app changes behaviour.
-  useEffect(() => {
-    if (!anyRunning) return;
-    const onBeforeUnload = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      e.returnValue = ""; // legacy browsers still gate on this being set
-    };
-    window.addEventListener("beforeunload", onBeforeUnload);
-    return () => window.removeEventListener("beforeunload", onBeforeUnload);
-  }, [anyRunning]);
+  // No beforeunload guard here on purpose. Browsers hard-code the unload prompt
+  // ("Leave site? Changes you made may not be saved") and ignore any custom
+  // string, so it could never say a timer was running — it just nagged on every
+  // reload without explaining why. The worded warning lives on sign-out instead,
+  // backed by the server-side auto-pause, which also covers the cases a browser
+  // prompt never could: crashes, force-quits and closed laptops.
 
   if (timers.length === 0) return null;
 

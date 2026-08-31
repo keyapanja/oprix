@@ -7,6 +7,7 @@ import { sendEventReminders } from "@/lib/calendar/reminders";
 import { sendFormReminders } from "@/lib/forms/notify-cron";
 import { runRecurringTasks } from "@/lib/tasks/recurring-cron";
 import { sendLeaveDayNotices } from "@/lib/leave/notices";
+import { autoPauseStaleTimers } from "@/lib/timer/finalize";
 import { listMenuForms } from "@/lib/forms/data";
 import { Sidebar } from "@/components/shell/sidebar";
 import { Topbar } from "@/components/shell/topbar";
@@ -89,6 +90,15 @@ export default async function AppLayout({
   // Day-of "X is on leave/WFH today" notices (office start + 15 min; per-day dedupe).
   try {
     await sendLeaveDayNotices({ companyId: session.companyId, tz: company?.timezone ?? "Asia/Kolkata" });
+  } catch {
+    /* never break the shell */
+  }
+
+  // Pause timers nobody stopped (crash, force-quit, went home Friday). The cap
+  // is measured from each run's own start, so a Monday-morning page load banks
+  // Friday's capped hours onto Friday — running late doesn't distort the result.
+  try {
+    await autoPauseStaleTimers(session.companyId);
   } catch {
     /* never break the shell */
   }

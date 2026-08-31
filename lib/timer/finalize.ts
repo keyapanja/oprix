@@ -1,11 +1,18 @@
 import "server-only";
 import { prisma } from "@/lib/db";
 import { getCompanyTimezone } from "@/lib/cache";
-import { nowInZone, dateAtUTC } from "@/lib/dates";
+import { dateAtUTC, dateISOInZone } from "@/lib/dates";
+import { notify } from "@/lib/notifications/notify";
 
 /**
- * Bank a single live run into the user's PENDING timesheet entry for today.
+ * Bank a single live run into the user's PENDING timesheet entry.
  * Returns the seconds banked (0 when the timer wasn't actively running).
+ *
+ * `endAt` is when the run is treated as having stopped — "now" for a normal
+ * pause, but an earlier cutoff for auto-pause, which may run days after the
+ * fact. It drives both the duration banked *and* the date of the timesheet
+ * entry, so capped hours land on the day they were worked rather than the day
+ * the job happened to fire.
  */
 async function bankRun(
   companyId: string,
@@ -13,9 +20,10 @@ async function bankRun(
   taskId: string,
   projectId: string,
   runStartedAt: Date | null,
+  endAt: Date = new Date(),
 ): Promise<number> {
   const runSeconds = runStartedAt
-    ? Math.max(0, Math.floor((Date.now() - runStartedAt.getTime()) / 1000))
+    ? Math.max(0, Math.floor((endAt.getTime() - runStartedAt.getTime()) / 1000))
     : 0;
   if (runSeconds <= 0) return 0;
 
@@ -23,7 +31,7 @@ async function bankRun(
     getCompanyTimezone(companyId),
     prisma.user.findUnique({ where: { id: userId }, select: { employeeId: true } }),
   ]);
-  const date = dateAtUTC(nowInZone(tz).dateISO);
+  const date = dateAtUTC(dateISOInZone(tz, endAt));
   const hours = runSeconds / 3600;
   const existing = await prisma.timeEntry.findFirst({
     where: { userId, taskId, date, status: "PENDING" },
@@ -119,6 +127,85 @@ export async function pauseTaskTimer(
     },
   });
   return runSeconds;
+}
+
+/**
+ * A single uninterrupted run longer than this is treated as forgotten rather
+ * than worked. Deliberately generous — it should never clip a real long day.
+ */
+export const MAX_RUN_HOURS = 10;
+
+/**
+ * Safety net for timers nobody stopped: pause any run that has been going for
+ * more than `maxRunHours`, banking exactly that cap and no more.
+ *
+ * This is the only thing that catches the cases a browser prompt cannot — a
+ * crash, a force-quit, a closed laptop, or simply going home on Friday — none
+ * of which fire `beforeunload`.
+ *
+ * The cap is measured from `runStartedAt`, NOT from now, which is what makes it
+ * safe to run late: the external scheduler isn't wired yet, so this may not fire
+ * until someone next opens the app. Banking to "now" would push an entire
+ * weekend into a timesheet (and from there into payroll); banking to the cutoff
+ * yields the same result whenever it runs.
+ *
+ * Idempotent: once paused, a timer no longer matches the query. Resuming starts
+ * a fresh run, which gets its own cap.
+ *
+ * Returns the number of timers paused.
+ */
+export async function autoPauseStaleTimers(
+  companyId: string,
+  maxRunHours: number = MAX_RUN_HOURS,
+): Promise<number> {
+  const maxMs = maxRunHours * 60 * 60 * 1000;
+  const startedBefore = new Date(Date.now() - maxMs);
+
+  const stale = await prisma.taskTimer.findMany({
+    where: {
+      companyId,
+      status: "RUNNING",
+      runStartedAt: { not: null, lt: startedBefore },
+    },
+    select: {
+      id: true,
+      userId: true,
+      taskId: true,
+      accumulatedSeconds: true,
+      runStartedAt: true,
+      task: { select: { projectId: true, name: true } },
+    },
+  });
+  if (stale.length === 0) return 0;
+
+  let paused = 0;
+  for (const t of stale) {
+    if (!t.runStartedAt) continue; // narrowing; the query already excludes nulls
+    try {
+      const endAt = new Date(t.runStartedAt.getTime() + maxMs);
+      const banked = await bankRun(companyId, t.userId, t.taskId, t.task.projectId, t.runStartedAt, endAt);
+      await prisma.taskTimer.update({
+        where: { id: t.id },
+        data: {
+          status: "PAUSED",
+          accumulatedSeconds: t.accumulatedSeconds + banked,
+          runStartedAt: null,
+        },
+      });
+      paused += 1;
+      // Tell the person — a silent edit to their timesheet is worse than the
+      // runaway timer was. Best-effort: a failed notify must not stop the pause.
+      await notify([t.userId], {
+        type: "TASK",
+        title: "Timer auto-paused",
+        body: `Your timer on “${t.task.name}” ran for over ${maxRunHours} hours, so it was paused and logged as ${maxRunHours} hours. Check your timesheet if that isn't right.`,
+        meta: { taskId: t.taskId },
+      });
+    } catch (e) {
+      console.error(`[timer] auto-pause failed for timer ${t.id}:`, e);
+    }
+  }
+  return paused;
 }
 
 /**

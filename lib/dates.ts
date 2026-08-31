@@ -55,6 +55,22 @@ export function daysInMonth(year: number, month0: number): number {
   return new Date(Date.UTC(year, month0 + 1, 0)).getUTCDate();
 }
 
+/**
+ * The calendar date at an arbitrary instant in a timezone, as "YYYY-MM-DD".
+ * Needed when dating a record to when something *happened* rather than to now —
+ * e.g. a timesheet entry banked by a job that runs days after the work did.
+ */
+export function dateISOInZone(timeZone: string, at: Date): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(at);
+  const g = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
+  return `${g("year")}-${g("month")}-${g("day")}`;
+}
+
 /** Current calendar date + wall-clock time in a given IANA timezone. */
 export function nowInZone(timeZone: string): { dateISO: string; time: string } {
   const parts = new Intl.DateTimeFormat("en-CA", {

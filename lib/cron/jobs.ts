@@ -4,12 +4,14 @@ import { sendEventReminders } from "@/lib/calendar/reminders";
 import { sendFormReminders } from "@/lib/forms/notify-cron";
 import { runRecurringTasks } from "@/lib/tasks/recurring-cron";
 import { sendLeaveDayNotices } from "@/lib/leave/notices";
+import { autoPauseStaleTimers } from "@/lib/timer/finalize";
 
 export type CronSummary = {
   companies: number;
   remindersRun: number;
   formRemindersFired: number;
   recurringTasksCreated: number;
+  timersAutoPaused: number;
   lateNotifiedCompanies: number;
   lateNamesTotal: number;
 };
@@ -29,6 +31,7 @@ export async function runDailyJobs(): Promise<CronSummary> {
   let remindersRun = 0;
   let formRemindersFired = 0;
   let recurringTasksCreated = 0;
+  let timersAutoPaused = 0;
   // PUNCH MODULE paused: late-login notices are disabled (with punch removed,
   // no one clocks in, so they'd flag everyone daily). Kept at 0; see
   // docs/PUNCH-MODULE.md to restore.
@@ -64,6 +67,15 @@ export async function runDailyJobs(): Promise<CronSummary> {
     } catch (e) {
       console.error(`[cron] leave day notices failed for ${c.id}:`, e);
     }
+
+    // Catch timers nobody stopped. Timezone-independent (the cap is measured
+    // from each run's own start), so it needs no `tz` and is correct whenever
+    // it runs — including days late via the lazy fallback.
+    try {
+      timersAutoPaused += await autoPauseStaleTimers(c.id);
+    } catch (e) {
+      console.error(`[cron] auto-pause stale timers failed for ${c.id}:`, e);
+    }
   }
 
   return {
@@ -71,6 +83,7 @@ export async function runDailyJobs(): Promise<CronSummary> {
     remindersRun,
     formRemindersFired,
     recurringTasksCreated,
+    timersAutoPaused,
     lateNotifiedCompanies,
     lateNamesTotal,
   };
