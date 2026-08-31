@@ -6,6 +6,7 @@ import Link from "next/link";
 import { pauseTimer, startTimer, getMyActiveTimers } from "@/lib/timer/actions";
 import { Icon } from "@/components/ui/icons";
 import { fmtClock, liveSeconds, type ActiveTimer } from "@/lib/timer/shared";
+import { setRunningTimerNames } from "@/lib/timer/running-flag";
 
 export function TimerBar({ timers: initial }: { timers: ActiveTimer[] }) {
   const router = useRouter();
@@ -48,10 +49,45 @@ export function TimerBar({ timers: initial }: { timers: ActiveTimer[] }) {
     };
   }, [refresh]);
 
+  // ---- Forgotten-timer guard ------------------------------------------------
+  // Only RUNNING timers matter; a paused one banks no time, so warning about it
+  // would just be noise. Derived every render, but reduced to a primitive key so
+  // the effects below don't re-fire on each 1s tick / 8s poll.
+  const runningNames = timers.filter((t) => t.status === "RUNNING").map((t) => t.taskName);
+  // JSON, not join() -- task names contain spaces, so a plain separator
+  // would shred them on the way back out.
+  const runningKey = JSON.stringify(runningNames);
+  const anyRunning = runningNames.length > 0;
+
+  // Publish for the topbar's sign-out confirm, which reads this on click.
+  useEffect(() => {
+    setRunningTimerNames(JSON.parse(runningKey) as string[]);
+    return () => setRunningTimerNames([]);
+  }, [runningKey]);
+
+  // Catch an actual tab/window close or reload while the clock is still ticking
+  // — otherwise a forgotten timer keeps accruing overnight and through the
+  // weekend. Browsers deliberately show their own generic "Leave site?" wording
+  // and ignore any custom string (Chrome 51+, Firefox 44+, Safari 9.1+), so this
+  // is a blunt safety net; the task-specific message lives on sign-out, which is
+  // the path people actually take at the end of the day.
+  //
+  // Scope is narrow by design: this never fires on in-app navigation (Next's
+  // client router doesn't unload the document) and unregisters the moment the
+  // last timer pauses, so nothing else in the app changes behaviour.
+  useEffect(() => {
+    if (!anyRunning) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = ""; // legacy browsers still gate on this being set
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [anyRunning]);
+
   if (timers.length === 0) return null;
 
-  const runningCount = timers.filter((t) => t.status === "RUNNING").length;
-  const anyRunning = runningCount > 0;
+  const runningCount = runningNames.length;
 
   const act = (fn: () => Promise<unknown>) =>
     start(async () => {

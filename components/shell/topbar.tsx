@@ -1,9 +1,11 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, type FormEvent } from "react";
 import Link from "next/link";
 import type { Role } from "@prisma/client";
 import { logoutAction } from "@/lib/auth/actions";
+import { confirmDialog } from "@/components/ui/confirm";
+import { getRunningTimerNames } from "@/lib/timer/running-flag";
 import { Icon } from "@/components/ui/icons";
 import { Avatar } from "@/components/ui/avatar";
 import { roleLabel } from "@/lib/format";
@@ -30,6 +32,42 @@ export function Topbar({
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+
+  /**
+   * Signing out with a timer still running is how hours quietly accrue over a
+   * night or a weekend, so confirm first — this is the one exit where we can
+   * show real task names (the browser's own tab-close prompt can't be worded).
+   *
+   * Fails open on purpose: if nothing is running, or the lookup throws, we
+   * never call preventDefault and the form submits exactly as it always has.
+   * It also calls logoutAction() directly rather than re-submitting the form,
+   * because opening the dialog closes this dropdown and unmounts the form.
+   */
+  async function onSignOutSubmit(e: FormEvent<HTMLFormElement>) {
+    let running: string[] = [];
+    try {
+      running = getRunningTimerNames();
+    } catch {
+      return;
+    }
+    if (running.length === 0) return;
+
+    e.preventDefault(); // must happen before the await, or the form is already gone
+
+    const list = running.map((n) => `“${n}”`).join(", ");
+    const ok = await confirmDialog({
+      title: running.length === 1 ? "Timer still running" : "Timers still running",
+      message:
+        running.length === 1
+          ? `The timer for ${list} is still running. Signing out won't stop it — it keeps counting until someone pauses it. Pause it first so your hours stay accurate.`
+          : `Timers for ${list} are still running. Signing out won't stop them — they keep counting until someone pauses them. Pause them first so your hours stay accurate.`,
+      confirmLabel: "Sign out anyway",
+      cancelLabel: "Go back and pause",
+      tone: "danger",
+    });
+    if (!ok) return;
+    await logoutAction();
+  }
 
   useEffect(() => {
     function onClick(e: MouseEvent) {
@@ -90,7 +128,7 @@ export function Topbar({
                 <Icon name="bell" className="size-4" />
                 Notification settings
               </Link>
-              <form action={logoutAction}>
+              <form action={logoutAction} onSubmit={onSignOutSubmit}>
                 <button
                   type="submit"
                   className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-content hover:bg-canvas"
