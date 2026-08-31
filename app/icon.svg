@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Oprix">
+  <!-- Matches .gradient-brand in app/globals.css:
+       linear-gradient(135deg, #2dd4bf 0%, #10b981 50%, #059669 100%).
+       135deg in CSS runs top-left to bottom-right, hence x1/y1 0 -> x2/y2 1. -->
+  <defs>
+    <linearGradient id="brand" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#2dd4bf"/>
+      <stop offset="50%" stop-color="#10b981"/>
+      <stop offset="100%" stop-color="#059669"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="19" fill="url(#brand)"/>
+  <text x="32" y="33.5" fill="#ffffff"
+        font-family="'Plus Jakarta Sans','Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif"
+        font-size="30" font-weight="700" letter-spacing="-1"
+        text-anchor="middle" dominant-baseline="central">Op</text>
+</svg>
