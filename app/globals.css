@@ -160,6 +160,16 @@ h1, h2, h3, .font-display {
 }
 .animate-rise { animation: rise 0.5s cubic-bezier(0.21, 1, 0.7, 1) both; }
 
+/* Mobile nav drawer sliding in from the left edge. */
+@keyframes drawer {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+.animate-drawer { animation: drawer 0.22s cubic-bezier(0.21, 1, 0.7, 1) both; }
+@media (prefers-reduced-motion: reduce) {
+  .animate-drawer { animation: none; }
+}
+
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--line-strong) transparent;

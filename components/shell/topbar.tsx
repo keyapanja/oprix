@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, type FormEvent } from "react";
+import { useState, useRef, useEffect, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
 import type { Role } from "@prisma/client";
 import { logoutAction } from "@/lib/auth/actions";
@@ -21,6 +21,7 @@ export function Topbar({
   avatarUrl,
   notifications,
   unread,
+  leading,
 }: {
   email: string;
   role: Role;
@@ -29,6 +30,9 @@ export function Topbar({
   avatarUrl: string | null;
   notifications: ClientNote[];
   unread: number;
+  /** Slot at the far left — the mobile nav trigger. A slot rather than the nav
+   *  props themselves, so the topbar stays about session chrome. */
+  leading?: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -79,6 +83,7 @@ export function Topbar({
 
   return (
     <header className="glass sticky top-0 z-10 flex h-16 items-center gap-4 border-b border-line px-6">
+      {leading}
       <div className="font-display text-lg font-bold tracking-tight text-content lg:hidden">
         Oprix
       </div>

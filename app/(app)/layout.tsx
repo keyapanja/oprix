@@ -11,6 +11,7 @@ import { autoPauseStaleTimers } from "@/lib/timer/finalize";
 import { listMenuForms } from "@/lib/forms/data";
 import { Sidebar } from "@/components/shell/sidebar";
 import { Topbar } from "@/components/shell/topbar";
+import { MobileNav } from "@/components/shell/mobile-nav";
 import { TimerBar } from "@/components/timer/timer-bar";
 import { PushPrompt } from "@/components/notifications/push-prompt";
 import { noteHref, formatNoteTime, type ClientNote } from "@/lib/notifications/categories";
@@ -137,6 +138,20 @@ export default async function AppLayout({
           avatarUrl={me?.avatarUrl ?? null}
           notifications={notes}
           unread={unread}
+          // Below `lg` the sidebar is hidden, so this is the only way to navigate.
+          leading={
+            <MobileNav
+              allowed={allowed}
+              isSuperAdmin={session.role === "SUPER_ADMIN"}
+              isEmployee={!!session.employeeId}
+              menuForms={menuForms}
+              company={{
+                name: company?.name ?? "Oprix",
+                tagline: company?.tagline || company?.businessType || null,
+                logoUrl: company?.logoUrl ?? null,
+              }}
+            />
+          }
         />
         <main className="flex-1 overflow-y-auto px-6 py-8">
           <div className="animate-rise mx-auto max-w-[1600px]">{children}</div>
