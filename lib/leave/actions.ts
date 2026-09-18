@@ -65,6 +65,26 @@ function requestDetail(opts: {
   return half ? `${base} (half day, ${half})` : `${base} (half day)`;
 }
 
+/** Longest reason we inline into a notification before trimming. */
+const REASON_MAX = 200;
+
+/**
+ * The applicant's own words, appended to a notification body so an approver can
+ * judge the request without opening the app.
+ *
+ * `reason` is free text up to 4000 chars, but this string is also an in-app bell
+ * line and a Web Push payload, so it's collapsed to one line and trimmed at
+ * REASON_MAX — the full text is always on the request itself. Returns "" when
+ * there's no reason (WFH and leave both allow omitting it), so the sentence
+ * before it simply ends.
+ */
+function reasonSuffix(reason: string | null | undefined): string {
+  const flat = (reason ?? "").replace(/\s+/g, " ").trim();
+  if (!flat) return "";
+  const shown = flat.length > REASON_MAX ? `${flat.slice(0, REASON_MAX).trimEnd()}…` : flat;
+  return ` Reason: ${shown}`;
+}
+
 // ---- Request timing (backdated / same-day) --------------------------------
 // A request's start date relative to today (app timezone). Flags last-minute
 // and retroactive requests, and routes their notifications:
@@ -335,11 +355,14 @@ export async function applyLeave(
       isHalfDay,
       halfDayPeriod,
     });
+    // The applicant's own words, so a recipient can judge the request from the
+    // email alone. Empty string when no reason was given.
+    const why = reasonSuffix(d.reason);
     const approvers = await leaveApproverUserIds(session.companyId, session.userId);
     await notifyUsers(
       approvers,
       `${prefix}${kindLower(d.kind)} request`,
-      `${emp?.fullName ?? "An employee"} requested ${detail} for ${formatDate(start)} – ${formatDate(end)}${note}.`,
+      `${emp?.fullName ?? "An employee"} requested ${detail} for ${formatDate(start)} – ${formatDate(end)}${note}.${why}`,
       reqMeta(created.id, "manage"),
     );
     // Also ping the applicant's department head (if the alert is enabled for
@@ -349,7 +372,7 @@ export async function applyLeave(
     await notifyUsers(
       heads,
       `Department ${kindLower(d.kind)} request`,
-      `${emp?.fullName ?? "Someone"} from your department requested ${detail} for ${formatDate(start)} – ${formatDate(end)}${note}.`,
+      `${emp?.fullName ?? "Someone"} from your department requested ${detail} for ${formatDate(start)} – ${formatDate(end)}${note}.${why}`,
       { team: true },
     );
   } catch (e) {
@@ -507,7 +530,7 @@ export async function createLeaveRequest(
     await notifyUsers(
       heads,
       `Department ${kindLower(kind)} request`,
-      `${emp.fullName} from your department has ${detail} for ${formatDate(start)} – ${formatDate(end)}.`,
+      `${emp.fullName} from your department has ${detail} for ${formatDate(start)} – ${formatDate(end)}.${reasonSuffix(d.reason)}`,
       { team: true },
     );
   } catch (e) {
@@ -706,7 +729,9 @@ export async function requestLeaveEdit(_prev: LeaveState, formData: FormData): P
     await notifyUsers(
       approvers,
       `${kindTitle(req.kind)} edit requested`,
-      `${emp?.fullName ?? "An employee"} requested a change to a ${kindLower(req.kind)} request (proposed ${formatDate(start)} – ${formatDate(end)}).`,
+      // d.reason is the *proposed* reason (it's what goes into pendingEdit), so
+      // the approver sees the wording they'd be approving, not the old one.
+      `${emp?.fullName ?? "An employee"} requested a change to a ${kindLower(req.kind)} request (proposed ${formatDate(start)} – ${formatDate(end)}).${reasonSuffix(d.reason)}`,
       reqMeta(id, "manage"),
     );
   } catch (e) {
