@@ -2,11 +2,15 @@
 
 import { z } from "zod";
 import { randomBytes } from "crypto";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { verifyPassword, hashPassword } from "@/lib/auth/password";
 import { createSession, destroySession, getSession } from "@/lib/auth/session";
-import { appUrl, sendPasswordResetEmail } from "@/lib/email";
+import { clientIp, rateLimited } from "@/lib/auth/rate-limit";
+import { hashToken, LINK_DEAD, MAGIC_LINK_TTL_MINUTES } from "@/lib/auth/magic-link";
+import { appUrl, sendMagicLinkEmail, sendPasswordResetEmail } from "@/lib/email";
+import { safeInternalPath } from "@/lib/url";
 
 const LoginSchema = z.object({
   email: z.string().email("Enter a valid email"),
@@ -71,9 +75,7 @@ export async function loginAction(
 
   // Return the user to where they were headed (e.g. the extension connect page)
   // when it's a safe internal path; otherwise role-home.
-  const next = String(formData.get("next") ?? "");
-  const safeNext =
-    next.startsWith("/") && !next.startsWith("//") && !next.includes("://") ? next : null;
+  const safeNext = safeInternalPath(String(formData.get("next") ?? ""));
   if (safeNext) redirect(safeNext);
 
   // Clients land in their portal; everyone else in the internal app.
@@ -83,6 +85,133 @@ export async function loginAction(
 export async function logoutAction(): Promise<void> {
   await destroySession();
   redirect("/login");
+}
+
+// ---- Magic link (passwordless sign-in) ------------------------------------
+
+const MAGIC_LINK_WINDOW_MS = 15 * 60 * 1000;
+/** Ceilings so the form can't be turned into a mail-bomb (or an SMTP bill). */
+const MAGIC_LINK_PER_EMAIL = 3;
+const MAGIC_LINK_PER_IP = 10;
+
+const MagicLinkSchema = z.object({ email: z.string().email("Enter a valid email") });
+export type MagicLinkState = { ok?: boolean; error?: string };
+
+/**
+ * Emails a one-time sign-in link. Always reports success so the form can't be
+ * used to discover which addresses have accounts — the rate-limit message is
+ * the one exception, and it's keyed on the submitted address whether or not it
+ * exists, so it reveals nothing either.
+ *
+ * Works for invited users who never set a password: holding the inbox is the
+ * same proof the invite link asks for.
+ */
+export async function requestMagicLink(
+  _prev: MagicLinkState,
+  formData: FormData,
+): Promise<MagicLinkState> {
+  const parsed = MagicLinkSchema.safeParse({ email: formData.get("email") });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Enter a valid email" };
+  const email = parsed.data.email.trim();
+  const next = safeInternalPath(String(formData.get("next") ?? ""));
+
+  const ip = clientIp(await headers());
+  const tooMany =
+    rateLimited(`magic:ip:${ip}`, MAGIC_LINK_PER_IP, MAGIC_LINK_WINDOW_MS) ||
+    rateLimited(`magic:email:${email.toLowerCase()}`, MAGIC_LINK_PER_EMAIL, MAGIC_LINK_WINDOW_MS);
+  if (tooMany) {
+    return { error: "Too many sign-in links requested. Try again in a few minutes." };
+  }
+
+  const user = await prisma.user.findFirst({
+    where: { email: { equals: email, mode: "insensitive" }, isActive: true },
+    select: {
+      id: true,
+      email: true,
+      company: { select: { name: true } },
+      employee: { select: { fullName: true } },
+      client: { select: { name: true } },
+    },
+  });
+
+  if (user) {
+    const token = randomBytes(32).toString("hex");
+    // Issuing a new link retires the previous one — only the latest works.
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        loginTokenHash: hashToken(token),
+        loginTokenExpiresAt: new Date(Date.now() + MAGIC_LINK_TTL_MINUTES * 60 * 1000),
+      },
+    });
+    const qs = new URLSearchParams({ token });
+    if (next) qs.set("next", next);
+    try {
+      await sendMagicLinkEmail({
+        // The stored address, not the typed one — same account, right casing.
+        to: user.email,
+        name: user.employee?.fullName ?? user.client?.name ?? user.email.split("@")[0],
+        companyName: user.company?.name ?? "Oprix",
+        link: appUrl(`/login/magic?${qs.toString()}`),
+        minutes: MAGIC_LINK_TTL_MINUTES,
+      });
+    } catch (e) {
+      console.error("[magic-link] email failed:", e);
+    }
+  }
+
+  // Same response either way (no enumeration).
+  return { ok: true };
+}
+
+/**
+ * Spends a sign-in link and starts the session. Only reachable by POST, so the
+ * link survives the previewers and security scanners that GET every URL in an
+ * inbox before the person ever clicks it.
+ */
+export async function consumeMagicLink(
+  _prev: MagicLinkState,
+  formData: FormData,
+): Promise<MagicLinkState> {
+  const token = String(formData.get("token") ?? "");
+  if (!token) return { error: LINK_DEAD };
+
+  const user = await prisma.user.findFirst({
+    where: { loginTokenHash: hashToken(token), isActive: true },
+    select: {
+      id: true,
+      companyId: true,
+      role: true,
+      email: true,
+      employeeId: true,
+      clientId: true,
+      loginTokenExpiresAt: true,
+    },
+  });
+  if (!user?.loginTokenExpiresAt || user.loginTokenExpiresAt < new Date()) {
+    return { error: LINK_DEAD };
+  }
+
+  // Burn it first, guarded on it still being present, so a double submit or a
+  // forwarded link can't turn one token into two sessions.
+  const claimed = await prisma.user.updateMany({
+    where: { id: user.id, loginTokenHash: hashToken(token) },
+    data: { loginTokenHash: null, loginTokenExpiresAt: null, lastLoginAt: new Date() },
+  });
+  if (claimed.count !== 1) return { error: LINK_DEAD };
+
+  await createSession({
+    userId: user.id,
+    companyId: user.companyId,
+    role: user.role,
+    email: user.email,
+    employeeId: user.employeeId,
+    clientId: user.clientId,
+  });
+
+  const next = safeInternalPath(String(formData.get("next") ?? ""));
+  if (next) redirect(next);
+  redirect(user.role === "CLIENT" ? "/portal" : "/dashboard");
 }
 
 // ---- Set password (invite flow) -------------------------------------------

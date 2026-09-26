@@ -101,6 +101,36 @@ export async function sendPasswordResetEmail(opts: {
   return sendMail({ to: opts.to, subject: "Reset your Oprix password", html });
 }
 
+export async function sendMagicLinkEmail(opts: {
+  to: string;
+  name: string;
+  companyName: string;
+  link: string;
+  minutes: number;
+}): Promise<{ delivered: boolean }> {
+  const html = `
+  <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto">
+    <h2 style="color:#059669;margin:0 0 8px">Sign in to Oprix</h2>
+    <p style="color:#334155;font-size:14px;line-height:1.6">
+      Hi ${escapeHtml(opts.name)}, here's your sign-in link for
+      <strong>${escapeHtml(opts.companyName)}</strong>. No password needed — just open it
+      on the device you want to sign in on.
+    </p>
+    <p style="margin:24px 0">
+      <a href="${opts.link}" style="background:#059669;color:#fff;text-decoration:none;padding:12px 20px;border-radius:10px;font-size:14px;font-weight:600;display:inline-block">
+        Sign in to Oprix
+      </a>
+    </p>
+    <p style="color:#94a3b8;font-size:12px;line-height:1.6">
+      This link works once and expires in ${opts.minutes} minutes. If you didn't ask for it,
+      ignore this email — nobody can sign in without opening the link.<br>
+      If the button doesn't work, copy this URL:<br>
+      <span style="color:#475569">${opts.link}</span>
+    </p>
+  </div>`;
+  return sendMail({ to: opts.to, subject: "Your Oprix sign-in link", html });
+}
+
 export async function sendTaskAssignedEmail(opts: {
   to: string;
   name: string;

@@ -36,3 +36,17 @@ export function looksLikeUrl(raw: string | null | undefined): boolean {
   if (/^https?:\/\//i.test(s)) return true;
   return /^[a-z0-9.-]+\.[a-z]{2,}(?:[/?#]|$)/i.test(s);
 }
+
+/**
+ * A post-login / post-action destination, but only when it's a path on this
+ * site. An absolute path alone isn't enough: "//host" and "/\host" are
+ * protocol-relative to a browser and would walk the user off to another origin.
+ * Returns null for anything else, so callers fall back to a known-safe route.
+ */
+export function safeInternalPath(raw: string | null | undefined): string | null {
+  const next = (raw ?? "").trim();
+  if (!next.startsWith("/")) return null;
+  if (next[1] === "/" || next[1] === "\\") return null;
+  if (next.includes("://")) return null;
+  return next;
+}

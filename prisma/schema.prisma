@@ -372,6 +372,13 @@ model User {
   // Invite / set-password flow:
   setupToken          String?   @unique
   setupTokenExpiresAt DateTime?
+  // Passwordless sign-in ("magic link"). Kept separate from setupToken on
+  // purpose: setPasswordAction accepts any valid setupToken, so sharing the
+  // slot would let a sign-in link silently change the password too. Stored
+  // as a SHA-256 hash because this token *is* a live session — a DB dump
+  // or a stray log shouldn't be replayable. Lookup stays one indexed read.
+  loginTokenHash      String?   @unique
+  loginTokenExpiresAt DateTime?
   // Exactly one of these is set depending on role:
   employeeId   String?  @unique // internal users
   clientId     String?          // CLIENT role -> portal scope
