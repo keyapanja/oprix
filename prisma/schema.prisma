@@ -376,8 +376,11 @@ model User {
   // purpose: setPasswordAction accepts any valid setupToken, so sharing the
   // slot would let a sign-in link silently change the password too. Stored
   // as a SHA-256 hash because this token *is* a live session — a DB dump
-  // or a stray log shouldn't be replayable. Lookup stays one indexed read.
-  loginTokenHash      String?   @unique
+  // or a stray log shouldn't be replayable. Indexed, not unique: 32 random
+  // bytes never collide, nothing reads it as a unique key, and a unique
+  // constraint would make `db push` demand --accept-data-loss on a table
+  // that already has rows — which is how this column failed to ship.
+  loginTokenHash      String?
   loginTokenExpiresAt DateTime?
   // Exactly one of these is set depending on role:
   employeeId   String?  @unique // internal users
@@ -394,6 +397,7 @@ model User {
 
   @@unique([companyId, email])
   @@index([companyId])
+  @@index([loginTokenHash])
 }
 
 // Web Push subscriptions — one per browser/device a user opts in on. Backs
