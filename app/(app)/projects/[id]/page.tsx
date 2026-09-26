@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requirePage } from "@/lib/auth/guard";
+import { requirePage, sessionCan } from "@/lib/auth/guard";
 import { prisma } from "@/lib/db";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -108,6 +108,8 @@ export default async function ProjectDetailPage({
     assigneeNames: t.assignees.map((a) => a.employee.fullName),
   }));
 
+  const canManageStorage = await sessionCan(session, "org:manage");
+
   return (
     <div>
       <div className="mb-4 flex items-center justify-between gap-4">
@@ -186,8 +188,19 @@ export default async function ProjectDetailPage({
         />
 
         <Card className="mb-6">
-          <div className="border-b border-line px-5 py-3.5">
+          <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-3.5">
             <h3 className="text-sm font-semibold text-content">Attachments</h3>
+            {canManageStorage && (
+              // Admins only: the panel above shows this project's own files;
+              // the storage view adds every task file and what it all weighs.
+              <Link
+                href={`/storage/${project.id}`}
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-muted transition-colors hover:text-content"
+              >
+                <Icon name="database" className="size-3.5" />
+                Storage
+              </Link>
+            )}
           </div>
           <div className="p-5">
             <AttachmentsPanel

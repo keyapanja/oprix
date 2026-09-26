@@ -122,6 +122,7 @@ export const NAV: NavItem[] = [
   },
   { label: "Extension", href: "/extension", icon: "download" },
   { label: "Organization", href: "/organization", icon: "building", action: "org:manage" },
+  { label: "Storage", href: "/storage", icon: "database", action: "org:manage" },
   { label: "Trash", href: "/trash", icon: "trash", superAdminOnly: true },
 ];
 
