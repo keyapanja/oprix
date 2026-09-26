@@ -123,41 +123,56 @@ export async function requestMagicLink(
     return { error: "Too many sign-in links requested. Try again in a few minutes." };
   }
 
-  const user = await prisma.user.findFirst({
-    where: { email: { equals: email, mode: "insensitive" }, isActive: true },
-    select: {
-      id: true,
-      email: true,
-      company: { select: { name: true } },
-      employee: { select: { fullName: true } },
-      client: { select: { name: true } },
-    },
-  });
-
-  if (user) {
-    const token = randomBytes(32).toString("hex");
-    // Issuing a new link retires the previous one — only the latest works.
-    await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        loginTokenHash: hashToken(token),
-        loginTokenExpiresAt: new Date(Date.now() + MAGIC_LINK_TTL_MINUTES * 60 * 1000),
+  try {
+    const user = await prisma.user.findFirst({
+      where: { email: { equals: email, mode: "insensitive" }, isActive: true },
+      select: {
+        id: true,
+        email: true,
+        company: { select: { name: true } },
+        employee: { select: { fullName: true } },
+        client: { select: { name: true } },
       },
     });
-    const qs = new URLSearchParams({ token });
-    if (next) qs.set("next", next);
-    try {
-      await sendMagicLinkEmail({
-        // The stored address, not the typed one — same account, right casing.
-        to: user.email,
-        name: user.employee?.fullName ?? user.client?.name ?? user.email.split("@")[0],
-        companyName: user.company?.name ?? "Oprix",
-        link: appUrl(`/login/magic?${qs.toString()}`),
-        minutes: MAGIC_LINK_TTL_MINUTES,
+
+    if (user) {
+      const token = randomBytes(32).toString("hex");
+      // Issuing a new link retires the previous one — only the latest works.
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          loginTokenHash: hashToken(token),
+          loginTokenExpiresAt: new Date(Date.now() + MAGIC_LINK_TTL_MINUTES * 60 * 1000),
+        },
       });
-    } catch (e) {
-      console.error("[magic-link] email failed:", e);
+      const qs = new URLSearchParams({ token });
+      if (next) qs.set("next", next);
+      try {
+        await sendMagicLinkEmail({
+          // The stored address, not the typed one — same account, right casing.
+          to: user.email,
+          name: user.employee?.fullName ?? user.client?.name ?? user.email.split("@")[0],
+          companyName: user.company?.name ?? "Oprix",
+          link: appUrl(`/login/magic?${qs.toString()}`),
+          minutes: MAGIC_LINK_TTL_MINUTES,
+        });
+      } catch (e) {
+        console.error("[magic-link] email failed:", e);
+      }
     }
+  } catch (e) {
+    // The sign-in page must survive a broken database or an unapplied schema.
+    // Letting this throw replaces the whole login screen with Next's error page,
+    // taking password sign-in down with it — for a feature that's optional.
+    //
+    // This does mean that *while the backend is broken* the message appears only
+    // for addresses that exist, which is a weak enumeration signal. Accepted:
+    // it needs the app to already be failing, and the alternative is people
+    // staring at "check your email" for a mail that is never coming.
+    console.error("[magic-link] request failed:", e);
+    return {
+      error: "We couldn't send a sign-in link just now. Sign in with your password, or try again in a moment.",
+    };
   }
 
   // Same response either way (no enumeration).
@@ -176,42 +191,56 @@ export async function consumeMagicLink(
   const token = String(formData.get("token") ?? "");
   if (!token) return { error: LINK_DEAD };
 
-  const user = await prisma.user.findFirst({
-    where: { loginTokenHash: hashToken(token), isActive: true },
-    select: {
-      id: true,
-      companyId: true,
-      role: true,
-      email: true,
-      employeeId: true,
-      clientId: true,
-      loginTokenExpiresAt: true,
-    },
-  });
-  if (!user?.loginTokenExpiresAt || user.loginTokenExpiresAt < new Date()) {
-    return { error: LINK_DEAD };
+  // Where to land once the session exists. Computed inside the try so the
+  // redirect itself stays outside it — redirect() works by throwing, and a
+  // catch would swallow it.
+  let destination: string;
+  try {
+    const user = await prisma.user.findFirst({
+      where: { loginTokenHash: hashToken(token), isActive: true },
+      select: {
+        id: true,
+        companyId: true,
+        role: true,
+        email: true,
+        employeeId: true,
+        clientId: true,
+        loginTokenExpiresAt: true,
+      },
+    });
+    if (!user?.loginTokenExpiresAt || user.loginTokenExpiresAt < new Date()) {
+      return { error: LINK_DEAD };
+    }
+
+    // Burn it first, guarded on it still being present, so a double submit or a
+    // forwarded link can't turn one token into two sessions.
+    const claimed = await prisma.user.updateMany({
+      where: { id: user.id, loginTokenHash: hashToken(token) },
+      data: { loginTokenHash: null, loginTokenExpiresAt: null, lastLoginAt: new Date() },
+    });
+    if (claimed.count !== 1) return { error: LINK_DEAD };
+
+    await createSession({
+      userId: user.id,
+      companyId: user.companyId,
+      role: user.role,
+      email: user.email,
+      employeeId: user.employeeId,
+      clientId: user.clientId,
+    });
+
+    destination =
+      safeInternalPath(String(formData.get("next") ?? "")) ??
+      (user.role === "CLIENT" ? "/portal" : "/dashboard");
+  } catch (e) {
+    // Never let a backend problem render as a crashed page on the way in. Said
+    // separately from LINK_DEAD so nobody burns a second link chasing a fault
+    // that was never about the link.
+    console.error("[magic-link] sign-in failed:", e);
+    return { error: "Something went wrong signing you in. Try the link again in a moment." };
   }
 
-  // Burn it first, guarded on it still being present, so a double submit or a
-  // forwarded link can't turn one token into two sessions.
-  const claimed = await prisma.user.updateMany({
-    where: { id: user.id, loginTokenHash: hashToken(token) },
-    data: { loginTokenHash: null, loginTokenExpiresAt: null, lastLoginAt: new Date() },
-  });
-  if (claimed.count !== 1) return { error: LINK_DEAD };
-
-  await createSession({
-    userId: user.id,
-    companyId: user.companyId,
-    role: user.role,
-    email: user.email,
-    employeeId: user.employeeId,
-    clientId: user.clientId,
-  });
-
-  const next = safeInternalPath(String(formData.get("next") ?? ""));
-  if (next) redirect(next);
-  redirect(user.role === "CLIENT" ? "/portal" : "/dashboard");
+  redirect(destination);
 }
 
 // ---- Set password (invite flow) -------------------------------------------
