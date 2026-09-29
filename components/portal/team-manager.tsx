@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Avatar } from "@/components/ui/avatar";
 import { Icon } from "@/components/ui/icons";
 import { toast } from "@/components/ui/toast";
 import { confirmDialog } from "@/components/ui/confirm";
@@ -14,6 +15,8 @@ import { confirmDialog } from "@/components/ui/confirm";
 type Member = {
   id: string;
   email: string;
+  nickname: string | null;
+  avatarUrl: string | null;
   accepted: boolean;
   isPrimary: boolean;
   lastLoginAt: Date | string | null;
@@ -86,15 +89,14 @@ export function TeamManager({
         {team.map((m) => (
           <div key={m.id} className="flex items-center justify-between gap-3 px-4 py-3">
             <div className="flex min-w-0 items-center gap-3">
-              <span className="gradient-brand flex size-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white">
-                {m.email.slice(0, 2).toUpperCase()}
-              </span>
+              <Avatar name={m.nickname || m.email} src={m.avatarUrl} size="md" />
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium text-content">
-                  {m.email}
+                  {m.nickname || m.email}
                   {m.id === currentUserId && <span className="text-faint"> (you)</span>}
                 </p>
-                <p className="text-xs text-faint">
+                <p className="truncate text-xs text-faint">
+                  {m.nickname ? `${m.email} · ` : ""}
                   {m.accepted ? "Active" : "Invite pending"}
                 </p>
               </div>

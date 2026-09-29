@@ -14,6 +14,8 @@ export function PortalHeader({
   companyName,
   clientName,
   email,
+  displayName,
+  avatarUrl,
   showForms,
   notifications,
   unread,
@@ -21,6 +23,9 @@ export function PortalHeader({
   companyName: string;
   clientName: string;
   email: string;
+  /** The signed-in person, not the client account — their own name and photo. */
+  displayName: string;
+  avatarUrl: string | null;
   showForms?: boolean;
   notifications: ClientNote[];
   unread: number;
@@ -87,9 +92,18 @@ export function PortalHeader({
               onClick={() => setOpen((v) => !v)}
               className="flex items-center gap-2.5 rounded-xl p-1 pr-2 transition-colors hover:bg-canvas"
             >
-              <span className="gradient-brand flex size-8 items-center justify-center rounded-lg text-xs font-semibold text-white shadow-sm">
-                {initials}
-              </span>
+              {avatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={avatarUrl}
+                  alt=""
+                  className="size-8 rounded-lg object-cover shadow-sm"
+                />
+              ) : (
+                <span className="gradient-brand flex size-8 items-center justify-center rounded-lg text-xs font-semibold text-white shadow-sm">
+                  {initials}
+                </span>
+              )}
               <span className="hidden text-left sm:block">
                 <span className="block max-w-[12rem] truncate text-sm font-medium leading-tight text-content">
                   {clientName}
@@ -101,8 +115,11 @@ export function PortalHeader({
             {open && (
               <div className="absolute right-0 z-20 mt-2 w-56 overflow-hidden rounded-xl border border-line bg-elevated py-1 shadow-card-hover">
                 <div className="border-b border-line px-3 py-2.5">
-                  <p className="truncate text-sm font-medium text-content">{clientName}</p>
+                  <p className="truncate text-sm font-medium text-content">{displayName}</p>
                   <p className="truncate text-xs text-muted">{email}</p>
+                  {clientName && displayName !== clientName && (
+                    <p className="truncate text-xs text-faint">{clientName}</p>
+                  )}
                 </div>
                 <div className="border-b border-line py-1 md:hidden">
                   {NAV.map((n) => (
@@ -116,6 +133,14 @@ export function PortalHeader({
                     </Link>
                   ))}
                 </div>
+                <Link
+                  href="/portal/profile"
+                  onClick={() => setOpen(false)}
+                  className="flex items-center gap-2 px-3 py-2 text-sm text-content hover:bg-canvas"
+                >
+                  <Icon name="users" className="size-4" />
+                  My profile
+                </Link>
                 <form action={logoutAction}>
                   <button
                     type="submit"

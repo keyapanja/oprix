@@ -23,6 +23,11 @@ export default async function PortalLayout({ children }: { children: React.React
   const clientName = client.companyName || client.name;
   const showForms = await companyHasPortalForms(session.companyId);
   const { items: notifications, unread } = await getPortalNotifications(session.userId);
+  // The header shows the signed-in person alongside the client account.
+  const me = await prisma.user.findUnique({
+    where: { id: session.userId },
+    select: { nickname: true, avatarUrl: true },
+  });
 
   return (
     <div className="min-h-dvh bg-canvas">
@@ -30,6 +35,8 @@ export default async function PortalLayout({ children }: { children: React.React
         companyName={companyName}
         clientName={clientName}
         email={session.email}
+        displayName={me?.nickname || session.email}
+        avatarUrl={me?.avatarUrl ?? null}
         showForms={showForms}
         notifications={notifications}
         unread={unread}

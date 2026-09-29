@@ -365,6 +365,13 @@ model User {
   isActive     Boolean  @default(true)
   // Self-managed profile:
   nickname     String?
+  // Profile fields for logins with no Employee behind them — CLIENT portal
+  // users. Employees keep the equivalents on Employee (photoKey, phone,
+  // dateOfBirth) and edit them through updateMyDetails; these are only read
+  // and written when `employeeId` is null, so there's one home per person.
+  photoKey     String?
+  phone        String?
+  dateOfBirth  DateTime?
   avatarUrl    String? // image URL — real uploads land in Phase 2 file storage
   bio          String?
   // Per-category email opt-in map (keyed by NoteCategory). null = use defaults.

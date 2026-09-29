@@ -428,3 +428,50 @@ export async function clientRequestDeliverableRevision(
   revalidatePath(`/portal/projects/${d.projectId}`);
   return { ok: true };
 }
+
+// ---- Portal profile (self-service) ----------------------------------------
+
+const PortalProfileZ = z.object({
+  nickname: z.string().trim().max(60).optional().or(z.literal("")),
+  bio: z.string().trim().max(500).optional().or(z.literal("")),
+  phone: z.string().trim().max(30).optional().or(z.literal("")),
+  dateOfBirth: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date")
+    .optional()
+    .or(z.literal("")),
+});
+export type PortalProfileInput = z.infer<typeof PortalProfileZ>;
+
+/**
+ * A portal user edits their own profile. Everything lands on their `User` row:
+ * a client login has no Employee behind it, which is where the equivalent
+ * employee fields live. The photo is handled separately by
+ * POST/DELETE /api/portal/avatar, which owns `photoKey`/`avatarUrl`.
+ */
+export async function updateMyPortalProfile(input: PortalProfileInput): Promise<PortalActionState> {
+  let session: PortalSession;
+  try {
+    session = await requirePortalAction();
+  } catch {
+    return { error: "Not authorized" };
+  }
+
+  const parsed = PortalProfileZ.safeParse(input);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  const d = parsed.data;
+
+  await prisma.user.update({
+    where: { id: session.userId },
+    data: {
+      nickname: d.nickname || null,
+      bio: d.bio || null,
+      phone: d.phone || null,
+      dateOfBirth: d.dateOfBirth ? dateAtUTC(d.dateOfBirth) : null,
+    },
+  });
+
+  revalidatePath("/portal/profile");
+  revalidatePath("/portal", "layout"); // the header shows the name + photo
+  return { ok: true };
+}

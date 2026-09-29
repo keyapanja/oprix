@@ -201,6 +201,9 @@ export async function listPendingTaskReviews(clientId: string, companyId: string
 export type TeamMember = {
   id: string;
   email: string;
+  /** Their own chosen name + photo, once they've filled in their profile. */
+  nickname: string | null;
+  avatarUrl: string | null;
   accepted: boolean; // has set a password (vs. a pending invite)
   isPrimary: boolean; // the earliest login — can manage the team
   lastLoginAt: Date | null;
@@ -215,12 +218,21 @@ export async function listClientTeam(clientId: string, companyId: string): Promi
   const users = await prisma.user.findMany({
     where: { clientId, companyId, role: "CLIENT", isActive: true },
     orderBy: { createdAt: "asc" },
-    select: { id: true, email: true, passwordHash: true, lastLoginAt: true },
+    select: {
+      id: true,
+      email: true,
+      nickname: true,
+      avatarUrl: true,
+      passwordHash: true,
+      lastLoginAt: true,
+    },
   });
   const primaryId = users[0]?.id ?? null;
   return users.map((u) => ({
     id: u.id,
     email: u.email,
+    nickname: u.nickname,
+    avatarUrl: u.avatarUrl,
     accepted: !!u.passwordHash,
     isPrimary: u.id === primaryId,
     lastLoginAt: u.lastLoginAt,
