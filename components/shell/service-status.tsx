@@ -12,7 +12,7 @@ const FAILURES_BEFORE_ALERT = 2;
 /** Long enough for a slow connection, short enough to notice a dead server. */
 const TIMEOUT_MS = 6_000;
 
-type Status = "ok" | "down" | "updated";
+type Status = "ok" | "deploying" | "down" | "updated";
 
 /**
  * Tells people when the platform is briefly unavailable, so a save that doesn't
@@ -22,6 +22,9 @@ type Status = "ok" | "down" | "updated";
  * would announce its own downtime is precisely the one that's gone. The browser
  * polls /api/health instead and draws its own conclusions —
  *
+ *  - `deploying` in the answer → a push has kicked off a build (see
+ *    lib/deploy-flag.ts). The server is still perfectly healthy and saves still
+ *    work, so this is a heads-up, not a warning
  *  - no answer twice running  → an update (or the network) is in the way
  *  - answers with a different build id → the server came back as a NEW version,
  *    so this tab is running code the server no longer serves and should reload
@@ -32,6 +35,8 @@ type Status = "ok" | "down" | "updated";
 export function ServiceStatus({ build }: { build: string }) {
   const [status, setStatus] = useState<Status>("ok");
   const [offline, setOffline] = useState(false);
+  /** Last known deploy state, so an unreachable server can say *why*. */
+  const [building, setBuilding] = useState(false);
 
   // Pin the build this tab actually loaded its JavaScript from.
   //
@@ -46,6 +51,10 @@ export function ServiceStatus({ build }: { build: string }) {
     let stopped = false;
     let failures = 0;
     let updated = false;
+    // Remembered across polls: a failed request carries no answer, but a deploy
+    // we already knew about is exactly why it failed — that's what lets the
+    // "down" notice say "update" rather than "can't reach the server".
+    let deploying = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
 
     async function check() {
@@ -56,9 +65,10 @@ export function ServiceStatus({ build }: { build: string }) {
         const res = await fetch("/api/health", { cache: "no-store", signal: ctrl.signal });
         clearTimeout(abort);
         if (res.ok) {
-          const data = (await res.json()) as { build?: string };
+          const data = (await res.json()) as { build?: string; deploying?: boolean };
           healthy = true;
           failures = 0;
+          deploying = data.deploying === true;
           // A different build means this tab is stale, not that anything broke.
           if (data.build && data.build !== loaded.current) updated = true;
         }
@@ -69,10 +79,21 @@ export function ServiceStatus({ build }: { build: string }) {
       if (stopped) return;
 
       setOffline(typeof navigator !== "undefined" && navigator.onLine === false);
-      setStatus(updated ? "updated" : failures >= FAILURES_BEFORE_ALERT ? "down" : "ok");
+      setStatus(
+        updated
+          ? "updated"
+          : failures >= FAILURES_BEFORE_ALERT
+            ? "down"
+            : deploying
+              ? "deploying"
+              : "ok",
+      );
+      setBuilding(deploying);
 
       if (updated) return; // nothing left to poll for
-      timer = setTimeout(check, healthy ? HEALTHY_MS : DEGRADED_MS);
+      // Check back quickly once a deploy is known to be coming, so the "new
+      // version is live" nudge lands close to the moment it actually is.
+      timer = setTimeout(check, healthy && !deploying ? HEALTHY_MS : DEGRADED_MS);
     }
 
     function schedule(delay: number) {
@@ -127,13 +148,22 @@ export function ServiceStatus({ build }: { build: string }) {
             Reload
           </button>
         </span>
+      ) : status === "deploying" ? (
+        // The build runs on a container that isn't this one; nothing is down
+        // and saves still work, so this promises no disruption it can't prove.
+        <span className="flex items-center gap-2.5 rounded-full bg-slate-100 px-4 py-2 text-slate-700 ring-1 ring-inset ring-slate-300 dark:bg-slate-500/15 dark:text-slate-200 dark:ring-slate-400/25">
+          <span className="size-2 shrink-0 animate-pulse rounded-full bg-slate-400" />
+          <span className="min-w-0">An update is on the way — we&rsquo;ll say when it&rsquo;s live.</span>
+        </span>
       ) : (
         <span className="flex items-center gap-2.5 rounded-full bg-amber-50 px-4 py-2 text-amber-900 ring-1 ring-inset ring-amber-200 dark:bg-amber-500/15 dark:text-amber-200 dark:ring-amber-500/25">
           <span className="size-2 shrink-0 animate-pulse rounded-full bg-amber-500" />
           <span className="min-w-0">
             {offline
               ? "You're offline — changes won't save until you're back."
-              : "Update in progress — changes won't save until it's done."}
+              : building
+                ? "Update in progress — changes won't save until it's done."
+                : "Can't reach the server — changes won't save until it's back."}
           </span>
         </span>
       )}

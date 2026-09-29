@@ -1,0 +1,42 @@
+name: Announce deploy
+
+# Tells the running app that an update is coming.
+#
+# Coolify keeps the OLD container serving for the whole build, so from inside
+# the app a deploy in progress looks exactly like an ordinary quiet afternoon —
+# and Coolify's own notification webhook only fires on deployment_success /
+# deployment_failed, never on start. The push is the one event that happens at
+# the right moment, so it does the telling.
+#
+# Needs two repository settings (Settings → Secrets and variables → Actions):
+#   secret  DEPLOY_HOOK_SECRET  — same value as the app's env var
+#   secret  APP_URL             — e.g. https://oprix.gowithepic.com
+#
+# Best-effort by design: this must never fail a push or block the deploy, so a
+# missing secret or an unreachable app is reported and shrugged off.
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  announce:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping /api/deploy-hook
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          DEPLOY_HOOK_SECRET: ${{ secrets.DEPLOY_HOOK_SECRET }}
+          SHA: ${{ github.sha }}
+        run: |
+          if [ -z "$APP_URL" ] || [ -z "$DEPLOY_HOOK_SECRET" ]; then
+            echo "APP_URL or DEPLOY_HOOK_SECRET not set — skipping."
+            exit 0
+          fi
+          code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 \
+            -X POST "$APP_URL/api/deploy-hook" \
+            -H "Authorization: Bearer $DEPLOY_HOOK_SECRET" \
+            -H 'Content-Type: application/json' \
+            -d "{\"sha\":\"$SHA\"}" || echo 000)
+          echo "deploy-hook responded $code"
+          [ "$code" = "200" ] || echo "::warning::deploy-hook did not accept the ping ($code)"

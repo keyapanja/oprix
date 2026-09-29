@@ -71,6 +71,7 @@ DIRECT_URL     = <the same internal Postgres URL>
 AUTH_SECRET    = <generate: see below>
 APP_URL        = https://oprix.gowithepic.com
 CRON_SECRET    = <generate: see below>
+DEPLOY_HOOK_SECRET = <generate: see below>   # see "Deploy notice" below
 EXTENSION_ORIGINS =            # leave empty until the extension is published
 # SMTP (so invites + password resets actually send):
 SMTP_HOST      = <your provider host>
@@ -139,6 +140,39 @@ just seeds.)
 - **Browser extension:** once you load/publish it against the live origin, set
   `EXTENSION_ORIGINS = chrome-extension://<id>` in the app env and redeploy, and
   point the extension's "Oprix address" at `https://oprix.gowithepic.com`.
+
+### Deploy notice ("An update is on the way")
+
+Coolify keeps the **old** container serving for the whole build — a full
+redeploy was measured answering every 2-second health poll without a single
+failure — so from inside the app, a deploy in progress is indistinguishable
+from a quiet afternoon. Coolify's notification webhook can't help either: its
+events are `deployment_success` / `deployment_failed` / `status_changed` /
+`restart_limit_reached`, and **none of them fire on start**.
+
+The one thing that happens at the right moment is the push. So
+`.github/workflows/announce-deploy.yml` pings the running app on every push to
+`main` — the same event that triggers Coolify's build.
+
+Three settings, all the same secret:
+
+1. Generate one: `openssl rand -base64 32`
+2. **Coolify** → app → Environment Variables → `DEPLOY_HOOK_SECRET` = that value
+3. **GitHub** → repo → Settings → Secrets and variables → Actions → add
+   `DEPLOY_HOOK_SECRET` (same value) and `APP_URL` = `https://oprix.gowithepic.com`
+
+Without them the workflow prints "skipping" and exits 0 — pushes and deploys are
+never blocked by this, it just goes quiet. To check it by hand:
+
+```bash
+curl -X POST -H "Authorization: Bearer $DEPLOY_HOOK_SECRET" https://oprix.gowithepic.com/api/deploy-hook
+curl -s https://oprix.gowithepic.com/api/health     # -> "deploying":true
+```
+
+The flag lives in memory and expires after 20 minutes, so a failed build can't
+leave a banner nobody can dismiss. It clears for real when the new container
+takes over, because that container reports a different build id — which is what
+turns the notice into "a new version is live, reload".
 
 ## Redeploys
 Push to `main` → Coolify rebuilds and redeploys. The Postgres data and the
