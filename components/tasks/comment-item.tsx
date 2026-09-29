@@ -11,6 +11,7 @@ import { confirmDialog } from "@/components/ui/confirm";
 import { CommentEditor } from "@/components/tasks/comment-editor";
 import { AttachmentLightbox, type LightboxItem } from "@/components/attachments/attachment-lightbox";
 import { renderMarkdown } from "@/lib/kb/markdown";
+import { highlightMentions } from "@/lib/mentions";
 
 type Person = { id: string; name: string };
 
@@ -130,7 +131,9 @@ export function CommentItem({
             {/* Render the whole body inline — images sit where they were pasted.
                 Safe: renderMarkdown escapes all input first, then layers a fixed
                 Markdown subset (img srcs allowlisted to /… and http(s)). Clicking
-                an inline image opens it in the lightbox (event delegation). */}
+                an inline image opens it in the lightbox (event delegation).
+                highlightMentions then links each @Name, working on the escaped
+                output so a person's name can never carry markup. */}
             <div
               className="comment-body text-sm text-content [&_img]:my-1.5 [&_img]:block [&_img]:max-h-60 [&_img]:w-auto [&_img]:cursor-zoom-in [&_img]:rounded-lg [&_img]:ring-1 [&_img]:ring-inset [&_img]:ring-line-strong [&_ol]:my-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-1 [&_ul]:my-1 [&_ul]:list-disc [&_ul]:pl-5"
               onClick={(e) => {
@@ -140,7 +143,7 @@ export function CommentItem({
                   setPreview({ fileName: img.alt || "image", mimeType: "image/*", href: img.src });
                 }
               }}
-              dangerouslySetInnerHTML={{ __html: renderMarkdown(body) }}
+              dangerouslySetInnerHTML={{ __html: highlightMentions(renderMarkdown(body), people) }}
             />
           </div>
         )}

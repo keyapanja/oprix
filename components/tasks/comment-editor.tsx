@@ -13,6 +13,27 @@ type Person = { id: string; name: string };
 const cleanAlt = (s: string) => s.replace(/[[\]()]/g, "").trim();
 
 /**
+ * The half-typed "@…" immediately before the caret.
+ *
+ * The query may span one space, so "@Ravi K" can pick Ravi Kumar out of a
+ * roster that also holds a Ravi Shankar — without it you can only ever filter
+ * by first name. Requiring `\S+` after that space is what closes the menu once
+ * a full name has been inserted, instead of it reopening on the name just
+ * chosen. Both the menu and the insertion read the query through this, so the
+ * text they agree on is the same text.
+ */
+const MENTION_QUERY = /(?:^|\s)@(\S*(?:\s\S+)?)$/u;
+
+/**
+ * Non-breaking space after an inserted name. A plain space here is collapsed by
+ * contentEditable the instant the next character is typed — you get
+ * "@Ravi Kumarand", which no longer reads as a mention and silently tags
+ * nobody. This survives, looks identical, and `htmlToMarkdown`'s collapse()
+ * (whose /\s+/ matches it) turns it back into an ordinary space on save.
+ */
+const NBSP = " ";
+
+/**
  * Compact rich-text comment editor. Text is a contentEditable that serializes to
  * Markdown (reusing the KB editor's htmlToMarkdown + the XSS-safe renderMarkdown),
  * with **bold / italic / lists / links** and @-mentions. Images — pasted from the
@@ -158,7 +179,7 @@ export function CommentEditor({
       setMQuery(null);
       return;
     }
-    const m = before.match(/(?:^|\s)@(\S*)$/u);
+    const m = before.match(MENTION_QUERY);
     if (!m) {
       setMQuery(null);
       return;
@@ -173,10 +194,10 @@ export function CommentEditor({
     const node = sel.anchorNode;
     const offset = sel.anchorOffset;
     const full = node.textContent ?? "";
-    const m = full.slice(0, offset).match(/(?:^|\s)@(\S*)$/u);
+    const m = full.slice(0, offset).match(MENTION_QUERY);
     if (!m) return;
     const at = offset - m[1].length - 1; // index of the "@"
-    const chunk = `@${p.name} `;
+    const chunk = `@${p.name}${NBSP}`;
     node.textContent = full.slice(0, at) + chunk + full.slice(offset);
     const pos = Math.min(at + chunk.length, (node.textContent ?? "").length);
     const range = document.createRange();

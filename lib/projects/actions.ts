@@ -16,6 +16,7 @@ import { TASK_STATUS_LABEL } from "@/lib/status";
 import { copyUpload, deleteUpload, makeFileKey } from "@/lib/uploads";
 import { notifyTaskAssigned, notifyClientTask } from "@/lib/tasks/assign-notify";
 import { notify } from "@/lib/notifications/notify";
+import { mentionedIds, type MentionPerson } from "@/lib/mentions";
 
 export type ProjectState = { error?: string; ok?: boolean; id?: string };
 
@@ -863,6 +864,21 @@ export async function duplicateTask(
 }
 
 // ---- Comments (task access OR admin) --------------------------------------
+/**
+ * Who can be @-mentioned: every active employee with a user account, since an
+ * employee without one has nowhere to receive the ping.
+ *
+ * Not exported — every export of a `"use server"` module becomes a callable
+ * endpoint, and the company roster isn't something to hand out on request.
+ */
+async function mentionRoster(companyId: string): Promise<MentionPerson[]> {
+  const people = await prisma.employee.findMany({
+    where: { companyId, deletedAt: null },
+    select: { fullName: true, user: { select: { id: true } } },
+  });
+  return people.flatMap((p) => (p.user ? [{ id: p.user.id, name: p.fullName }] : []));
+}
+
 export async function addComment(taskId: string, body: string): Promise<ProjectState> {
   const session = await getSession();
   if (!session) return { error: "Not authenticated" };
@@ -883,25 +899,20 @@ export async function addComment(taskId: string, body: string): Promise<ProjectS
 
   const actor = await actorLabel(session.userId);
 
-  // Notify anyone @-mentioned in the comment (matched by "@Full Name").
-  const people = await prisma.employee.findMany({
-    where: { companyId: session.companyId, deletedAt: null },
-    select: { fullName: true, user: { select: { id: true } } },
-  });
-  const mentioned = people.filter(
-    (p) => p.user && p.user.id !== session.userId && text.includes(`@${p.fullName}`),
+  // Ping everyone @-mentioned. scanMentions is the same matcher the rendered
+  // comment highlights with, so a linked name is always a notified name — and
+  // it dedupes, so tagging someone twice in one comment pings them once.
+  const targets = mentionedIds(text, await mentionRoster(session.companyId)).filter(
+    (id) => id !== session.userId,
   );
-  if (mentioned.length) {
+  if (targets.length) {
     // Central fan-out: in-app bell + Web Push + (pref-gated) email.
-    await notify(
-      mentioned.map((p) => p.user!.id),
-      {
-        type: "MENTION",
-        title: "You were mentioned",
-        body: `${actor} mentioned you in a comment on “${task.name}”`,
-        meta: { taskId },
-      },
-    );
+    await notify(targets, {
+      type: "MENTION",
+      title: "You were mentioned",
+      body: `${actor} mentioned you in a comment on “${task.name}”`,
+      meta: { taskId },
+    });
   }
 
   await logActivity({
@@ -924,11 +935,27 @@ export async function editComment(commentId: string, text: string): Promise<Proj
   if (!body) return { error: "Comment can't be empty." };
   const c = await prisma.comment.findFirst({
     where: { id: commentId, task: { project: { companyId: session.companyId } } },
-    select: { authorId: true, taskId: true },
+    select: { authorId: true, taskId: true, body: true, task: { select: { name: true } } },
   });
   if (!c) return { error: "Comment not found" };
   if (c.authorId !== session.userId) return { error: "You can only edit your own comments." };
   await prisma.comment.update({ where: { id: commentId }, data: { body } });
+
+  // A mention added by an edit pings too, or the highlight on it would promise
+  // a notification that never went out. Only *newly* added names: fixing a typo
+  // must not ping everyone in the comment a second time.
+  const roster = await mentionRoster(session.companyId);
+  const already = new Set(mentionedIds(c.body, roster));
+  const added = mentionedIds(body, roster).filter((id) => id !== session.userId && !already.has(id));
+  if (added.length) {
+    await notify(added, {
+      type: "MENTION",
+      title: "You were mentioned",
+      body: `${await actorLabel(session.userId)} mentioned you in a comment on “${c.task.name}”`,
+      meta: { taskId: c.taskId },
+    });
+  }
+
   revalidatePath(`/tasks/${c.taskId}`);
   return { ok: true };
 }
