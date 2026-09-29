@@ -4,6 +4,8 @@ import { prisma } from "@/lib/db";
 import { companyHasPortalForms } from "@/lib/forms/data";
 import { getPortalNotifications } from "@/lib/portal/data";
 import { PortalHeader } from "@/components/portal/portal-header";
+import { ServiceStatus } from "@/components/shell/service-status";
+import { BUILD_ID } from "@/lib/build-id";
 import { Toaster } from "@/components/ui/toast";
 import { ConfirmHost } from "@/components/ui/confirm";
 
@@ -49,6 +51,7 @@ export default async function PortalLayout({ children }: { children: React.React
           task edit/withdraw controls and the team manager). */}
       <Toaster />
       <ConfirmHost />
+      <ServiceStatus build={BUILD_ID} />
     </div>
   );
 }

@@ -15,6 +15,8 @@ import { MobileNav } from "@/components/shell/mobile-nav";
 import { TimerBar } from "@/components/timer/timer-bar";
 import { PushPrompt } from "@/components/notifications/push-prompt";
 import { noteHref, formatNoteTime, type ClientNote } from "@/lib/notifications/categories";
+import { ServiceStatus } from "@/components/shell/service-status";
+import { BUILD_ID } from "@/lib/build-id";
 import { Toaster } from "@/components/ui/toast";
 import { ConfirmHost } from "@/components/ui/confirm";
 
@@ -161,6 +163,10 @@ export default async function AppLayout({
       </div>
       <Toaster />
       <ConfirmHost />
+      {/* Tells people the platform is mid-deploy instead of letting a save
+          silently fail. Client-side: a redeploy kills the server that would
+          otherwise be announcing it. */}
+      <ServiceStatus build={BUILD_ID} />
     </div>
   );
 }

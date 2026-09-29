@@ -41,9 +41,13 @@ export async function proxy(req: NextRequest) {
   // /api/portal/* is the client-portal's own API namespace (e.g. task-attachment
   // uploads): clients are otherwise confined to /portal/* below and couldn't
   // reach any /api route — each handler re-checks the portal session + ownership.
+  // /api/health is the liveness probe the in-app "deployment in progress" notice
+  // polls. It must answer with JSON even when the caller's session has expired —
+  // a redirect to /login would be indistinguishable from the server being down.
   if (
     pathname.startsWith("/api/ext/") ||
     pathname.startsWith("/api/cron") ||
+    pathname.startsWith("/api/health") ||
     pathname.startsWith("/api/portal/")
   ) {
     return NextResponse.next();
