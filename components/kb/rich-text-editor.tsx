@@ -52,6 +52,20 @@ function inlineText(node: Node): string {
 // Collapse whitespace for inline content (PRE is handled separately).
 const collapse = (s: string) => s.replace(/\s+/g, " ").trim();
 
+/**
+ * Tags that are part of a sentence rather than a block of their own.
+ *
+ * A run of these sitting directly in the editor root — `"Hi "`,
+ * `<span>@Ravi</span>`, `" and "`, `<span>@Sam</span>` — has to come out as
+ * ONE paragraph. Emitting a block per node scatters a single sentence across
+ * four, which is what used to happen to anything inline the browser left at the
+ * top level (mention chips, but bold mid-sentence too).
+ *
+ * BR and IMG are deliberately absent: they already separated blocks, and a BR
+ * folded into a run would collapse to a space and merge two lines into one.
+ */
+const INLINE_TAGS = new Set(["SPAN", "STRONG", "B", "EM", "I", "U", "A", "CODE", "FONT"]);
+
 function blockText(el: HTMLElement): string {
   switch (el.tagName) {
     case "H1":
@@ -89,15 +103,29 @@ function blockText(el: HTMLElement): string {
 
 export function htmlToMarkdown(root: HTMLElement): string {
   const blocks: string[] = [];
+  let run: string[] = []; // root-level inline content awaiting a paragraph
+  const flushRun = () => {
+    const t = collapse(run.join(""));
+    if (t) blocks.push(t);
+    run = [];
+  };
+
   root.childNodes.forEach((node) => {
     if (node.nodeType === Node.TEXT_NODE) {
-      const t = collapse(node.textContent ?? "");
-      if (t) blocks.push(t);
-    } else if (node.nodeType === Node.ELEMENT_NODE) {
-      const md = blockText(node as HTMLElement);
-      if (md.trim()) blocks.push(md);
+      run.push(node.textContent ?? "");
+      return;
     }
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+    const el = node as HTMLElement;
+    if (INLINE_TAGS.has(el.tagName)) {
+      run.push(inlineText(el)); // stays in the sentence being built
+      return;
+    }
+    flushRun();
+    const md = blockText(el);
+    if (md.trim()) blocks.push(md);
   });
+  flushRun();
   return blocks.join("\n\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 

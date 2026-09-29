@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ChangeEvent, type ClipboardEvent, type KeyboardEvent, type ReactNode } from "react";
 import { toast } from "@/components/ui/toast";
 import { renderMarkdown } from "@/lib/kb/markdown";
+import { highlightMentions, MENTION_CLASS } from "@/lib/mentions";
 import { htmlToMarkdown } from "@/components/kb/rich-text-editor";
 import { Icon } from "@/components/ui/icons";
 import { cn } from "@/lib/cn";
@@ -66,16 +67,18 @@ export function CommentEditor({
   const [mQuery, setMQuery] = useState<string | null>(null);
   const [mActive, setMActive] = useState(0);
 
-  // Seed once from the initial Markdown — images render inline, in place.
+  // Seed once from the initial Markdown — images render inline, in place, and
+  // existing @-names come back as chips so editing a comment looks like writing
+  // one. They serialize straight back to "@Name" (see MentionStyle).
   useEffect(() => {
     const el = ref.current;
     if (el && !inited.current) {
-      el.innerHTML = value?.trim() ? renderMarkdown(value) : "";
+      el.innerHTML = value?.trim() ? highlightMentions(renderMarkdown(value), people, "chip") : "";
       setEmpty(!el.textContent?.trim() && !el.querySelector("img"));
       inited.current = true;
       if (autoFocus) el.focus();
     }
-  }, [value, autoFocus]);
+  }, [value, autoFocus, people]);
 
   // Serialize the contentEditable (text + inline images) to Markdown.
   function emit() {
@@ -197,11 +200,24 @@ export function CommentEditor({
     const m = full.slice(0, offset).match(MENTION_QUERY);
     if (!m) return;
     const at = offset - m[1].length - 1; // index of the "@"
-    const chunk = `@${p.name}${NBSP}`;
-    node.textContent = full.slice(0, at) + chunk + full.slice(offset);
-    const pos = Math.min(at + chunk.length, (node.textContent ?? "").length);
+    const parent = node.parentNode;
+    if (!parent) return;
+
+    // Swap the half-typed "@query" for a chip element, then a plain text node
+    // holding the gap. The caret lands in that text node, so what you type next
+    // is ordinary text instead of being absorbed into the name.
+    const tail = (node as Text).splitText(at); // `tail` now begins at the "@"
+    tail.deleteData(0, offset - at); // drop "@query", keep whatever followed
+    const chip = document.createElement("span");
+    chip.className = MENTION_CLASS;
+    chip.setAttribute("data-mention", p.id);
+    chip.textContent = `@${p.name}`;
+    const gap = document.createTextNode(NBSP);
+    parent.insertBefore(chip, tail);
+    parent.insertBefore(gap, tail);
+
     const range = document.createRange();
-    range.setStart(node, pos);
+    range.setStart(gap, gap.length);
     range.collapse(true);
     sel.removeAllRanges();
     sel.addRange(range);

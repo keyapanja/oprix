@@ -80,8 +80,20 @@ export function mentionedIds(text: string, people: MentionPerson[]): string[] {
 const OPAQUE = /(<a\b[^>]*>[\s\S]*?<\/a>|<code\b[^>]*>[\s\S]*?<\/code>|<pre\b[^>]*>[\s\S]*?<\/pre>)/gi;
 const TAGS = /(<[^>]+>)/g;
 
-const CHIP =
-  'rounded px-1 font-semibold text-accent-strong bg-accent-soft hover:underline';
+/** Shared look, so a name reads the same while you type it and after you post. */
+export const MENTION_CLASS = "rounded px-1 font-semibold text-accent-strong bg-accent-soft";
+
+/**
+ * How to draw a mention.
+ *
+ * `"link"` for a posted comment — it navigates to the person. `"chip"` for the
+ * editor, where a link would be a trap (clicking your own draft to navigate
+ * away) and where a `<span>` is also what survives the round trip: the
+ * serializer unwraps unknown inline tags to their text, so the chip saves as a
+ * plain `@Name`, while an `<a>` would save as `[@Name](/people/…)` and the
+ * plain text the notifier reads would be gone after one edit.
+ */
+export type MentionStyle = "link" | "chip";
 
 /**
  * Turns `@Name` into a link to that person, in already-rendered comment HTML.
@@ -100,7 +112,11 @@ const CHIP =
  * `[@Name](/people/…)` and the plain `@Name` the notifier looks for would be
  * gone after one edit.
  */
-export function highlightMentions(html: string, people: MentionPerson[]): string {
+export function highlightMentions(
+  html: string,
+  people: MentionPerson[],
+  style: MentionStyle = "link",
+): string {
   if (!people.length || !html.includes("@")) return html;
   const roster = people.map((p) => ({ id: p.id, name: escapeHtml(p.name) }));
 
@@ -110,20 +126,26 @@ export function highlightMentions(html: string, people: MentionPerson[]): string
       if (i % 2 === 1) return seg; // a captured <a>/<code>/<pre> — leave intact
       return seg
         .split(TAGS)
-        .map((part, j) => (j % 2 === 1 ? part : link(part, roster)))
+        .map((part, j) => (j % 2 === 1 ? part : decorate(part, roster, style)))
         .join("");
     })
     .join("");
 }
 
-function link(text: string, roster: MentionPerson[]): string {
+/** The markup for one mention. Name and id are already escaped by the caller. */
+export function mentionMarkup(p: MentionPerson, style: MentionStyle): string {
+  return style === "link"
+    ? `<a href="/people/${encodeURIComponent(p.id)}" class="${MENTION_CLASS} hover:underline">@${p.name}</a>`
+    : `<span class="${MENTION_CLASS}" data-mention="${encodeURIComponent(p.id)}">@${p.name}</span>`;
+}
+
+function decorate(text: string, roster: MentionPerson[], style: MentionStyle): string {
   const hits = scanMentions(text, roster);
   if (!hits.length) return text;
   let out = "";
   let last = 0;
   for (const h of hits) {
-    out += text.slice(last, h.start);
-    out += `<a href="/people/${encodeURIComponent(h.person.id)}" class="${CHIP}">@${h.person.name}</a>`;
+    out += text.slice(last, h.start) + mentionMarkup(h.person, style);
     last = h.end;
   }
   return out + text.slice(last);
