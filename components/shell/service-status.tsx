@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Icon } from "@/components/ui/icons";
 
 /** Quiet cadence while everything is fine. */
@@ -33,6 +33,15 @@ export function ServiceStatus({ build }: { build: string }) {
   const [status, setStatus] = useState<Status>("ok");
   const [offline, setOffline] = useState(false);
 
+  // Pin the build this tab actually loaded its JavaScript from.
+  //
+  // Reading the prop on every render would quietly re-base it: a router.refresh()
+  // (the tasks page runs one every 10 seconds) fetches a fresh payload from
+  // whichever server is answering now, so a few seconds after a deploy this
+  // stale tab would be handed the NEW build id and conclude it was up to date.
+  // The comparison below has to be against the build we started with.
+  const loaded = useRef(build);
+
   useEffect(() => {
     let stopped = false;
     let failures = 0;
@@ -51,7 +60,7 @@ export function ServiceStatus({ build }: { build: string }) {
           healthy = true;
           failures = 0;
           // A different build means this tab is stale, not that anything broke.
-          if (data.build && data.build !== build) updated = true;
+          if (data.build && data.build !== loaded.current) updated = true;
         }
       } catch {
         /* unreachable, aborted, or mid-restart — all counted the same below */
@@ -94,7 +103,7 @@ export function ServiceStatus({ build }: { build: string }) {
       window.removeEventListener("online", onOnline);
       window.removeEventListener("offline", onOnline);
     };
-  }, [build]);
+  }, []);
 
   if (status === "ok") return null;
 

@@ -145,9 +145,9 @@ export const MAX_RUN_HOURS = 8;
  * Safety net for timers nobody stopped: pause any run that has been going for
  * more than `maxRunHours`, banking exactly that cap and no more.
  *
- * This is the only thing that catches the cases a browser prompt cannot — a
- * crash, a force-quit, a closed laptop, or simply going home on Friday — none
- * of which fire `beforeunload`.
+ * Since there's no tab-close prompt, this is the only thing standing between a
+ * forgotten timer and a corrupted timesheet — a closed tab, a crash, a
+ * force-quit, a shut laptop, or simply going home on Friday.
  *
  * The cap is measured from `runStartedAt`, NOT from now, which is what makes it
  * safe to run late: the external scheduler isn't wired yet, so this may not fire
