@@ -13,7 +13,7 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { Icon } from "@/components/ui/icons";
 import { FilePreviewGrid, makePicked, type PickedFile } from "@/components/attachments/file-preview-grid";
 import { toast } from "@/components/ui/toast";
-import { humanizeEnum } from "@/lib/format";
+import { formatBytes, humanizeEnum } from "@/lib/format";
 import { cn } from "@/lib/cn";
 
 type Emp = { id: string; name: string };
@@ -37,8 +37,11 @@ export type TaskPrefill = {
   dueDate: string;
   clientDeadline: string;
   assigneeIds: string[];
-  /** Where it came from, so the form can link back to the original. */
-  source: { href: string; label: string; fromClient: boolean };
+  /** Files already on the source task, offered for copying across. */
+  attachments: { fileName: string; sizeBytes: number | null; isLink: boolean }[];
+  /** Where it came from — the id drives the server-side file copy, the rest
+   *  lets the form link back to the original. */
+  source: { taskId: string; href: string; label: string; fromClient: boolean };
 };
 
 const PRIORITIES = ["LOW", "MEDIUM", "HIGH", "URGENT"];
@@ -82,6 +85,9 @@ export function NewTaskForm({
   const [clientVisible, setClientVisible] = useState(false);
   const [checkText, setCheckText] = useState("");
   const [files, setFiles] = useState<PickedFile[]>([]);
+  // Copying the source's files is the default; a big brief nobody needs on the
+  // internal task shouldn't be duplicated on disk without a way to say no.
+  const [copySourceFiles, setCopySourceFiles] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
@@ -176,12 +182,25 @@ export function NewTaskForm({
           checklistEnabled: !noChecklist,
           checklist: noChecklist ? [] : checklist,
           clientVisible,
+          copyAttachmentsFromTaskId:
+            prefill && copySourceFiles && prefill.attachments.length ? prefill.source.taskId : undefined,
         });
         if (res.error) {
           setError(res.error);
           return;
         }
         if (!res.task) return;
+
+        // Files can go missing from disk between the request and this copy —
+        // say so rather than letting the task open quietly short of its brief.
+        if (prefill && copySourceFiles && prefill.attachments.length) {
+          const got = res.attachmentsCopied ?? 0;
+          if (got < prefill.attachments.length) {
+            toast.error(
+              `Task created, but ${prefill.attachments.length - got} of ${prefill.attachments.length} files couldn't be copied — they're no longer on the server.`,
+            );
+          }
+        }
 
         if (files.length) {
           // The upload result is surfaced via a toast (not setError) because we
@@ -276,6 +295,35 @@ export function NewTaskForm({
           {/* Attachments — moved up, with a preview grid */}
           <Field label="Attachments" className="sm:col-span-2">
             <div>
+              {prefill && prefill.attachments.length > 0 && (
+                <div className="mb-3 rounded-xl bg-canvas p-3 ring-1 ring-inset ring-line">
+                  <label className="flex cursor-pointer select-none items-start gap-2.5">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 size-4"
+                      checked={copySourceFiles}
+                      onChange={(e) => setCopySourceFiles(e.target.checked)}
+                    />
+                    <span className="min-w-0">
+                      <span className="block text-sm font-medium text-content">
+                        Copy {prefill.attachments.length} file
+                        {prefill.attachments.length === 1 ? "" : "s"} from {prefill.source.label}
+                      </span>
+                      <span className="mt-1 block space-y-0.5">
+                        {prefill.attachments.map((a, i) => (
+                          <span key={i} className="flex items-center gap-1.5 text-xs text-muted">
+                            <Icon name={a.isLink ? "link" : "folder"} className="size-3.5 shrink-0 text-faint" />
+                            <span className="truncate">{a.fileName}</span>
+                            {!a.isLink && a.sizeBytes != null && (
+                              <span className="shrink-0 text-faint">{formatBytes(a.sizeBytes)}</span>
+                            )}
+                          </span>
+                        ))}
+                      </span>
+                    </span>
+                  </label>
+                </div>
+              )}
               <FilePreviewGrid files={files} onRemove={removeFile} />
               <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-canvas px-3 py-2 text-sm font-medium text-content ring-1 ring-inset ring-line transition-colors hover:bg-surface">
                 <Icon name="plus" className="size-4" />

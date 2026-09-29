@@ -13,7 +13,7 @@ import { finalizeTaskTimer, finalizeAllTaskTimers } from "@/lib/timer/finalize";
 import { canEditTask, toggleChecklistItemFor } from "@/lib/projects/task-access";
 import { resolveTaskChecklist } from "@/lib/projects/checklist";
 import { TASK_STATUS_LABEL } from "@/lib/status";
-import { deleteUpload } from "@/lib/uploads";
+import { copyUpload, deleteUpload, makeFileKey } from "@/lib/uploads";
 import { notifyTaskAssigned, notifyClientTask } from "@/lib/tasks/assign-notify";
 import { notify } from "@/lib/notifications/notify";
 
@@ -378,6 +378,62 @@ async function nextTaskNumber(companyId: string): Promise<number> {
   return c.taskSeq;
 }
 
+/**
+ * Duplicate one task's attachments onto another — rows and files both. Inline
+ * images are skipped: they belong to the comment they're embedded in, not the
+ * task's file list. A source file that has vanished from disk is skipped rather
+ * than copied as a row pointing at nothing (the storage console already has
+ * enough of those to report). `uploadedBy` is carried over rather than reset to
+ * the copier, so provenance survives — a client's brief still reads as theirs.
+ */
+async function copyTaskAttachments(
+  companyId: string,
+  fromTaskId: string,
+  toTaskId: string,
+): Promise<number> {
+  const rows = await prisma.attachment.findMany({
+    where: { taskId: fromTaskId, inline: false, task: { project: { companyId } } },
+    orderBy: { createdAt: "asc" },
+    select: {
+      fileKey: true,
+      fileName: true,
+      title: true,
+      url: true,
+      mimeType: true,
+      sizeBytes: true,
+      uploadedBy: true,
+    },
+  });
+
+  let copied = 0;
+  for (const a of rows) {
+    let fileKey: string | null = null;
+    if (a.fileKey) {
+      const key = makeFileKey(a.fileName);
+      try {
+        await copyUpload(a.fileKey, key);
+      } catch {
+        continue; // nothing on disk to copy — don't leave a broken row behind
+      }
+      fileKey = key;
+    }
+    await prisma.attachment.create({
+      data: {
+        taskId: toTaskId,
+        fileKey,
+        fileName: a.fileName,
+        title: a.title,
+        url: a.url, // link-only attachments carry across with no disk work
+        mimeType: a.mimeType,
+        sizeBytes: a.sizeBytes,
+        uploadedBy: a.uploadedBy,
+      },
+    });
+    copied += 1;
+  }
+  return copied;
+}
+
 export async function createTask(input: {
   projectId: string;
   name: string;
@@ -395,7 +451,10 @@ export async function createTask(input: {
   checklistEnabled?: boolean;
   /** Expose this task in the client portal (the project's client sees + is notified). */
   clientVisible?: boolean;
-}): Promise<{ ok?: boolean; error?: string; task?: KanbanTask }> {
+  /** Bring another task's files across — used when filing a client request as
+   *  internal work, so the brief lands with the task instead of being re-hunted. */
+  copyAttachmentsFromTaskId?: string;
+}): Promise<{ ok?: boolean; error?: string; task?: KanbanTask; attachmentsCopied?: number }> {
   const session = await requireCapability("task:manage");
   const name = input.name.trim();
   if (!name) return { error: "Task name is required" };
@@ -457,6 +516,21 @@ export async function createTask(input: {
     }
   }
 
+  // Best effort on purpose: the task exists by now, and a file that won't copy
+  // must not undo it. The count goes back to the caller so the UI can say so.
+  let attachmentsCopied = 0;
+  if (input.copyAttachmentsFromTaskId) {
+    try {
+      attachmentsCopied = await copyTaskAttachments(
+        session.companyId,
+        input.copyAttachmentsFromTaskId,
+        task.id,
+      );
+    } catch (e) {
+      console.error("[createTask] attachment copy failed:", e);
+    }
+  }
+
   await logActivity({
     companyId: session.companyId,
     actorId: session.userId,
@@ -479,7 +553,7 @@ export async function createTask(input: {
   }
 
   revalidatePath(`/projects/${input.projectId}`);
-  return { ok: true, task: toKanban(task) };
+  return { ok: true, task: toKanban(task), attachmentsCopied };
 }
 
 /** Show/hide a task in the client portal. Notifies the client when turned on. */

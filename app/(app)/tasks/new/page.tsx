@@ -30,6 +30,12 @@ export default async function NewTaskPage({
           clientDeadline: true,
           clientRaised: true,
           assignees: { select: { employeeId: true } },
+          // Inline images belong to the comment they sit in, not the file list.
+          attachments: {
+            where: { inline: false },
+            orderBy: { createdAt: "asc" },
+            select: { fileName: true, sizeBytes: true, url: true },
+          },
         },
       })
     : null;
@@ -113,7 +119,13 @@ export default async function NewTaskPage({
         dueDate: source.dueDate ? source.dueDate.toISOString().slice(0, 10) : "",
         clientDeadline: source.clientDeadline ? source.clientDeadline.toISOString().slice(0, 10) : "",
         assigneeIds: source.assignees.map((a) => a.employeeId),
+        attachments: source.attachments.map((a) => ({
+          fileName: a.fileName,
+          sizeBytes: a.sizeBytes,
+          isLink: !!a.url,
+        })),
         source: {
+          taskId: source.id,
           href: source.clientRaised ? `/client-tasks/${source.id}` : `/tasks/${source.id}`,
           label: source.name,
           fromClient: source.clientRaised,

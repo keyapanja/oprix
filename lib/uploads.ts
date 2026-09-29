@@ -30,6 +30,16 @@ export async function saveUpload(key: string, data: Buffer): Promise<void> {
   await fs.writeFile(abs, data);
 }
 
+/**
+ * Duplicate a stored file under a new key. Throws when the source is missing,
+ * so callers can skip the row rather than create one pointing at nothing.
+ */
+export async function copyUpload(srcKey: string, destKey: string): Promise<void> {
+  const to = resolveKey(destKey);
+  await fs.mkdir(path.dirname(to), { recursive: true });
+  await fs.copyFile(resolveKey(srcKey), to);
+}
+
 export async function readUpload(key: string): Promise<Buffer> {
   return fs.readFile(resolveKey(key));
 }
