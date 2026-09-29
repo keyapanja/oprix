@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "@/components/ui/icons";
+import { cn } from "@/lib/cn";
 
 /** Quiet cadence while everything is fine. */
 const HEALTHY_MS = 30_000;
@@ -130,14 +131,20 @@ export function ServiceStatus({ build }: { build: string }) {
 
   const updatedView = status === "updated";
 
+  // The shadow belongs to the pill, not to this wrapper. On the wrapper — which
+  // has no radius — a 40px soft shadow is cast from a square rectangle, and the
+  // corners show up as a pale box behind the rounded pill.
+  const pill =
+    "flex items-center gap-2.5 rounded-full px-4 py-2 shadow-card-hover ring-1 ring-inset";
+
   return (
     <div
       role="status"
       aria-live="polite"
-      className="animate-rise fixed left-1/2 top-4 z-[110] flex max-w-[calc(100vw-2rem)] -translate-x-1/2 justify-center text-sm shadow-card-hover"
+      className="animate-rise fixed left-1/2 top-4 z-[110] flex max-w-[calc(100vw-2rem)] -translate-x-1/2 justify-center text-sm"
     >
       {updatedView ? (
-        <span className="flex items-center gap-2.5 rounded-full bg-brand-50 px-4 py-2 text-brand-800 ring-1 ring-inset ring-brand-200 dark:bg-brand-500/15 dark:text-brand-200 dark:ring-brand-500/25">
+        <span className={cn(pill, "bg-brand-50 text-brand-800 ring-brand-200 dark:bg-brand-500/15 dark:text-brand-200 dark:ring-brand-500/25")}>
           <Icon name="download" className="size-4 shrink-0" />
           <span className="min-w-0">A new version is live.</span>
           <button
@@ -151,12 +158,12 @@ export function ServiceStatus({ build }: { build: string }) {
       ) : status === "deploying" ? (
         // The build runs on a container that isn't this one; nothing is down
         // and saves still work, so this promises no disruption it can't prove.
-        <span className="flex items-center gap-2.5 rounded-full bg-slate-100 px-4 py-2 text-slate-700 ring-1 ring-inset ring-slate-300 dark:bg-slate-500/15 dark:text-slate-200 dark:ring-slate-400/25">
+        <span className={cn(pill, "bg-slate-100 text-slate-700 ring-slate-300 dark:bg-slate-500/15 dark:text-slate-200 dark:ring-slate-400/25")}>
           <span className="size-2 shrink-0 animate-pulse rounded-full bg-slate-400" />
           <span className="min-w-0">An update is on the way — we&rsquo;ll say when it&rsquo;s live.</span>
         </span>
       ) : (
-        <span className="flex items-center gap-2.5 rounded-full bg-amber-50 px-4 py-2 text-amber-900 ring-1 ring-inset ring-amber-200 dark:bg-amber-500/15 dark:text-amber-200 dark:ring-amber-500/25">
+        <span className={cn(pill, "bg-amber-50 text-amber-900 ring-amber-200 dark:bg-amber-500/15 dark:text-amber-200 dark:ring-amber-500/25")}>
           <span className="size-2 shrink-0 animate-pulse rounded-full bg-amber-500" />
           <span className="min-w-0">
             {offline
