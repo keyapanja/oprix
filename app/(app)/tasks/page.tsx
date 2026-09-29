@@ -174,7 +174,7 @@ export default async function TasksPage({
           </Link>
         }
       />
-      <TasksWorkspace rows={rows} canTrack initialView={initialView} initialStatus={initialStatus} showAdvancedFilters={showAdvancedFilters} today={today} isSuperAdmin={session.role === "SUPER_ADMIN"} />
+      <TasksWorkspace rows={rows} canTrack initialView={initialView} initialStatus={initialStatus} showAdvancedFilters={showAdvancedFilters} today={today} />
     </>
   );
 }

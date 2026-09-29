@@ -38,22 +38,17 @@ type Seg = {
   lane: number;
 };
 
-export function TaskCalendar({
-  tasks,
-  today,
-  isSuperAdmin,
-}: {
-  tasks: TaskRow[];
-  today: string;
-  isSuperAdmin: boolean;
-}) {
+/**
+ * Draws whatever it's handed. The workspace toolbar decides which tasks those
+ * are — the calendar adds no narrowing of its own, so "All" really means all of
+ * them and the month matches the list beside it. (What a role may see at all is
+ * already settled server-side by the task-visibility scope.)
+ */
+export function TaskCalendar({ tasks, today }: { tasks: TaskRow[]; today: string }) {
   const router = useRouter();
   const [ym, setYm] = useState(() => ({ y: Number(today.slice(0, 4)), m: Number(today.slice(5, 7)) }));
   const [openDay, setOpenDay] = useState<string | null>(null);
   const { y, m } = ym;
-
-  // Non-super-admins only see tasks assigned to them in the calendar.
-  const shownTasks = useMemo(() => (isSuperAdmin ? tasks : tasks.filter((t) => t.mine)), [tasks, isSuperAdmin]);
 
   const { weeks, segsByWeek, moreByIso, noDate, ranges } = useMemo(() => {
     const first = new Date(Date.UTC(y, m - 1, 1));
@@ -69,7 +64,7 @@ export function TaskCalendar({
     // Each task occupies the range [assigned date, due date].
     let noDate = 0;
     const ranges: { task: TaskRow; start: string; end: string }[] = [];
-    for (const t of shownTasks) {
+    for (const t of tasks) {
       if (!t.dueDate) { noDate++; continue; }
       const start = t.assignedDate && t.assignedDate < t.dueDate ? t.assignedDate : t.dueDate;
       ranges.push({ task: t, start, end: t.dueDate });
@@ -123,7 +118,7 @@ export function TaskCalendar({
     });
 
     return { weeks, segsByWeek, moreByIso, noDate, ranges };
-  }, [shownTasks, y, m]);
+  }, [tasks, y, m]);
 
   // Tasks covering the day whose "+N more" (or number) was clicked.
   const dayTasks = openDay

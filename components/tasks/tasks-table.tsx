@@ -2,14 +2,13 @@
 
 import { toast } from "@/components/ui/toast";
 import { confirmDialog } from "@/components/ui/confirm";
-import { Fragment, useEffect, useMemo, useState, useTransition, type MouseEvent } from "react";
+import { Fragment, useMemo, useState, useTransition, type MouseEvent } from "react";
 import { useRouter } from "next/navigation";
 import type { TaskStatus, Priority } from "@prisma/client";
 import { deleteTask, deleteTasks, duplicateTask } from "@/lib/projects/actions";
 import { TASK_STATUS_TONE, PRIORITY_TONE } from "@/lib/status";
 import { Badge } from "@/components/ui/badge";
 import { Icon } from "@/components/ui/icons";
-import { Combobox } from "@/components/ui/combobox";
 import { humanizeEnum, formatDate, formatDateTime } from "@/lib/format";
 import { safeHref, isHttpUrl } from "@/lib/url";
 import { fmtHm, type TimerStatusUI } from "@/lib/timer/shared";
@@ -72,84 +71,43 @@ function deliveryInfo(r: TaskRow, todayISO: string): { verdict: "ontime" | "dela
   return { verdict: null, delayedDays: 0 };
 }
 
-type View = "all" | "mine" | "created";
-
-const STATUS_FILTER = [
-  { value: "ALL", label: "All statuses" },
-  { value: "TODO", label: "To Do" },
-  { value: "IN_PROGRESS", label: "In Progress" },
-  { value: "REVIEW", label: "Review" },
-  { value: "REDO", label: "Redo" },
-  { value: "CLIENT_REVIEW", label: "Client Review" },
-  { value: "COMPLETED", label: "Completed" },
-];
-
-const VIEWS: { value: View; label: string }[] = [
-  { value: "all", label: "All" },
-  { value: "mine", label: "My tasks" },
-  { value: "created", label: "Assigned by me" },
-];
-
-const GROUP_OPTS = [
-  { value: "", label: "No grouping" },
-  { value: "status", label: "Group: Status" },
-  { value: "project", label: "Group: Project" },
-  { value: "department", label: "Group: Department" },
-];
 // Status groups render in workflow order, not alphabetical.
 const STATUS_ORDER = ["TODO", "IN_PROGRESS", "REVIEW", "REDO", "CLIENT_REVIEW", "COMPLETED", "HOLD"];
 
+/**
+ * Renders the rows it's given. Filtering and grouping are chosen in the
+ * workspace toolbar above, so the calendar view can act on the same choices.
+ */
 export function TasksTable({
   rows,
   canTrack,
-  initialView = "all",
-  initialStatus = "ALL",
-  showAdvancedFilters = false,
   today,
+  groupBy,
+  filterKey,
 }: {
   rows: TaskRow[];
   canTrack: boolean;
-  initialView?: View;
-  initialStatus?: string;
-  showAdvancedFilters?: boolean;
   today: string;
+  groupBy: string;
+  /** Changes when the filter *settings* change — see TasksWorkspace. */
+  filterKey: string;
 }) {
   const router = useRouter();
-  const [search, setSearch] = useState("");
-  const [status, setStatus] = useState(initialStatus);
-  const [view, setView] = useState<View>(initialView);
-  const [dept, setDept] = useState("ALL");
-  const [service, setService] = useState("ALL");
-  const [project, setProject] = useState("ALL");
   const [page, setPage] = useState(1);
   const pageSize = 15;
-  const [groupBy, setGroupBy] = useState("");
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
-  // Keep the view in sync with the URL (sidebar "My tasks" / "Assigned by me").
-  useEffect(() => {
-    setView(initialView);
+  // Narrowing the list should land you back at the start of it. Adjusted during
+  // render rather than in an effect, so page 3 of the old result set never gets
+  // painted first. Keyed on the filter settings, not on `rows` — those get a
+  // fresh identity every time the 10s refresh runs, which would bounce anyone
+  // reading page 3 back to the top.
+  const [lastFilterKey, setLastFilterKey] = useState(filterKey);
+  if (lastFilterKey !== filterKey) {
+    setLastFilterKey(filterKey);
     setPage(1);
-  }, [initialView]);
-
-  // The grouping choice persists across visits (per device) until changed.
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem("oprix:tasks-group");
-      if (saved !== null) setGroupBy(saved);
-    } catch {
-      /* ignore */
-    }
-  }, []);
-  function changeGroup(v: string) {
-    setGroupBy(v);
-    setPage(1);
-    try {
-      localStorage.setItem("oprix:tasks-group", v);
-    } catch {
-      /* ignore */
-    }
   }
+
   function toggleCollapse(key: string) {
     setCollapsed((s) => {
       const n = new Set(s);
@@ -159,52 +117,16 @@ export function TasksTable({
     });
   }
 
-  const deptOptions = useMemo(() => {
-    const set = new Set<string>();
-    rows.forEach((r) => r.departmentName && set.add(r.departmentName));
-    return [{ value: "ALL", label: "All departments" }, ...[...set].sort().map((d) => ({ value: d, label: d }))];
-  }, [rows]);
-
-  const serviceOptions = useMemo(() => {
-    const set = new Set<string>();
-    rows.forEach((r) => r.serviceName && set.add(r.serviceName));
-    return [{ value: "ALL", label: "All services" }, ...[...set].sort().map((s) => ({ value: s, label: s }))];
-  }, [rows]);
-
-  const projectOptions = useMemo(() => {
-    const set = new Set<string>();
-    rows.forEach((r) => r.projectName && set.add(r.projectName));
-    return [{ value: "ALL", label: "All projects" }, ...[...set].sort().map((p) => ({ value: p, label: p }))];
-  }, [rows]);
-
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return rows.filter((r) => {
-      if (status !== "ALL" && r.status !== status) return false;
-      if (view === "mine" && !r.mine) return false;
-      if (view === "created" && !r.createdByMe) return false;
-      if (dept !== "ALL" && r.departmentName !== dept) return false;
-      if (service !== "ALL" && r.serviceName !== service) return false;
-      if (project !== "ALL" && r.projectName !== project) return false;
-      if (!q) return true;
-      return (
-        r.name.toLowerCase().includes(q) ||
-        r.projectName.toLowerCase().includes(q) ||
-        (r.serviceName?.toLowerCase().includes(q) ?? false)
-      );
-    });
-  }, [rows, search, status, view, dept, service, project]);
-
-  const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const pages = Math.max(1, Math.ceil(rows.length / pageSize));
   const current = Math.min(page, pages);
   const startIdx = (current - 1) * pageSize;
-  const pageRows = filtered.slice(startIdx, startIdx + pageSize);
+  const pageRows = rows.slice(startIdx, startIdx + pageSize);
 
   const colSpan = 19;
   const groups = useMemo(() => {
     if (!groupBy) return [] as { key: string; label: string; rows: TaskRow[] }[];
     const m = new Map<string, TaskRow[]>();
-    for (const r of filtered) {
+    for (const r of rows) {
       const key =
         groupBy === "status" ? r.status : groupBy === "project" ? r.projectName || "—" : r.departmentName || "No department";
       (m.get(key) ?? m.set(key, []).get(key)!).push(r);
@@ -216,9 +138,9 @@ export function TasksTable({
     }
     entries.sort((a, b) => a[0].localeCompare(b[0]));
     return entries.map(([key, rows]) => ({ key, label: key, rows }));
-  }, [groupBy, filtered]);
+  }, [groupBy, rows]);
   // Selection "select all" targets what's on screen: the page, or all rows when grouped.
-  const visibleRows = groupBy ? filtered : pageRows;
+  const visibleRows = groupBy ? rows : pageRows;
 
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
@@ -399,63 +321,6 @@ export function TasksTable({
           </div>
         </div>
       )}
-      <div className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-3">
-        <div className="relative max-w-xs flex-1">
-          <Icon name="search" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-faint" />
-          <input
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
-            }}
-            placeholder="Search tasks…"
-            className="h-9 w-full rounded-xl bg-canvas pl-9 pr-3 text-sm text-content placeholder:text-faint focus:outline-none focus:ring-2 focus:ring-brand-500/40"
-          />
-        </div>
-
-        {/* View: all / mine / assigned by me */}
-        <div className="inline-flex rounded-xl bg-canvas p-0.5">
-          {VIEWS.map((v) => (
-            <button
-              key={v.value}
-              type="button"
-              onClick={() => {
-                setView(v.value);
-                setPage(1);
-              }}
-              className={cn(
-                "rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
-                view === v.value ? "bg-surface text-content shadow-sm" : "text-muted hover:text-content",
-              )}
-            >
-              {v.label}
-            </button>
-          ))}
-        </div>
-
-        <div className="ml-auto flex flex-wrap items-center gap-2">
-          {showAdvancedFilters && (
-            <>
-              <div className="w-44">
-                <Combobox value={dept} onChange={(v) => { setDept(v); setPage(1); }} options={deptOptions} />
-              </div>
-              <div className="w-40">
-                <Combobox value={service} onChange={(v) => { setService(v); setPage(1); }} options={serviceOptions} />
-              </div>
-            </>
-          )}
-          <div className="w-48">
-            <Combobox value={project} onChange={(v) => { setProject(v); setPage(1); }} options={projectOptions} />
-          </div>
-          <div className="w-44">
-            <Combobox value={status} onChange={(v) => { setStatus(v); setPage(1); }} options={STATUS_FILTER} />
-          </div>
-          <div className="w-40">
-            <Combobox value={groupBy} onChange={changeGroup} options={GROUP_OPTS} />
-          </div>
-        </div>
-      </div>
-
       <div className="max-h-[70vh] overflow-auto">
       <table className="w-full text-sm [&_td]:border-r [&_td]:border-line [&_th]:border-r [&_th]:border-line">
         <thead>
@@ -534,7 +399,7 @@ export function TasksTable({
 
       {!groupBy ? (
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-5 py-3 text-sm text-muted">
-          <span>{filtered.length === 0 ? "0" : `${startIdx + 1}–${Math.min(startIdx + pageSize, filtered.length)}`} of {filtered.length}</span>
+          <span>{rows.length === 0 ? "0" : `${startIdx + 1}–${Math.min(startIdx + pageSize, rows.length)}`} of {rows.length}</span>
           <div className="flex items-center gap-2">
             <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={current <= 1} className="flex size-8 items-center justify-center rounded-lg ring-1 ring-inset ring-line-strong hover:bg-canvas disabled:opacity-40" aria-label="Previous page">
               <Icon name="chevronLeft" className="size-4" />
@@ -547,7 +412,7 @@ export function TasksTable({
         </div>
       ) : (
         <div className="border-t border-line px-5 py-3 text-sm text-muted">
-          {filtered.length} task{filtered.length === 1 ? "" : "s"} in {groups.length} group{groups.length === 1 ? "" : "s"}
+          {rows.length} task{rows.length === 1 ? "" : "s"} in {groups.length} group{groups.length === 1 ? "" : "s"}
         </div>
       )}
     </div>
