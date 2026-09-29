@@ -1,7 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/db";
 import type { SessionUser } from "@/lib/auth/session";
-import { hasPermission } from "@/lib/auth/permissions";
 import { canUseTimer } from "@/lib/timer/finalize";
 import { getTaskTimerStates } from "@/lib/timer/data";
 import { appBaseUrl } from "@/lib/ext/url";
@@ -62,7 +61,6 @@ export async function getActiveTasksFor(session: SessionUser): Promise<ExtActive
       })
     : [];
 
-  const isManager = await hasPermission(session.companyId, session.role, "task:manage");
   const base = appBaseUrl();
 
   const tasks: ExtTask[] = rows.map((t) => {
