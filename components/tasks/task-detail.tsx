@@ -58,6 +58,7 @@ export async function TaskDetail({
       createdById: true,
       checklistEnabled: true,
       clientVisible: true,
+      clientRaised: true,
       finalLink: true,
       previousLink: true,
       changeRequest: true,
@@ -215,6 +216,18 @@ export async function TaskDetail({
               <Badge tone={TASK_STATUS_TONE[task.status]}>{TASK_STATUS_LABEL[task.status]}</Badge>
             )}
             {isManager && <TaskDuplicate taskId={task.id} />}
+            {/* A client request isn't internal work yet — this opens the normal
+                new-task form with its details filled in, for someone to pick a
+                task type and file it properly. */}
+            {isManager && task.clientRaised && (
+              <Link
+                href={`/tasks/new?from=${task.id}`}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-canvas px-3 py-1.5 text-sm font-medium text-content ring-1 ring-inset ring-line transition-colors hover:bg-surface"
+              >
+                <Icon name="listPlus" className="size-4" />
+                Copy to internal task
+              </Link>
+            )}
             {isManager && task.project.clientId && (
               <TaskClientVisible taskId={task.id} clientVisible={task.clientVisible} />
             )}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition, type ChangeEvent } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createTask } from "@/lib/projects/actions";
 import { Card } from "@/components/ui/card";
@@ -26,6 +27,20 @@ type SubCat = {
 type Proj = { id: string; name: string; subcategories: SubCat[] };
 type CheckItem = { text: string; isDone: boolean };
 
+/** Values carried over from an existing task (e.g. a client request), so the
+ *  form opens already filled in and only the internal-only bits are left. */
+export type TaskPrefill = {
+  projectId: string;
+  name: string;
+  description: string;
+  priority: string;
+  dueDate: string;
+  clientDeadline: string;
+  assigneeIds: string[];
+  /** Where it came from, so the form can link back to the original. */
+  source: { href: string; label: string; fromClient: boolean };
+};
+
 const PRIORITIES = ["LOW", "MEDIUM", "HIGH", "URGENT"];
 
 /** One calendar day before the given YYYY-MM-DD (UTC), as YYYY-MM-DD. */
@@ -41,6 +56,7 @@ export function NewTaskForm({
   employees,
   initialProjectId = "",
   lockProject = false,
+  prefill,
 }: {
   projects: Proj[];
   employees: Emp[];
@@ -48,16 +64,19 @@ export function NewTaskForm({
   /** When arriving from a project's page the project is fixed — show it, but
    *  don't let it be changed. */
   lockProject?: boolean;
+  /** Copied from an existing task. Everything stays editable — the task type
+   *  in particular has no equivalent on a client request and must be chosen. */
+  prefill?: TaskPrefill;
 }) {
   const router = useRouter();
-  const [projectId, setProjectId] = useState(initialProjectId);
+  const [projectId, setProjectId] = useState(prefill?.projectId || initialProjectId);
   const [serviceId, setServiceId] = useState(""); // a sub-category = "task type"
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [priority, setPriority] = useState("MEDIUM");
-  const [clientDeadline, setClientDeadline] = useState("");
-  const [dueDate, setDueDate] = useState("");
-  const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
+  const [name, setName] = useState(prefill?.name ?? "");
+  const [description, setDescription] = useState(prefill?.description ?? "");
+  const [priority, setPriority] = useState(prefill?.priority ?? "MEDIUM");
+  const [clientDeadline, setClientDeadline] = useState(prefill?.clientDeadline ?? "");
+  const [dueDate, setDueDate] = useState(prefill?.dueDate ?? "");
+  const [assigneeIds, setAssigneeIds] = useState<string[]>(prefill?.assigneeIds ?? []);
   const [checklist, setChecklist] = useState<CheckItem[]>([]);
   const [noChecklist, setNoChecklist] = useState(false);
   const [clientVisible, setClientVisible] = useState(false);
@@ -198,6 +217,21 @@ export function NewTaskForm({
 
   return (
     <div className="space-y-5">
+      {prefill && (
+        <div className="flex flex-wrap items-start gap-2.5 rounded-xl bg-brand-50 px-4 py-3 text-sm text-brand-800 ring-1 ring-inset ring-brand-200 dark:bg-brand-500/10 dark:text-brand-200 dark:ring-brand-500/25">
+          <Icon name="copy" className="mt-0.5 size-4 shrink-0" />
+          <p className="min-w-0">
+            Copied from{" "}
+            <Link href={prefill.source.href} className="font-medium underline underline-offset-2">
+              {prefill.source.label}
+            </Link>
+            .{" "}
+            {prefill.source.fromClient
+              ? "Pick a task type and adjust anything below — nothing is saved until you create it, and the client won't see this task."
+              : "Adjust anything below — nothing is saved until you create it."}
+          </p>
+        </div>
+      )}
       <Card className="p-5">
         {error && (
           <div className="mb-4 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 ring-1 ring-inset ring-red-200 dark:bg-red-500/15 dark:text-red-300 dark:ring-red-500/25">

@@ -3,17 +3,36 @@ import { BackLink } from "@/components/ui/back-link";
 import { requirePage } from "@/lib/auth/guard";
 import { prisma } from "@/lib/db";
 import { PageHeader } from "@/components/ui/page-header";
-import { NewTaskForm } from "@/components/tasks/new-task-form";
+import { NewTaskForm, type TaskPrefill } from "@/components/tasks/new-task-form";
 
 export const metadata: Metadata = { title: "New task · Oprix" };
 
 export default async function NewTaskPage({
   searchParams,
 }: {
-  searchParams: Promise<{ project?: string }>;
+  searchParams: Promise<{ project?: string; from?: string }>;
 }) {
   const session = await requirePage("task:manage");
   const sp = await searchParams;
+
+  // `?from=` copies an existing task's details into the form — the path from a
+  // client request to a real internal task. Nothing is saved until Create.
+  const source = sp.from
+    ? await prisma.task.findFirst({
+        where: { id: sp.from, deletedAt: null, project: { companyId: session.companyId } },
+        select: {
+          id: true,
+          name: true,
+          description: true,
+          projectId: true,
+          priority: true,
+          dueDate: true,
+          clientDeadline: true,
+          clientRaised: true,
+          assignees: { select: { employeeId: true } },
+        },
+      })
+    : null;
 
   const [projects, employees, overrides, configs] = await Promise.all([
     prisma.project.findMany({
@@ -83,14 +102,41 @@ export default async function NewTaskPage({
   // Pre-select the project when arriving from a project page (?project=…).
   const initialProjectId = projects.some((p) => p.id === sp.project) ? sp.project! : "";
 
+  // The task type has no equivalent on a client request, so it's deliberately
+  // left blank for whoever files the internal task to choose.
+  const prefill: TaskPrefill | undefined = source
+    ? {
+        projectId: source.projectId,
+        name: source.name,
+        description: source.description ?? "",
+        priority: source.priority,
+        dueDate: source.dueDate ? source.dueDate.toISOString().slice(0, 10) : "",
+        clientDeadline: source.clientDeadline ? source.clientDeadline.toISOString().slice(0, 10) : "",
+        assigneeIds: source.assignees.map((a) => a.employeeId),
+        source: {
+          href: source.clientRaised ? `/client-tasks/${source.id}` : `/tasks/${source.id}`,
+          label: source.name,
+          fromClient: source.clientRaised,
+        },
+      }
+    : undefined;
+
   return (
     <div className="mx-auto max-w-3xl">
       <div className="mb-4">
         <BackLink href="/tasks">Back to tasks</BackLink>
       </div>
-      <PageHeader title="New task" description="Create a task under a project." />
+      <PageHeader
+        title="New task"
+        description={
+          prefill ? "Check the details, pick a task type, then create." : "Create a task under a project."
+        }
+      />
       <NewTaskForm
+        prefill={prefill}
         initialProjectId={initialProjectId}
+        // Only a project-page arrival fixes the project; a copied task can be
+        // re-pointed if the internal work belongs somewhere else.
         lockProject={Boolean(initialProjectId)}
         projects={projects.map((p) => ({
           id: p.id,
