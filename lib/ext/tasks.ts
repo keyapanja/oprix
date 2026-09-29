@@ -5,6 +5,7 @@ import { hasPermission } from "@/lib/auth/permissions";
 import { canUseTimer } from "@/lib/timer/finalize";
 import { getTaskTimerStates } from "@/lib/timer/data";
 import { appBaseUrl } from "@/lib/ext/url";
+import { byUrgency } from "@/lib/ext/order";
 import type { ExtActiveResponse, ExtKbLink, ExtTask } from "@/shared/ext-contract";
 
 // ---------------------------------------------------------------------------
@@ -29,9 +30,11 @@ export async function getActiveTasksFor(session: SessionUser): Promise<ExtActive
       status: { in: [...WORK_STATES] },
       assignees: { some: { employeeId: session.employeeId } },
     },
-    // Stable order (creation time). Deliberately NOT by status or timer state, so
-    // pausing/resuming or a status change never reshuffles the dock list.
-    orderBy: { createdAt: "asc" },
+    // Soonest deadline first so the 100 we keep are the 100 that matter — the
+    // old creation-time order silently dropped the *newest* tasks at the cap,
+    // which is the wrong hundred. Undated tasks sink. createdAt breaks ties and
+    // gives the JS sort below a stable base to build on.
+    orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }, { createdAt: "asc" }],
     take: 100,
     select: {
       id: true,
@@ -100,7 +103,6 @@ export async function getActiveTasksFor(session: SessionUser): Promise<ExtActive
     };
   });
 
-  // Kept in the stable query order (creation time) — no status/running re-sort,
-  // so a task stays put when you pause, resume, or change its status.
+  tasks.sort(byUrgency);
   return { tasks, serverTimeMs: Date.now() };
 }
