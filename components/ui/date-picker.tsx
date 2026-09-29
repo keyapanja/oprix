@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { Icon } from "@/components/ui/icons";
 import { cn } from "@/lib/cn";
 
@@ -20,6 +21,11 @@ function parseISO(s: string): { y: number; m0: number; d: number } | null {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
   return m ? { y: +m[1], m0: +m[2] - 1, d: +m[3] } : null;
 }
+/** Panel box, used to decide whether the calendar fits below the field.
+ *  Width matches `w-72`; height is header + 6 week rows + the footer. */
+const PANEL_W = 288;
+const PANEL_H = 360;
+
 const daysInMonth = (y: number, m0: number) => new Date(y, m0 + 1, 0).getDate();
 const firstWeekday = (y: number, m0: number) => new Date(y, m0, 1).getDay();
 
@@ -27,6 +33,11 @@ const firstWeekday = (y: number, m0: number) => new Date(y, m0, 1).getDay();
  * Themed date picker — opens on click anywhere in the field, fully styled to
  * the app theme. Stores "YYYY-MM-DD" (same as a native date input) so server
  * actions parse it unchanged. The default dropdown for date selection.
+ *
+ * Like <Combobox>, the calendar is rendered in a portal (position: fixed against
+ * the field) and flips above when there isn't room below — so it's never clipped
+ * by a card's overflow or stranded off the bottom of a modal, which is what a
+ * plain absolutely-positioned panel does to any field low on a form.
  */
 export function DatePicker({
   name,
@@ -49,6 +60,8 @@ export function DatePicker({
   const [mode, setMode] = useState<"days" | "years">("days");
   const [internal, setInternal] = useState(defaultValue ?? "");
   const ref = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [coords, setCoords] = useState<{ left: number; top: number; up: boolean } | null>(null);
 
   const current = value !== undefined ? value : internal;
   const sel = current ? parseISO(current) : null;
@@ -57,9 +70,36 @@ export function DatePicker({
   const today = { y: now.getFullYear(), m0: now.getMonth(), d: now.getDate() };
   const [view, setView] = useState({ y: sel?.y ?? today.y, m0: sel?.m0 ?? today.m0 });
 
+  // Position the portaled calendar against the field, and keep it pinned while
+  // the page or an enclosing modal scrolls.
+  useEffect(() => {
+    if (!open) return;
+    function place() {
+      const el = ref.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - r.bottom;
+      // Flip up only when below is too tight AND above has more room, so a
+      // field near the top of a short viewport still opens downward.
+      const up = spaceBelow < PANEL_H && r.top > spaceBelow;
+      const left = Math.max(8, Math.min(r.left, window.innerWidth - PANEL_W - 8));
+      setCoords({ left, top: up ? r.top : r.bottom, up });
+    }
+    place();
+    window.addEventListener("scroll", place, true);
+    window.addEventListener("resize", place);
+    return () => {
+      window.removeEventListener("scroll", place, true);
+      window.removeEventListener("resize", place);
+    };
+  }, [open]);
+
   useEffect(() => {
     function onDoc(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      // The panel is portaled, so it isn't inside `ref` — check it separately.
+      if (ref.current?.contains(t) || panelRef.current?.contains(t)) return;
+      setOpen(false);
     }
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
@@ -112,8 +152,19 @@ export function DatePicker({
         <Icon name="calendar" className="size-4 shrink-0 text-faint" />
       </button>
 
-      {open && !disabled && (
-        <div className="absolute z-30 mt-1.5 w-72 rounded-xl border border-line bg-elevated p-3 shadow-card-hover">
+      {open && !disabled && coords && createPortal(
+        <div
+          ref={panelRef}
+          onMouseDown={(e) => e.stopPropagation()}
+          style={{
+            position: "fixed",
+            left: coords.left,
+            ...(coords.up
+              ? { bottom: window.innerHeight - coords.top + 6 }
+              : { top: coords.top + 6 }),
+          }}
+          className="z-[60] w-72 rounded-xl border border-line bg-elevated p-3 shadow-card-hover"
+        >
           <div className="mb-2 flex items-center justify-between">
             <button
               type="button"
@@ -208,7 +259,8 @@ export function DatePicker({
               Today
             </button>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
