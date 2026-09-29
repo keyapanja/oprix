@@ -81,11 +81,24 @@ SMTP_PASS      = <smtp password>
 SMTP_FROM      = Oprix <no-reply@gowithepic.com>
 ```
 
-Generate the two secrets (run anywhere, e.g. the server shell) and paste the
-output — **don't reuse the localhost values**:
+Generate the three secrets and paste the output — **don't reuse the localhost
+values**. Run once per secret (`AUTH_SECRET`, `CRON_SECRET`, `DEPLOY_HOOK_SECRET`).
+
+Node, which this project already needs, so it works on Windows and the server
+alike:
 ```bash
-openssl rand -base64 32   # AUTH_SECRET
-openssl rand -base64 32   # CRON_SECRET
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+```
+
+On the server shell, or anywhere with OpenSSL:
+```bash
+openssl rand -base64 32
+```
+
+Windows PowerShell with nothing else installed (`openssl` is **not** on PATH
+there):
+```bash
+$b = New-Object byte[] 32; [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); [Convert]::ToBase64String($b)
 ```
 
 ## Step 6 — Persistent storage for uploads (important)
@@ -156,7 +169,8 @@ The one thing that happens at the right moment is the push. So
 
 Three settings, all the same secret:
 
-1. Generate one: `openssl rand -base64 32`
+1. Generate one — see **Step 5** for commands that work on Windows too
+   (`node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`)
 2. **Coolify** → app → Environment Variables → `DEPLOY_HOOK_SECRET` = that value
 3. **GitHub** → repo → Settings → Secrets and variables → Actions → add
    `DEPLOY_HOOK_SECRET` (same value) and `APP_URL` = `https://oprix.gowithepic.com`
