@@ -44,6 +44,14 @@ export default async function PortalLayout({ children }: { children: React.React
     select: { nickname: true, avatarUrl: true },
   });
 
+  // The stored logoUrl points at /api/org/logo, which the proxy bounces clients
+  // away from — swap in the portal-reachable route, keeping the ?v= cache-buster
+  // so replacing the logo still busts it.
+  const storedLogo = client.company?.logoUrl ?? null;
+  const badgeLogoUrl = storedLogo
+    ? `/api/portal/logo${storedLogo.includes("?") ? storedLogo.slice(storedLogo.indexOf("?")) : ""}`
+    : null;
+
   return (
     <div className="min-h-dvh bg-canvas">
       <PortalHeader
@@ -70,7 +78,7 @@ export default async function PortalLayout({ children }: { children: React.React
         text={client.company?.portalBadgeText ?? null}
         name={client.company?.portalBadgeName ?? null}
         url={client.company?.portalBadgeUrl ?? null}
-        logoUrl={client.company?.logoUrl ?? null}
+        logoUrl={badgeLogoUrl}
       />
     </div>
   );

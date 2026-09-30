@@ -6,10 +6,15 @@ import { safeHref, isHttpUrl } from "@/lib/url";
  * Shown only when a name is set — clearing that field in Organization →
  * Company is what turns it off, so there's no separate flag to disagree with.
  *
- * The company logo doubles as the mark, so nothing extra needs uploading. The
- * link is optional and runs through `safeHref`/`isHttpUrl`, because the value
- * is admin-entered text and a `javascript:` URL would otherwise be live in
- * every client's browser.
+ * The company logo doubles as the mark, so nothing extra needs uploading.
+ *
+ * Only the **name** is the link — not the whole chip. The lead-in is a label
+ * about the name, not part of it, and a link that swallows the surrounding
+ * furniture makes the click target vague.
+ *
+ * The link runs through `safeHref`/`isHttpUrl`, because the value is
+ * admin-entered text and a `javascript:` URL would otherwise be live in every
+ * client's browser.
  *
  * `preview` drops the fixed positioning so the admin page can show the real
  * component inline rather than a mock-up of it.
@@ -42,31 +47,29 @@ export function PortalBadge({
         <img src={logoUrl} alt="" className="size-4 shrink-0 rounded object-contain" />
       )}
       {lead && <span className="text-muted">{lead}</span>}
-      <span className="font-semibold text-content">{label}</span>
+      {href ? (
+        <a
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer nofollow"
+          className="font-semibold text-content hover:text-accent-strong hover:underline"
+        >
+          {label}
+        </a>
+      ) : (
+        <span className="font-semibold text-content">{label}</span>
+      )}
     </span>
   );
 
-  const inner = href ? (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer nofollow"
-      className="transition-opacity hover:opacity-80"
-    >
-      {chip}
-    </a>
-  ) : (
-    chip
-  );
-
-  if (preview) return inner;
+  if (preview) return chip;
 
   // Sits above the page but below modals and the service-status pill (z-110),
   // and ignores pointer events except on the chip itself, so it can never
   // swallow a click meant for the content underneath.
   return (
     <div className="pointer-events-none fixed bottom-4 right-4 z-40 print:hidden">
-      <span className="pointer-events-auto">{inner}</span>
+      <span className="pointer-events-auto">{chip}</span>
     </div>
   );
 }
