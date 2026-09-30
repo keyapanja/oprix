@@ -121,6 +121,26 @@ export default async function PortalHomePage() {
 
       <section className="space-y-3">
         <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-faint">Your projects</h2>
+          {projects.length > 4 && (
+            <Link href="/portal/projects" className="text-sm font-medium text-accent-strong hover:underline">
+              View all
+            </Link>
+          )}
+        </div>
+        {projects.length === 0 ? (
+          <Card className="px-5 py-12 text-center text-sm text-muted">No projects yet.</Card>
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2">
+            {projects.slice(0, 4).map((p) => (
+              <ProjectCard key={p.id} p={p} />
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold uppercase tracking-wider text-faint">Tasks in progress</h2>
           {openTasks.length > 0 && (
             <span className="text-xs text-faint">{openTasks.length}</span>
@@ -156,26 +176,6 @@ export default async function PortalHomePage() {
               );
             })}
           </Card>
-        )}
-      </section>
-
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-faint">Your projects</h2>
-          {projects.length > 4 && (
-            <Link href="/portal/projects" className="text-sm font-medium text-accent-strong hover:underline">
-              View all
-            </Link>
-          )}
-        </div>
-        {projects.length === 0 ? (
-          <Card className="px-5 py-12 text-center text-sm text-muted">No projects yet.</Card>
-        ) : (
-          <div className="grid gap-4 sm:grid-cols-2">
-            {projects.slice(0, 4).map((p) => (
-              <ProjectCard key={p.id} p={p} />
-            ))}
-          </div>
         )}
       </section>
     </div>
