@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { companyHasPortalForms } from "@/lib/forms/data";
 import { getPortalNotifications } from "@/lib/portal/data";
 import { PortalHeader } from "@/components/portal/portal-header";
+import { PortalBadge } from "@/components/portal/portal-badge";
 import { ServiceStatus } from "@/components/shell/service-status";
 import { BUILD_ID } from "@/lib/build-id";
 import { Toaster } from "@/components/ui/toast";
@@ -16,7 +17,19 @@ export default async function PortalLayout({ children }: { children: React.React
 
   const client = await prisma.client.findFirst({
     where: { id: session.clientId, companyId: session.companyId, deletedAt: null },
-    select: { name: true, companyName: true, company: { select: { name: true } } },
+    select: {
+      name: true,
+      companyName: true,
+      company: {
+        select: {
+          name: true,
+          logoUrl: true,
+          portalBadgeText: true,
+          portalBadgeName: true,
+          portalBadgeUrl: true,
+        },
+      },
+    },
   });
   // Account points at a missing/removed client → treat as signed out.
   if (!client) redirect("/logout");
@@ -52,6 +65,13 @@ export default async function PortalLayout({ children }: { children: React.React
       <Toaster />
       <ConfirmHost />
       <ServiceStatus build={BUILD_ID} />
+      {/* Client portal only — the internal app never shows this. */}
+      <PortalBadge
+        text={client.company?.portalBadgeText ?? null}
+        name={client.company?.portalBadgeName ?? null}
+        url={client.company?.portalBadgeUrl ?? null}
+        logoUrl={client.company?.logoUrl ?? null}
+      />
     </div>
   );
 }

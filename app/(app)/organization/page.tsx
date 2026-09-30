@@ -61,6 +61,9 @@ export default async function OrganizationPage() {
           email: true,
           phone: true,
           address: true,
+          portalBadgeText: true,
+          portalBadgeName: true,
+          portalBadgeUrl: true,
         },
       }),
     ]);
@@ -94,6 +97,12 @@ export default async function OrganizationPage() {
           email: company?.email ?? null,
           phone: company?.phone ?? null,
           address: company?.address ?? null,
+        }}
+        portalBadge={{
+          portalBadgeText: company?.portalBadgeText ?? null,
+          portalBadgeName: company?.portalBadgeName ?? null,
+          portalBadgeUrl: company?.portalBadgeUrl ?? null,
+          logoUrl: company?.logoUrl ?? null,
         }}
         departments={departments}
         employees={employees.map((e) => ({ value: e.id, label: e.fullName }))}

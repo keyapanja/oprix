@@ -160,6 +160,11 @@ model Company {
   // Remind everyone the day before a holiday / announcement.
   eventReminderEnabled Boolean @default(false)
   eventReminderTime    String  @default("09:00") // HH:MM in the company timezone
+  // Client-portal footer chip ("Made by EPIC"). Blank name = no chip. The
+  // company logo doubles as its mark, so there is no separate image here.
+  portalBadgeText      String?  // muted lead-in, e.g. "Made by"
+  portalBadgeName      String?  // emphasised name, e.g. "EPIC"
+  portalBadgeUrl       String?  // optional link target
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 

@@ -19,6 +19,7 @@ import { AdminsPanel } from "@/components/org/admins-panel";
 import { WorkingDaysSettings } from "@/components/org/working-days-settings";
 import type { WorkWeek } from "@/lib/leave/work-week";
 import { CompanyInfoForm, type CompanyInfo } from "@/components/org/company-info-form";
+import { PortalBadgeForm, type PortalBadgeInfo } from "@/components/org/portal-badge-form";
 import { DepartmentHead } from "@/components/org/department-head";
 import { DepartmentClientFacing } from "@/components/org/department-client-facing";
 import { BulkSubcategoryForm } from "@/components/org/bulk-subcategory-form";
@@ -52,6 +53,7 @@ const BASE_TABS = ["Company", "Departments", "Services", "Designations"];
 
 export function OrgTabs({
   company,
+  portalBadge,
   departments,
   employees,
   services,
@@ -68,6 +70,7 @@ export function OrgTabs({
   promotable,
 }: {
   company: CompanyInfo;
+  portalBadge: PortalBadgeInfo;
   departments: Dept[];
   employees: { value: string; label: string }[];
   services: Svc[];
@@ -115,7 +118,10 @@ export function OrgTabs({
 
       {tab === "Company" && (
         <div className="grid items-start gap-x-6 gap-y-8 lg:grid-cols-2">
-          <CompanyInfoForm company={company} />
+          <div className="space-y-8">
+            <CompanyInfoForm company={company} />
+            <PortalBadgeForm company={portalBadge} />
+          </div>
 
           <div className="space-y-8">
           <div>

@@ -366,6 +366,39 @@ export async function updateCompanyInfo(input: CompanyInfoInput): Promise<Action
   return { ok: true };
 }
 
+// ---- Client-portal badge --------------------------------------------------
+const PortalBadgeSchema = z.object({
+  text: z.string().trim().max(40).optional().or(z.literal("")),
+  name: z.string().trim().max(40).optional().or(z.literal("")),
+  url: z.string().trim().url("Enter a valid link (https://…)").max(300).optional().or(z.literal("")),
+});
+
+export type PortalBadgeInput = { text?: string; name?: string; url?: string };
+
+/**
+ * The "Made by …" chip in the corner of the client portal.
+ *
+ * An empty name switches the chip off, so there's no separate enabled flag to
+ * fall out of sync with it — clearing the field is the off switch.
+ */
+export async function updatePortalBadge(input: PortalBadgeInput): Promise<ActionState> {
+  const session = await requireCapability("org:manage");
+  const parsed = PortalBadgeSchema.safeParse(input);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message };
+  const d = parsed.data;
+  await prisma.company.update({
+    where: { id: session.companyId },
+    data: {
+      portalBadgeText: d.text || null,
+      portalBadgeName: d.name || null,
+      portalBadgeUrl: d.url || null,
+    },
+  });
+  revalidatePath(ORG);
+  revalidatePath("/portal", "layout"); // the chip lives in the portal shell
+  return { ok: true };
+}
+
 // ---- Probation periods ----------------------------------------------------
 const MonthsSchema = z.object({
   months: z.coerce.number().int().min(1, "Enter a number of months").max(36),
