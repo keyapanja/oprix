@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requirePortal } from "@/lib/auth/guard";
+import { prisma } from "@/lib/db";
 import { safeHref, isHttpUrl } from "@/lib/url";
 import {
   getPortalSummary,
@@ -54,6 +55,16 @@ export default async function PortalHomePage() {
   const pendingDeliverables = deliverables.filter((d) => d.status === "SUBMITTED");
   const awaiting = pendingTasks.length + pendingDeliverables.length;
 
+  // Greet the person, not the account. Their own nickname first (they set it on
+  // the profile page); the client account's name is the fallback, which is what
+  // the header chip shows. Never the email — "Welcome back, a@b.com" is worse
+  // than no name at all, so that case just drops the name.
+  const me = await prisma.user.findUnique({
+    where: { id: session.userId },
+    select: { nickname: true, client: { select: { name: true, companyName: true } } },
+  });
+  const greetingName = me?.nickname?.trim() || me?.client?.companyName?.trim() || me?.client?.name?.trim() || null;
+
   // The client's projects + their Business Manager, for the "Raise a task" launcher.
   const bms = await Promise.all(projects.map((p) => getProjectManager(p.id)));
   const projectsWithBm = projects.map((p, i) => ({ id: p.id, name: p.name, bmName: bms[i]?.name ?? null }));
@@ -62,7 +73,9 @@ export default async function PortalHomePage() {
     <div className="space-y-8">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-content">Welcome back</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-content">
+            {greetingName ? `Welcome back, ${greetingName}` : "Welcome back"}
+          </h1>
           <p className="mt-1 text-sm text-muted">
             {awaiting > 0
               ? `You have ${awaiting} item${awaiting > 1 ? "s" : ""} awaiting your review.`
