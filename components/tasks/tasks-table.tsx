@@ -9,6 +9,7 @@ import { deleteTask, deleteTasks, duplicateTask } from "@/lib/projects/actions";
 import { TASK_STATUS_TONE, PRIORITY_TONE } from "@/lib/status";
 import { Badge } from "@/components/ui/badge";
 import { Icon } from "@/components/ui/icons";
+import { rowLinkProps, RowLink } from "@/components/ui/row-link";
 import { humanizeEnum, formatDate, formatDateTime } from "@/lib/format";
 import { safeHref, isHttpUrl } from "@/lib/url";
 import { fmtHm, type TimerStatusUI } from "@/lib/timer/shared";
@@ -217,11 +218,12 @@ export function TasksTable({
     // Frozen columns need an opaque bg that tracks the row's hover/selected state.
     const stickyBg = rowSel ? "bg-accent-soft" : "bg-surface group-hover:bg-canvas";
     const di = deliveryInfo(r, today);
+    const href = `/tasks/${r.id}`;
     return (
     <tr
       key={r.id}
       className={cn("group cursor-pointer border-b border-line", rowSel ? "bg-accent-soft" : "hover:bg-canvas")}
-      onClick={() => router.push(`/tasks/${r.id}`)}
+      {...rowLinkProps(router, href)}
     >
       <td className={cn("sticky left-0 z-[1] w-12 px-4 py-2", stickyBg)} onClick={(e) => e.stopPropagation()}>
         <input
@@ -232,8 +234,15 @@ export function TasksTable({
           aria-label={`Select ${r.name}`}
         />
       </td>
-      <td className={cn("sticky left-12 z-[1] whitespace-nowrap border-r border-line px-4 py-2 text-xs font-medium text-muted", stickyBg)}>{taskCode(r)}</td>
-      <td className="px-4 py-2 font-medium text-content"><span className="block max-w-[16rem] truncate" title={r.name}>{r.name}</span></td>
+      {/* These two are real anchors: right-click gives "Open in new tab", and
+          the status bar previews the URL. The row handlers above carry the
+          modifier clicks across the cells that aren't links. */}
+      <td className={cn("sticky left-12 z-[1] whitespace-nowrap border-r border-line px-4 py-2 text-xs font-medium text-muted", stickyBg)}>
+        <RowLink href={href} className="hover:text-accent-strong">{taskCode(r)}</RowLink>
+      </td>
+      <td className="px-4 py-2 font-medium text-content">
+        <RowLink href={href} className="block max-w-[16rem] truncate hover:text-accent-strong" title={r.name}>{r.name}</RowLink>
+      </td>
       <td className="whitespace-nowrap px-4 py-2 text-muted"><span className="block max-w-[11rem] truncate" title={r.serviceName ?? ""}>{r.serviceName ?? "—"}</span></td>
       <td className="whitespace-nowrap px-4 py-2 text-muted"><span className="block max-w-[11rem] truncate" title={r.projectName}>{r.projectName}</span></td>
       <td className="px-4 py-2 text-muted"><span className="block max-w-[18rem] truncate" title={r.description ?? ""}>{r.description || "—"}</span></td>

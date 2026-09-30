@@ -6,6 +6,7 @@ import { type KanbanTask } from "@/lib/projects/actions";
 import { PRIORITY_TONE, TASK_STATUS_TONE } from "@/lib/status";
 import { Badge } from "@/components/ui/badge";
 import { Icon } from "@/components/ui/icons";
+import { rowLinkProps, RowLink } from "@/components/ui/row-link";
 import { humanizeEnum } from "@/lib/format";
 
 function Avatars({ names }: { names: string[] }) {
@@ -43,8 +44,6 @@ export function KanbanBoard({
   projectId: string;
   initialTasks: KanbanTask[];
 }) {
-  const router = useRouter();
-
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
@@ -60,12 +59,13 @@ export function KanbanBoard({
         </Link>
       </div>
 
-      <TaskList tasks={initialTasks} onOpen={(id) => router.push(`/tasks/${id}`)} />
+      <TaskList tasks={initialTasks} />
     </div>
   );
 }
 
-function TaskList({ tasks, onOpen }: { tasks: KanbanTask[]; onOpen: (id: string) => void }) {
+function TaskList({ tasks }: { tasks: KanbanTask[] }) {
+  const router = useRouter();
   if (tasks.length === 0) {
     return (
       <div className="rounded-2xl border border-line bg-surface px-5 py-12 text-center text-sm text-muted">
@@ -87,8 +87,10 @@ function TaskList({ tasks, onOpen }: { tasks: KanbanTask[]; onOpen: (id: string)
         </thead>
         <tbody className="divide-y divide-line">
           {tasks.map((t) => (
-            <tr key={t.id} className="cursor-pointer hover:bg-canvas" onClick={() => onOpen(t.id)}>
-              <td className="px-5 py-3 font-medium text-content">{t.name}</td>
+            <tr key={t.id} className="cursor-pointer hover:bg-canvas" {...rowLinkProps(router, `/tasks/${t.id}`)}>
+              <td className="px-5 py-3 font-medium text-content">
+                <RowLink href={`/tasks/${t.id}`} className="hover:text-accent-strong">{t.name}</RowLink>
+              </td>
               <td className="px-5 py-3 text-muted">{t.serviceName ?? "—"}</td>
               <td className="px-5 py-3"><Badge tone={TASK_STATUS_TONE[t.status]}>{humanizeEnum(t.status)}</Badge></td>
               <td className="px-5 py-3"><Badge tone={PRIORITY_TONE[t.priority]}>{humanizeEnum(t.priority)}</Badge></td>

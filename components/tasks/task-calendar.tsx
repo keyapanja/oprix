@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import type { TaskRow } from "./tasks-table";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -45,7 +45,6 @@ type Seg = {
  * already settled server-side by the task-visibility scope.)
  */
 export function TaskCalendar({ tasks, today }: { tasks: TaskRow[]; today: string }) {
-  const router = useRouter();
   const [ym, setYm] = useState(() => ({ y: Number(today.slice(0, 4)), m: Number(today.slice(5, 7)) }));
   const [openDay, setOpenDay] = useState<string | null>(null);
   const { y, m } = ym;
@@ -198,9 +197,10 @@ export function TaskCalendar({ tasks, today }: { tasks: TaskRow[]; today: string
                 const leftPct = ((s.startCol - 1) / 7) * 100;
                 const widthPct = (s.span / 7) * 100;
                 return (
-                  <button
+                  <Link
                     key={`${t.id}:${si}`}
-                    onClick={() => router.push(`/tasks/${t.id}`)}
+                    href={`/tasks/${t.id}`}
+                    prefetch={false}
                     title={t.name}
                     className={cn(
                       "pointer-events-auto absolute flex items-center gap-1.5 overflow-hidden px-1.5 text-left text-[11px] font-medium",
@@ -218,7 +218,7 @@ export function TaskCalendar({ tasks, today }: { tasks: TaskRow[]; today: string
                     <span className={cn("size-1.5 shrink-0 rounded-full", STATUS_DOT[t.status] ?? "bg-slate-400")} />
                     <span className="truncate">{t.name}</span>
                     {s.isEnd && <span className="ml-auto shrink-0 text-[9px] font-semibold uppercase tracking-wide text-brand-700/70 dark:text-brand-200/70">Due</span>}
-                  </button>
+                  </Link>
                 );
               })}
             </div>
@@ -236,11 +236,13 @@ export function TaskCalendar({ tasks, today }: { tasks: TaskRow[]; today: string
             <ul className="space-y-1">
               {dayTasks.map((t) => (
                 <li key={t.id}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setOpenDay(null);
-                      router.push(`/tasks/${t.id}`);
+                  <Link
+                    href={`/tasks/${t.id}`}
+                    prefetch={false}
+                    // A modifier click opens a tab and stays here, so you can
+                    // pick several off one day without the dialog vanishing.
+                    onClick={(e) => {
+                      if (!e.metaKey && !e.ctrlKey && !e.shiftKey) setOpenDay(null);
                     }}
                     className="flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left hover:bg-canvas"
                   >
@@ -252,7 +254,7 @@ export function TaskCalendar({ tasks, today }: { tasks: TaskRow[]; today: string
                         Due
                       </span>
                     )}
-                  </button>
+                  </Link>
                 </li>
               ))}
             </ul>
