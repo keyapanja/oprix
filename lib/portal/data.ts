@@ -210,6 +210,36 @@ export async function listClientDeliverables(clientId: string, companyId: string
   });
 }
 
+/**
+ * The client's open requests — raised by them, not finished.
+ *
+ * CLIENT_REVIEW is left out on purpose: those already have their own section on
+ * the dashboard with the approve / request-changes controls attached, and
+ * listing the same task twice on one screen only makes it longer.
+ *
+ * Soonest deadline first, undated last — the same order the internal boards
+ * use, so the two don't disagree about what looks urgent.
+ */
+export async function listOpenClientTasks(clientId: string, companyId: string) {
+  return prisma.task.findMany({
+    where: {
+      ...(await portalTasksWhere(companyId)),
+      project: { clientId, companyId, deletedAt: null },
+      status: { notIn: ["COMPLETED", "CLIENT_REVIEW"] },
+    },
+    orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }, { createdAt: "asc" }],
+    take: 25,
+    select: {
+      id: true,
+      name: true,
+      status: true,
+      dueDate: true,
+      project: { select: { id: true, name: true } },
+      service: { select: { name: true } },
+    },
+  });
+}
+
 export async function listPendingTaskReviews(clientId: string, companyId: string) {
   return prisma.task.findMany({
     // Client-raised only: CLIENT_REVIEW on an internal task is not the client's

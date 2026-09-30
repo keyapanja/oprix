@@ -6,9 +6,13 @@ import {
   getPortalSummary,
   listClientProjects,
   listPendingTaskReviews,
+  listOpenClientTasks,
   listClientDeliverables,
 } from "@/lib/portal/data";
 import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { taskPill } from "@/lib/portal/status";
+import { formatDate } from "@/lib/format";
 import { Icon } from "@/components/ui/icons";
 import { ProjectCard } from "@/components/portal/project-card";
 import { ReviewControls } from "@/components/portal/review-controls";
@@ -40,10 +44,11 @@ function StatCard({ icon, label, value, highlight }: { icon: string; label: stri
 
 export default async function PortalHomePage() {
   const session = await requirePortal();
-  const [summary, projects, pendingTasks, deliverables] = await Promise.all([
+  const [summary, projects, pendingTasks, openTasks, deliverables] = await Promise.all([
     getPortalSummary(session.clientId, session.companyId),
     listClientProjects(session.clientId, session.companyId),
     listPendingTaskReviews(session.clientId, session.companyId),
+    listOpenClientTasks(session.clientId, session.companyId),
     listClientDeliverables(session.clientId, session.companyId),
   ]);
   const pendingDeliverables = deliverables.filter((d) => d.status === "SUBMITTED");
@@ -113,6 +118,46 @@ export default async function PortalHomePage() {
           ))}
         </section>
       )}
+
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-faint">Tasks in progress</h2>
+          {openTasks.length > 0 && (
+            <span className="text-xs text-faint">{openTasks.length}</span>
+          )}
+        </div>
+        {openTasks.length === 0 ? (
+          <Card className="px-5 py-10 text-center text-sm text-muted">
+            Nothing open right now — raise a task above when you need something.
+          </Card>
+        ) : (
+          <Card className="divide-y divide-line overflow-hidden">
+            {openTasks.map((t) => {
+              const pill = taskPill(t.status);
+              return (
+                <Link
+                  key={t.id}
+                  href={`/portal/tasks/${t.id}`}
+                  className="flex items-center justify-between gap-3 px-4 py-3 transition-colors hover:bg-canvas"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-content">{t.name}</p>
+                    <p className="truncate text-xs text-faint">
+                      {t.project.name}
+                      {t.service?.name ? ` · ${t.service.name}` : ""}
+                      {t.dueDate ? ` · Due ${formatDate(t.dueDate)}` : ""}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <Badge tone={pill.tone}>{pill.label}</Badge>
+                    <Icon name="chevronRight" className="size-4 text-faint" />
+                  </div>
+                </Link>
+              );
+            })}
+          </Card>
+        )}
+      </section>
 
       <section className="space-y-3">
         <div className="flex items-center justify-between">

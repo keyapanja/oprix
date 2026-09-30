@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { requirePortal } from "@/lib/auth/guard";
+import { taskPill } from "@/lib/portal/status";
 import { getClientTask, getClientTaskActivity } from "@/lib/portal/data";
 import { safeHref, isHttpUrl } from "@/lib/url";
 import { Card } from "@/components/ui/card";
@@ -15,15 +16,7 @@ import { PortalAttachments } from "@/components/portal/portal-attachments";
 
 export const metadata: Metadata = { title: "Task · Client Portal" };
 
-type Tone = "gray" | "green" | "amber" | "blue" | "red";
 
-// Client-facing status — internal workflow states collapse to "In progress" so
-// the portal never exposes the team's internal pipeline (matches the list).
-function taskPill(status: string): { tone: Tone; label: string } {
-  if (status === "COMPLETED") return { tone: "green", label: "Done" };
-  if (status === "CLIENT_REVIEW") return { tone: "amber", label: "Needs your review" };
-  return { tone: "blue", label: "In progress" };
-}
 
 export default async function PortalTaskDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
