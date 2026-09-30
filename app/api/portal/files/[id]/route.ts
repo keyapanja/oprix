@@ -2,6 +2,7 @@ import "server-only";
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
+import { clientRaisedFilter } from "@/lib/tasks/client-tasks";
 import { getSession } from "@/lib/auth/session";
 import { readUpload } from "@/lib/uploads";
 
@@ -11,14 +12,16 @@ export const dynamic = "force-dynamic";
 // task on THEIR project that they can see (client-raised or client-visible).
 // Clients can't reach the internal /api/files route — the proxy confines them
 // to /portal + /api/portal — so the portal has its own guarded file endpoint.
-function loadClientAttachment(clientId: string, companyId: string, attId: string) {
+async function loadClientAttachment(clientId: string, companyId: string, attId: string) {
   return prisma.attachment.findFirst({
     where: {
       id: attId,
       task: {
         deletedAt: null,
         project: { clientId, companyId, deletedAt: null },
-        OR: [{ clientRaised: true }, { clientVisible: true }],
+        // Client-raised only. `clientVisible` alone used to be enough, which
+        // let an internal task's files through if anyone had ever shared it.
+        ...(await clientRaisedFilter(companyId)),
       },
     },
     select: {

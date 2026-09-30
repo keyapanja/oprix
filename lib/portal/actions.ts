@@ -5,6 +5,7 @@ import { randomBytes } from "crypto";
 import { revalidatePath } from "next/cache";
 import { Role, Priority } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { clientRaisedFilter } from "@/lib/tasks/client-tasks";
 import { requirePortalAction, type PortalSession } from "@/lib/auth/guard";
 import { logTaskActivity } from "@/lib/activity";
 import { notify } from "@/lib/notifications/notify";
@@ -287,10 +288,17 @@ export async function clientDeleteTask(taskId: string): Promise<PortalActionStat
 
 // ---- Tasks in CLIENT_REVIEW ------------------------------------------------
 
-function loadClientTask(clientId: string, companyId: string, taskId: string) {
+async function loadClientTask(clientId: string, companyId: string, taskId: string) {
   return prisma.task.findFirst({
     // clientId in the WHERE = the ownership check; a foreign task returns null.
-    where: { id: taskId, deletedAt: null, project: { clientId, companyId, deletedAt: null } },
+    // Client-raised too, so a client can't approve or reject internal work even
+    // with its id in hand.
+    where: {
+      id: taskId,
+      deletedAt: null,
+      project: { clientId, companyId, deletedAt: null },
+      ...(await clientRaisedFilter(companyId)),
+    },
     select: {
       id: true,
       name: true,

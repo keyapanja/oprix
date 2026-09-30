@@ -18,5 +18,5 @@ export default async function TaskDetailPage({
   // stale /tasks/[id] link (e.g. from an old notification) to the canonical URL.
   if (await isClientRaisedTask(session.companyId, id)) redirect(`/client-tasks/${id}`);
 
-  return <TaskDetail taskId={id} session={session} backHref="/tasks" />;
+  return <TaskDetail taskId={id} session={session} backHref="/tasks" clientRaised={false} />;
 }

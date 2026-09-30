@@ -82,7 +82,6 @@ export function NewTaskForm({
   const [assigneeIds, setAssigneeIds] = useState<string[]>(prefill?.assigneeIds ?? []);
   const [checklist, setChecklist] = useState<CheckItem[]>([]);
   const [noChecklist, setNoChecklist] = useState(false);
-  const [clientVisible, setClientVisible] = useState(false);
   const [checkText, setCheckText] = useState("");
   const [files, setFiles] = useState<PickedFile[]>([]);
   // Copying the source's files is the default; a big brief nobody needs on the
@@ -181,7 +180,6 @@ export function NewTaskForm({
           assigneeIds,
           checklistEnabled: !noChecklist,
           checklist: noChecklist ? [] : checklist,
-          clientVisible,
           copyAttachmentsFromTaskId:
             prefill && copySourceFiles && prefill.attachments.length ? prefill.source.taskId : undefined,
         });
@@ -377,19 +375,6 @@ export function NewTaskForm({
                 </div>
               )}
             </div>
-          </Field>
-
-          {/* Visible to client — exposes the task in the client portal + notifies them */}
-          <Field label="Client portal" hint="Show this task to the project's client and notify them" className="sm:col-span-2">
-            <label className="flex items-center gap-2 text-sm text-content">
-              <input
-                type="checkbox"
-                checked={clientVisible}
-                onChange={(e) => setClientVisible(e.target.checked)}
-                className="size-4 rounded border-line-strong text-brand-600 focus:ring-brand-500"
-              />
-              Make this task visible to the client
-            </label>
           </Field>
 
           {/* Checklist — seeded from the sub-category template; editable. Or opt out. */}

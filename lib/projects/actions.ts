@@ -17,6 +17,7 @@ import { copyUpload, deleteUpload, makeFileKey } from "@/lib/uploads";
 import { notifyTaskAssigned, notifyClientTask } from "@/lib/tasks/assign-notify";
 import { notify } from "@/lib/notifications/notify";
 import { mentionedIds, type MentionPerson } from "@/lib/mentions";
+import { clientRaisedFilter } from "@/lib/tasks/client-tasks";
 
 export type ProjectState = { error?: string; ok?: boolean; id?: string };
 
@@ -450,8 +451,6 @@ export async function createTask(input: {
   checklist?: { text: string; isDone: boolean }[];
   /** When false, the task is created with no checklist and the detail page hides the box. */
   checklistEnabled?: boolean;
-  /** Expose this task in the client portal (the project's client sees + is notified). */
-  clientVisible?: boolean;
   /** Bring another task's files across — used when filing a client request as
    *  internal work, so the brief lands with the task instead of being re-hunted. */
   copyAttachmentsFromTaskId?: string;
@@ -485,7 +484,6 @@ export async function createTask(input: {
       status: input.status ?? "TODO",
       priority: input.priority ?? "MEDIUM",
       checklistEnabled: input.checklistEnabled ?? true,
-      clientVisible: input.clientVisible ?? false,
       dueDate: input.dueDate ? dateAtUTC(input.dueDate) : null,
       clientDeadline: input.clientDeadline ? dateAtUTC(input.clientDeadline) : null,
       assignees: assigneeIds.length ? { create: assigneeIds.map((employeeId) => ({ employeeId })) } : undefined,
@@ -549,22 +547,30 @@ export async function createTask(input: {
       assignerUserId: session.userId,
     });
   }
-  if (input.clientVisible) {
-    await notifyClientTask({ companyId: session.companyId, taskId: task.id, actorUserId: session.userId });
-  }
-
   revalidatePath(`/projects/${input.projectId}`);
   return { ok: true, task: toKanban(task), attachmentsCopied };
 }
 
-/** Show/hide a task in the client portal. Notifies the client when turned on. */
+/**
+ * Show/hide a **client-raised** task in the client portal. Notifies the client
+ * when turned on.
+ *
+ * Internal tasks are refused outright. The UI already hides the control for
+ * them, but every export of a `"use server"` module is a callable endpoint, so
+ * the rule has to hold here too rather than only in the markup.
+ */
 export async function setTaskClientVisible(taskId: string, visible: boolean): Promise<ProjectState> {
   const session = await requireCapability("task:manage");
   const task = await prisma.task.findFirst({
-    where: { id: taskId, deletedAt: null, project: { companyId: session.companyId } },
+    where: {
+      id: taskId,
+      deletedAt: null,
+      project: { companyId: session.companyId },
+      ...(await clientRaisedFilter(session.companyId)),
+    },
     select: { id: true, clientVisible: true, projectId: true },
   });
-  if (!task) return { error: "Task not found" };
+  if (!task) return { error: "Only a task the client raised can be shared with them." };
   if (task.clientVisible !== visible) {
     await prisma.task.update({ where: { id: task.id }, data: { clientVisible: visible } });
     if (visible) {

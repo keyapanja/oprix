@@ -2,6 +2,7 @@ import "server-only";
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
+import { clientRaisedFilter } from "@/lib/tasks/client-tasks";
 import { getSession } from "@/lib/auth/session";
 import { makeFileKey, saveUpload } from "@/lib/uploads";
 
@@ -20,13 +21,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const { id: taskId } = await ctx.params;
 
   // Ownership: the task must sit on a project this client owns, and be one they
-  // can actually see (client-raised or client-visible) — never internal-only.
+  // raised themselves. Internal work never accepts client uploads.
   const task = await prisma.task.findFirst({
     where: {
       id: taskId,
       deletedAt: null,
       project: { clientId: session.clientId, companyId: session.companyId, deletedAt: null },
-      OR: [{ clientRaised: true }, { clientVisible: true }],
+      ...(await clientRaisedFilter(session.companyId)),
     },
     select: { id: true, projectId: true },
   });

@@ -18,5 +18,5 @@ export default async function ClientTaskDetailPage({
   // task detail so each task keeps a single canonical URL.
   if (!(await isClientRaisedTask(session.companyId, id))) redirect(`/tasks/${id}`);
 
-  return <TaskDetail taskId={id} session={session} backHref="/client-tasks" />;
+  return <TaskDetail taskId={id} session={session} backHref="/client-tasks" clientRaised />;
 }

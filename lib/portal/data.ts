@@ -1,6 +1,32 @@
 import "server-only";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { clientRaisedFilter } from "@/lib/tasks/client-tasks";
 import { formatNoteTime, type ClientNote } from "@/lib/notifications/categories";
+
+/**
+ * Which tasks the portal may show: ones the **client raised themselves**, and
+ * not since hidden by their manager.
+ *
+ * Client-raised is the outer gate, so an internal task can never surface here —
+ * not even one carrying a stale `clientVisible` from before internal sharing
+ * was removed. That makes this the fix for the existing rows as well as the
+ * rule going forward, with no data migration.
+ *
+ * `clientRaisedFilter` is used rather than a bare `clientRaised: true` because
+ * it also matches client tasks that predate the column, where the flag reads
+ * false but a client user created the row.
+ */
+async function portalTasksWhere(companyId: string): Promise<Prisma.TaskWhereInput> {
+  return {
+    deletedAt: null,
+    AND: [
+      await clientRaisedFilter(companyId),
+      // The manager can still hide one; a task in their review queue always shows.
+      { OR: [{ clientVisible: true }, { status: "CLIENT_REVIEW" }] },
+    ],
+  };
+}
 
 /** Where a client notification points inside the portal (never internal routes). */
 function portalNoteHref(type: string, meta: unknown): string | null {
@@ -53,6 +79,7 @@ export function progressOf(tasks: { status: string }[]): Progress {
 }
 
 export async function listClientProjects(clientId: string, companyId: string) {
+  const taskWhere = await portalTasksWhere(companyId);
   const projects = await prisma.project.findMany({
     where: { clientId, companyId, deletedAt: null },
     orderBy: { createdAt: "desc" },
@@ -67,7 +94,7 @@ export async function listClientProjects(clientId: string, companyId: string) {
       dueDate: true,
       // Progress reflects the client-facing tasks only (matches the detail page).
       tasks: {
-        where: { deletedAt: null, OR: [{ clientVisible: true }, { status: "CLIENT_REVIEW" }] },
+        where: taskWhere,
         select: { status: true },
       },
     },
@@ -76,6 +103,7 @@ export async function listClientProjects(clientId: string, companyId: string) {
 }
 
 export async function getClientProject(clientId: string, companyId: string, projectId: string) {
+  const taskWhere = await portalTasksWhere(companyId);
   return prisma.project.findFirst({
     // Ownership is part of the WHERE — a wrong id simply returns null (→ 404).
     where: { id: projectId, clientId, companyId, deletedAt: null },
@@ -89,10 +117,9 @@ export async function getClientProject(clientId: string, companyId: string, proj
       type: true,
       dueDate: true,
       tasks: {
-        // Only tasks meant for the client: those explicitly shared with them, or
-        // sitting in their review queue. Internal-only tasks never reach the
-        // portal — and progress below is computed from this same client-facing set.
-        where: { deletedAt: null, OR: [{ clientVisible: true }, { status: "CLIENT_REVIEW" }] },
+        // Only the client's own requests — see portalTasksWhere. Progress below
+        // is computed from this same set, so the two can't disagree.
+        where: taskWhere,
         orderBy: { createdAt: "asc" },
         // No timers / cost — progress only, plus client-visible flag + due date
         // for the tasks the client and their manager exchange.
@@ -130,9 +157,8 @@ export async function getClientTask(clientId: string, companyId: string, taskId:
   return prisma.task.findFirst({
     where: {
       id: taskId,
-      deletedAt: null,
       project: { clientId, companyId, deletedAt: null },
-      OR: [{ clientVisible: true }, { status: "CLIENT_REVIEW" }],
+      ...(await portalTasksWhere(companyId)),
     },
     select: {
       id: true,
@@ -186,7 +212,14 @@ export async function listClientDeliverables(clientId: string, companyId: string
 
 export async function listPendingTaskReviews(clientId: string, companyId: string) {
   return prisma.task.findMany({
-    where: { status: "CLIENT_REVIEW", deletedAt: null, project: { clientId, companyId, deletedAt: null } },
+    // Client-raised only: CLIENT_REVIEW on an internal task is not the client's
+    // business, so it must not appear in their review queue.
+    where: {
+      status: "CLIENT_REVIEW",
+      deletedAt: null,
+      project: { clientId, companyId, deletedAt: null },
+      ...(await clientRaisedFilter(companyId)),
+    },
     orderBy: { updatedAt: "desc" },
     select: {
       id: true,
@@ -243,7 +276,14 @@ export async function getPortalSummary(clientId: string, companyId: string) {
   const [projectCount, tasksAwaiting, deliverablesAwaiting] = await Promise.all([
     prisma.project.count({ where: { clientId, companyId, deletedAt: null } }),
     prisma.task.count({
-      where: { status: "CLIENT_REVIEW", deletedAt: null, project: { clientId, companyId, deletedAt: null } },
+      // Must match listPendingTaskReviews, or the badge counts what the list
+      // won't show.
+      where: {
+        status: "CLIENT_REVIEW",
+        deletedAt: null,
+        project: { clientId, companyId, deletedAt: null },
+        ...(await clientRaisedFilter(companyId)),
+      },
     }),
     prisma.deliverable.count({
       where: { status: "SUBMITTED", project: { clientId, companyId, deletedAt: null } },

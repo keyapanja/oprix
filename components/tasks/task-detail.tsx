@@ -39,10 +39,18 @@ export async function TaskDetail({
   taskId,
   session,
   backHref = "/tasks",
+  clientRaised,
 }: {
   taskId: string;
   session: SessionUser;
   backHref?: string;
+  /**
+   * Did the client raise this from the portal? Passed in rather than read off
+   * the row, because both routes have already settled it with
+   * `isClientRaisedTask` — which also recognises client tasks that predate the
+   * `clientRaised` column, where the raw flag still reads false.
+   */
+  clientRaised: boolean;
 }) {
   const id = taskId;
 
@@ -219,7 +227,7 @@ export async function TaskDetail({
             {/* A client request isn't internal work yet — this opens the normal
                 new-task form with its details filled in, for someone to pick a
                 task type and file it properly. */}
-            {isManager && task.clientRaised && (
+            {isManager && clientRaised && (
               <Link
                 href={`/tasks/new?from=${task.id}`}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-canvas px-3 py-1.5 text-sm font-medium text-content ring-1 ring-inset ring-line transition-colors hover:bg-surface"
@@ -228,7 +236,10 @@ export async function TaskDetail({
                 Copy to internal task
               </Link>
             )}
-            {isManager && task.project.clientId && (
+            {/* Only a task the client raised can be shown to them. An internal
+                task has no business in the portal, whatever project it sits in,
+                so there's nothing here to toggle. */}
+            {isManager && clientRaised && (
               <TaskClientVisible taskId={task.id} clientVisible={task.clientVisible} />
             )}
             {canEdit && (
