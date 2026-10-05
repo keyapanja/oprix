@@ -769,14 +769,9 @@ function DayDetail({
   const pct = (min: number) => ((min - lo) / (hi - lo)) * 100;
 
   const facts: { label: string; value: string; tone?: string }[] = [
-    { label: "First scan", value: f.firstIn === null ? "—" : to12h(hhmm(f.firstIn)) },
-    { label: "Last scan", value: f.lastOut === null ? "—" : to12h(hhmm(f.lastOut)) },
-    { label: "First to last", value: f.punches.length ? hoursMin(f.spanMin) : "—" },
-    // Only when the scans pair cleanly — otherwise the device's directions are
-    // too garbled to say where the breaks were, and a number here would look
-    // every bit as certain as one that happens to be right.
-    { label: "Between in/out", value: f.insideMin === null ? "can't read" : hoursMin(f.insideMin) },
-    { label: "Away in between", value: f.awayMin === null ? "can't read" : f.awayMin ? hoursMin(f.awayMin) : "none" },
+    { label: "In", value: f.firstIn === null ? "—" : to12h(hhmm(f.firstIn)) },
+    { label: "Out", value: f.lastOut === null ? "—" : to12h(hhmm(f.lastOut)) },
+    { label: "Hours", value: f.punches.length ? hoursMin(f.spanMin) : "—" },
     {
       label: "Late",
       value:
@@ -790,9 +785,15 @@ function DayDetail({
       tone:
         shiftWindow.startMin === null || f.lateMin > 0 ? "text-amber-600 dark:text-amber-400" : undefined,
     },
-    { label: "Left early by", value: f.earlyMin > 0 ? hoursMin(f.earlyMin) : "—" },
+    { label: "Left early", value: f.earlyMin > 0 ? hoursMin(f.earlyMin) : "—" },
     { label: "Scans", value: String(f.punches.length) },
   ];
+  // Shown only when the scans pair cleanly AND there is a real gap. On the other
+  // days it was two permanent "can't read" cells, and on a straight two-scan day
+  // it just repeated the hours back — neither told anyone anything.
+  if (f.awayMin !== null && f.awayMin > 0) {
+    facts.push({ label: "Away mid-day", value: hoursMin(f.awayMin) });
+  }
 
   const deviceFacts: { label: string; value: string }[] = [
     { label: "Status", value: device.label || "—" },
@@ -820,74 +821,96 @@ function DayDetail({
         }
       />
       <CardBody className="space-y-5">
-        {/* timeline */}
+        {/* The day on a clock. One bar from the first scan to the last, with a
+            dot per scan — not split into in/out stretches, because the device's
+            direction labels only pair up on about half the days and splitting on
+            them invents breaks that weren't there. */}
         <div>
-          <div className="relative h-14 overflow-hidden rounded-xl bg-canvas ring-1 ring-inset ring-line">
-            {/* shift window */}
-            {shiftWindow.startMin !== null && shiftWindow.endMin !== null && (
-              <div
-                className="absolute inset-y-0 bg-brand-500/[0.07]"
-                style={{ left: `${pct(shiftWindow.startMin)}%`, width: `${pct(shiftWindow.endMin) - pct(shiftWindow.startMin)}%` }}
-              />
-            )}
-            {/* grace window */}
-            {shiftWindow.startMin !== null && shiftWindow.graceMin > 0 && (
-              <div
-                className="absolute inset-y-0 bg-amber-400/15"
-                style={{ left: `${pct(shiftWindow.startMin)}%`, width: `${pct(shiftWindow.startMin + shiftWindow.graceMin) - pct(shiftWindow.startMin)}%` }}
-              />
-            )}
-            {/* shift start line */}
-            {shiftWindow.startMin !== null && (
-              <div className="absolute inset-y-0 w-px bg-brand-500/60" style={{ left: `${pct(shiftWindow.startMin)}%` }} />
-            )}
-            {/* The day. Drawn as separate in/out stretches only when the scans
-                pair cleanly; otherwise as one bar from first to last, because
-                splitting it on unreliable directions would invent breaks. */}
-            {f.coherent ? (
-              f.sessions.map((s, i) => (
+          <div className="relative">
+            {/* hour labels, positioned along the track */}
+            <div className="relative h-4">
+              {axisHours(lo, hi).map((h) => (
+                <span
+                  key={h}
+                  className="absolute -translate-x-1/2 text-[11px] tabular-nums text-faint"
+                  style={{ left: `${pct(h)}%` }}
+                >
+                  {clockLabel(h)}
+                </span>
+              ))}
+            </div>
+
+            <div className="relative h-12 rounded-xl bg-canvas ring-1 ring-inset ring-line">
+              {/* the shift, as one labelled band */}
+              {shiftWindow.startMin !== null && shiftWindow.endMin !== null && (
+                <div
+                  className="absolute inset-y-0 border-x border-brand-500/40 bg-brand-500/[0.06]"
+                  style={{
+                    left: `${pct(shiftWindow.startMin)}%`,
+                    width: `${pct(shiftWindow.endMin) - pct(shiftWindow.startMin)}%`,
+                  }}
+                  title={`Shift ${hhmm(shiftWindow.startMin)} – ${hhmm(shiftWindow.endMin)}`}
+                />
+              )}
+              {/* the late stretch: from the end of grace to when they arrived */}
+              {shiftWindow.startMin !== null && f.lateMin > 0 && f.firstIn !== null && (
+                <div
+                  className="absolute top-1/2 h-2.5 -translate-y-1/2 rounded-l-full bg-amber-400/70"
+                  style={{
+                    left: `${pct(shiftWindow.startMin + shiftWindow.graceMin)}%`,
+                    width: `${Math.max(0.3, pct(f.firstIn) - pct(shiftWindow.startMin + shiftWindow.graceMin))}%`,
+                  }}
+                  title={`${hoursMin(f.lateMin)} late`}
+                />
+              )}
+              {/* the day itself */}
+              {f.firstIn !== null && f.lastOut !== null && (
+                <div
+                  className="absolute top-1/2 h-2.5 -translate-y-1/2 rounded-full bg-emerald-500"
+                  style={{ left: `${pct(f.firstIn)}%`, width: `${Math.max(0.4, pct(f.lastOut) - pct(f.firstIn))}%` }}
+                  title={`${hhmm(f.firstIn)} – ${hhmm(f.lastOut)}`}
+                />
+              )}
+              {f.punches.map((p, i) => (
                 <div
                   key={i}
-                  className="absolute top-1/2 h-3 -translate-y-1/2 rounded-full bg-emerald-500/80"
-                  style={{ left: `${pct(s.in)}%`, width: `${Math.max(0.4, pct(s.out!) - pct(s.in))}%` }}
-                  title={`${hhmm(s.in)} – ${hhmm(s.out!)}`}
+                  className="absolute top-1/2 size-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/90 ring-1 ring-emerald-700/40"
+                  style={{ left: `${pct(p.min)}%` }}
+                  title={`Scan at ${to12h(hhmm(p.min))}`}
                 />
-              ))
-            ) : f.firstIn !== null && f.lastOut !== null ? (
-              <div
-                className="absolute top-1/2 h-3 -translate-y-1/2 rounded-full bg-emerald-500/40"
-                style={{ left: `${pct(f.firstIn)}%`, width: `${Math.max(0.4, pct(f.lastOut) - pct(f.firstIn))}%` }}
-                title={`${hhmm(f.firstIn)} – ${hhmm(f.lastOut)} — the device's in/out labels don't pair up, so breaks can't be read`}
-              />
-            ) : null}
-            {/* every scan */}
-            {f.punches.map((p, i) => (
-              <div
-                key={i}
-                className="absolute top-1/2 size-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-content"
-                style={{ left: `${pct(p.min)}%` }}
-                title={`${hhmm(p.min)}${p.dir ? ` ${p.dir}` : ""}`}
-              />
-            ))}
-            {/* hour ticks */}
-            {hourTicks(lo, hi).map((h) => (
-              <span key={h} className="absolute bottom-0.5 -translate-x-1/2 text-[10px] text-faint" style={{ left: `${pct(h)}%` }}>
-                {h / 60}
+              ))}
+              {f.punches.length === 0 && (
+                <span className="absolute inset-0 flex items-center justify-center text-xs text-faint">
+                  No scans on this day
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted">
+            {f.firstIn !== null && (
+              <span className="inline-flex items-center gap-1.5">
+                <span className="h-1.5 w-4 rounded-full bg-emerald-500" />
+                In {to12h(hhmm(f.firstIn))} → out {to12h(hhmm(f.lastOut!))}
+                <span className="text-faint">· {f.punches.length} scans</span>
               </span>
-            ))}
-            {f.punches.length === 0 && (
-              <span className="absolute inset-0 flex items-center justify-center text-xs text-faint">No scans on this day</span>
+            )}
+            {f.lateMin > 0 && (
+              <span className="inline-flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
+                <span className="h-1.5 w-4 rounded-full bg-amber-400" />
+                {hoursMin(f.lateMin)} late
+              </span>
+            )}
+            {shiftWindow.startMin !== null && (
+              <span className="inline-flex items-center gap-1.5">
+                <span className="h-3 w-4 rounded-sm border-x border-brand-500/40 bg-brand-500/[0.12]" />
+                Shift {to12h(hhmm(shiftWindow.startMin))} – {to12h(hhmm(shiftWindow.endMin!))}
+              </span>
             )}
           </div>
-          {f.punches.length > 0 && !f.coherent && (
-            <p className="mt-1.5 text-xs text-faint">
-              The device&apos;s in/out labels on this day don&apos;t pair up, so the bar shows the whole day rather than
-              individual stretches. Every scan is still marked.
-            </p>
-          )}
         </div>
 
-        <div className="grid gap-x-6 gap-y-4 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3 lg:grid-cols-6">
           {facts.map((d) => (
             <div key={d.label}>
               <p className="text-[11px] font-medium uppercase tracking-wide text-faint">{d.label}</p>
@@ -937,10 +960,19 @@ function DayDetail({
   );
 }
 
-function hourTicks(lo: number, hi: number): number[] {
+/** Hour marks across the track — every 3 hours, so the labels can be words. */
+function axisHours(lo: number, hi: number): number[] {
   const out: number[] = [];
-  for (let h = Math.ceil(lo / 120) * 120; h <= hi; h += 120) out.push(h);
+  for (let h = Math.ceil(lo / 180) * 180; h <= hi; h += 180) out.push(h);
   return out;
+}
+
+/** 540 → "9am", 720 → "12pm". Short enough to sit under a tick. */
+function clockLabel(min: number): string {
+  const h = Math.floor((min % 1440) / 60);
+  const suffix = h < 12 ? "am" : "pm";
+  const twelve = h % 12 === 0 ? 12 : h % 12;
+  return `${twelve}${suffix}`;
 }
 
 // ---- charts -------------------------------------------------------------
