@@ -51,6 +51,7 @@ export default async function OrganizationPage() {
         select: {
           multiLocation: true,
           workWeek: true,
+          defaultWorkShiftId: true,
           eventReminderEnabled: true,
           eventReminderTime: true,
           name: true,
@@ -115,6 +116,7 @@ export default async function OrganizationPage() {
         }))}
         designations={designations}
         shifts={shifts}
+        defaultShiftId={company?.defaultWorkShiftId ?? null}
         locations={locations}
         probationPeriods={probationPeriods}
         multiLocation={company?.multiLocation ?? false}

@@ -270,6 +270,36 @@ export async function createShift(
   return { ok: true };
 }
 
+/**
+ * The shift anyone without one of their own falls back to. Resolved when
+ * attendance is read rather than written onto employees, so changing it moves
+ * everyone relying on it at once and never overwrites a deliberate assignment.
+ * Empty clears it, which puts those people back to having no shift at all.
+ */
+export async function setDefaultWorkShift(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const session = await requireCapability("org:manage");
+  const raw = String(formData.get("shiftId") ?? "").trim();
+
+  if (raw) {
+    const owned = await prisma.workShift.findFirst({
+      where: { id: raw, companyId: session.companyId },
+      select: { id: true },
+    });
+    if (!owned) return { error: "That shift doesn't exist" };
+  }
+
+  await prisma.company.update({
+    where: { id: session.companyId },
+    data: { defaultWorkShiftId: raw || null },
+  });
+  revalidatePath(ORG);
+  revalidatePath("/attendance");
+  return { ok: true };
+}
+
 const ShiftUpdateSchema = ShiftSchema.extend({ id: z.string().min(1, "Missing id") });
 
 export async function updateShift(
@@ -448,7 +478,15 @@ export async function deleteOrgEntity(entity: OrgEntity, id: string): Promise<Ac
       await prisma.service.deleteMany({ where: scope });
     }
     else if (entity === "designation") await prisma.designation.deleteMany({ where: scope });
-    else if (entity === "shift") await prisma.workShift.deleteMany({ where: scope });
+    else if (entity === "shift") {
+      // Drop the company default first, or the FK blocks the delete and the
+      // error claims an employee is using it.
+      await prisma.company.updateMany({
+        where: { id: session.companyId, defaultWorkShiftId: id },
+        data: { defaultWorkShiftId: null },
+      });
+      await prisma.workShift.deleteMany({ where: scope });
+    }
     else if (entity === "location") await prisma.location.deleteMany({ where: scope });
     else if (entity === "probationPeriod") await prisma.probationPeriod.deleteMany({ where: scope });
   } catch {
@@ -483,7 +521,13 @@ export async function deleteOrgEntities(
         }
         await prisma.service.deleteMany({ where: scope });
       } else if (entity === "designation") await prisma.designation.deleteMany({ where: scope });
-      else if (entity === "shift") await prisma.workShift.deleteMany({ where: scope });
+      else if (entity === "shift") {
+        await prisma.company.updateMany({
+          where: { id: companyId, defaultWorkShiftId: id },
+          data: { defaultWorkShiftId: null },
+        });
+        await prisma.workShift.deleteMany({ where: scope });
+      }
       else if (entity === "location") await prisma.location.deleteMany({ where: scope });
       else if (entity === "probationPeriod") await prisma.probationPeriod.deleteMany({ where: scope });
       deleted++;

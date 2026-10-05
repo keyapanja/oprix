@@ -177,6 +177,10 @@ model Company {
   // the device's own test/placeholder slots. Newline-separated; an attendance
   // import drops their rows instead of reporting them as unclaimed.
   ignoredMachineCodes  String?
+  // Falls back for anyone with no shift of their own, so attendance can still
+  // measure lateness. Resolved at read time, never copied onto employees — a
+  // change here applies to everyone relying on it immediately.
+  defaultWorkShiftId   String?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
@@ -200,6 +204,7 @@ model Company {
   forms            Form[]
   formSubmissions  FormSubmission[]
   attendanceImports AttendanceImport[]
+  defaultWorkShift  WorkShift?  @relation("CompanyDefaultShift", fields: [defaultWorkShiftId], references: [id])
 }
 
 // Company holidays — shown to every employee on the calendar.
@@ -366,6 +371,7 @@ model WorkShift {
 
   company   Company    @relation(fields: [companyId], references: [id])
   employees Employee[]
+  defaultFor Company[] @relation("CompanyDefaultShift")
 
   @@index([companyId])
 }

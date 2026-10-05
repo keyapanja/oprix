@@ -182,8 +182,8 @@ export function EmployeeForm({
           <Field label="Reporting manager">
             <Combobox name="managerId" value={managerId} onChange={setManagerId} emptyLabel="— None —" placeholder="— None —" options={toOpts(managers)} />
           </Field>
-          <Field label="Work shift">
-            <Combobox name="workShiftId" defaultValue={employee?.workShiftId ?? ""} emptyLabel="— None —" placeholder="— None —" options={toOpts(shifts)} />
+          <Field label="Work shift" hint="Leave blank to use the company default">
+            <Combobox name="workShiftId" defaultValue={employee?.workShiftId ?? ""} emptyLabel="— Company default —" placeholder="— Company default —" options={toOpts(shifts)} />
           </Field>
 
           <Field

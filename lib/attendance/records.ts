@@ -30,7 +30,27 @@ export type PersonShift = {
   startTime: string | null;
   endTime: string | null;
   graceMinutes: number;
+  /** True when this is the company default, not a shift set on the person. */
+  fromDefault: boolean;
 };
+
+type ShiftRow = { name: string; startTime: string; endTime: string; graceMinutes: number } | null;
+
+/**
+ * The shift that applies to someone: their own, or the company default when
+ * they have none. Resolved on read so a change to the default takes effect for
+ * everyone relying on it without touching a single employee record.
+ */
+function resolveShift(own: ShiftRow, fallback: ShiftRow): PersonShift {
+  const shift = own ?? fallback;
+  return {
+    name: shift?.name ?? null,
+    startTime: shift?.startTime ?? null,
+    endTime: shift?.endTime ?? null,
+    graceMinutes: shift?.graceMinutes ?? 0,
+    fromDefault: !own && !!fallback,
+  };
+}
 
 export type PersonAttendance = {
   employee: {
@@ -134,7 +154,13 @@ export async function getPersonAttendance(args: {
       where: { companyId, deletedAt: null, date: { gte: dateAtUTC(from), lte: dateAtUTC(to) } },
       select: { date: true, name: true },
     }),
-    prisma.company.findUnique({ where: { id: companyId }, select: { workWeek: true } }),
+    prisma.company.findUnique({
+      where: { id: companyId },
+      select: {
+        workWeek: true,
+        defaultWorkShift: { select: { name: true, startTime: true, endTime: true, graceMinutes: true } },
+      },
+    }),
   ]);
 
   const leaveDays: PersonAttendance["leaveDays"] = [];
@@ -154,12 +180,7 @@ export async function getPersonAttendance(args: {
       department: employee.department?.name ?? null,
       designation: employee.designation?.name ?? null,
     },
-    shift: {
-      name: employee.workShift?.name ?? null,
-      startTime: employee.workShift?.startTime ?? null,
-      endTime: employee.workShift?.endTime ?? null,
-      graceMinutes: employee.workShift?.graceMinutes ?? 0,
-    },
+    shift: resolveShift(employee.workShift, company?.defaultWorkShift ?? null),
     from,
     to,
     days: days.map((d) => ({
@@ -196,6 +217,8 @@ export type RosterPerson = {
   shiftName: string | null;
   shiftStart: string | null;
   graceMinutes: number;
+  /** True when the shift above is the company default, not theirs. */
+  shiftFromDefault: boolean;
   /** Days with at least one scan. */
   daysWorked: number;
   /** Days the device recorded as a no-show. */
@@ -249,7 +272,13 @@ export async function getRoster(args: {
         deviceStatus: true,
       },
     }),
-    prisma.company.findUnique({ where: { id: companyId }, select: { workWeek: true } }),
+    prisma.company.findUnique({
+      where: { id: companyId },
+      select: {
+        workWeek: true,
+        defaultWorkShift: { select: { name: true, startTime: true, endTime: true, graceMinutes: true } },
+      },
+    }),
     prisma.holiday.findMany({
       where: { companyId, deletedAt: null, date: { gte: dateAtUTC(from), lte: dateAtUTC(to) } },
       select: { date: true },
@@ -266,11 +295,14 @@ export async function getRoster(args: {
     else byEmployee.set(r.employeeId, [r]);
   }
 
+  const fallback = company?.defaultWorkShift ?? null;
+
   const people: RosterPerson[] = employees.map((e) => {
+    const applies = resolveShift(e.workShift, fallback);
     const shift = {
-      startMin: toMin(e.workShift?.startTime),
-      endMin: toMin(e.workShift?.endTime),
-      graceMin: e.workShift?.graceMinutes ?? 0,
+      startMin: toMin(applies.startTime),
+      endMin: toMin(applies.endTime),
+      graceMin: applies.graceMinutes,
     };
     const mine = byEmployee.get(e.id) ?? [];
     let daysWorked = 0;
@@ -311,9 +343,10 @@ export async function getRoster(args: {
       employeeCode: e.employeeCode,
       machineCode: e.machineCode,
       department: e.department?.name ?? null,
-      shiftName: e.workShift?.name ?? null,
-      shiftStart: e.workShift?.startTime ?? null,
-      graceMinutes: e.workShift?.graceMinutes ?? 0,
+      shiftName: applies.name,
+      shiftStart: applies.startTime,
+      graceMinutes: applies.graceMinutes,
+      shiftFromDefault: applies.fromDefault,
       daysWorked,
       absences,
       totalMin,

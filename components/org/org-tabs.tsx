@@ -6,12 +6,14 @@ import { Icon } from "@/components/ui/icons";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
 import { Combobox } from "@/components/ui/combobox";
 import { AddForm } from "@/components/org/add-form";
 import { DeleteButton } from "@/components/org/delete-button";
 import { ShiftEdit } from "@/components/org/shift-edit";
+import { DefaultShiftSetting } from "@/components/org/default-shift";
 import { ServiceList } from "@/components/org/service-list";
 import { PermissionsMatrix } from "@/components/org/permissions-matrix";
 import { TaskScopeMatrix } from "@/components/org/task-scope-matrix";
@@ -59,6 +61,7 @@ export function OrgTabs({
   services,
   designations,
   shifts,
+  defaultShiftId,
   locations,
   probationPeriods,
   multiLocation,
@@ -76,6 +79,7 @@ export function OrgTabs({
   services: Svc[];
   designations: Desig[];
   shifts: Shift[];
+  defaultShiftId: string | null;
   locations: Loc[];
   probationPeriods: Prob[];
   multiLocation: boolean;
@@ -151,7 +155,14 @@ export function OrgTabs({
               rows={shifts.map((s) => ({
                 id: s.id,
                 cells: [
-                  s.name,
+                  s.id === defaultShiftId ? (
+                    <span key="n" className="inline-flex items-center gap-2">
+                      {s.name}
+                      <Badge tone="blue">Default</Badge>
+                    </span>
+                  ) : (
+                    s.name
+                  ),
                   `${s.startTime} – ${s.endTime}`,
                   s.graceMinutes ? `${s.graceMinutes} min` : "—",
                 ],
@@ -163,6 +174,9 @@ export function OrgTabs({
                 ),
               }))}
             />
+            <div className="mt-4">
+              <DefaultShiftSetting shifts={shifts} current={defaultShiftId} />
+            </div>
           </div>
 
           <div>

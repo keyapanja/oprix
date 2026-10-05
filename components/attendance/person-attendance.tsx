@@ -231,6 +231,9 @@ export function PersonAttendance({
   const graceNote = shift.startTime
     ? `${shift.startTime}${shift.graceMinutes ? ` + ${shift.graceMinutes} min grace` : " · no grace set"}`
     : "No work shift assigned";
+  // Worth saying out loud: the figures are real, but they rest on a company-wide
+  // fallback rather than anything decided about this person.
+  const shiftSource = shift.fromDefault ? " (company default)" : "";
 
   return (
     <div className="space-y-6">
@@ -251,6 +254,7 @@ export function PersonAttendance({
               {shift.startTime ? (
                 <>
                   Lateness measured from <span className="font-medium text-content">{graceNote}</span>
+                  {shiftSource}
                 </>
               ) : (
                 <span className="font-medium text-amber-600 dark:text-amber-400">Lateness not measured — no work shift</span>
@@ -811,7 +815,7 @@ function DayDetail({
         }
         description={
           shift.startTime
-            ? `Shift ${shift.name ? `${shift.name} ` : ""}${shift.startTime}–${shift.endTime}${shift.graceMinutes ? `, ${shift.graceMinutes} min grace` : ""}`
+            ? `Shift ${shift.name ? `${shift.name} ` : ""}${shift.startTime}–${shift.endTime}${shift.graceMinutes ? `, ${shift.graceMinutes} min grace` : ""}${shift.fromDefault ? " (company default)" : ""}`
             : "No work shift assigned, so lateness can't be measured"
         }
       />
