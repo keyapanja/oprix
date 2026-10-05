@@ -126,19 +126,22 @@ export async function importAttendanceFile(args: {
   let ignoredRows = 0;
   for (const row of rows) {
     const key = normalise(row.machineCode);
-    // A written-off code is dropped outright: it isn't a person's day, and
-    // reporting it as unclaimed every upload is the thing being written off.
+    const employeeId = resolve(row.machineCode);
+    // Resolving wins over the written-off list, deliberately. Writing a code off
+    // means "this is nobody", so the moment it belongs to somebody the note is
+    // moot — and dropping a mapped colleague's attendance because of a stale
+    // write-off would be a silent, invisible loss.
+    if (employeeId) {
+      matched.push({ employeeId, row });
+      continue;
+    }
     if (ignored.has(key)) {
       ignoredRows++;
       continue;
     }
-    const employeeId = resolve(row.machineCode);
-    if (employeeId) matched.push({ employeeId, row });
-    else {
-      const seen = unmatched.get(key);
-      if (seen) seen.rows++;
-      else unmatched.set(key, { code: row.machineCode, name: row.name, rows: 1 });
-    }
+    const seen = unmatched.get(key);
+    if (seen) seen.rows++;
+    else unmatched.set(key, { code: row.machineCode, name: row.name, rows: 1 });
   }
 
   // The period is taken from the rows we can actually place, so a re-import

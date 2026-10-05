@@ -52,6 +52,10 @@ export async function mapMachineCode(
     await tx.employee.update({ where: { id: employeeId }, data: { machineCode: value } });
   });
 
+  // Claiming a code settles the question of whose it is, so it can't still be
+  // sitting on the written-off list saying it belongs to nobody.
+  if (value) await setCodeIgnored(session.companyId, value, false);
+
   revalidatePath("/attendance/import");
   revalidatePath("/attendance");
   return { ok: true };

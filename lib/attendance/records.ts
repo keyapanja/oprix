@@ -343,6 +343,7 @@ export async function listImports(companyId: string, take = 10) {
       rowsSaved: true,
       rowsSkipped: true,
       unmatched: true,
+      fileKey: true,
     },
   });
   return rows.map((r) => ({
@@ -355,5 +356,7 @@ export async function listImports(companyId: string, take = 10) {
     rowsSaved: r.rowsSaved,
     rowsSkipped: r.rowsSkipped,
     unmatched: r.unmatched,
+    // Whether the upload itself was kept, which is what makes a re-run possible.
+    hasFile: !!r.fileKey,
   }));
 }

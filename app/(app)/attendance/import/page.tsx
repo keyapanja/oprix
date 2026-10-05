@@ -44,7 +44,18 @@ export default async function AttendanceImportPage() {
       <div className="space-y-6">
         <ImportPanel
           people={people}
-          lastImport={last ? { id: last.id, unmatched: last.unmatched } : null}
+          lastImport={
+            last
+              ? {
+                  id: last.id,
+                  unmatched: last.unmatched,
+                  fileName: last.fileName,
+                  from: last.from,
+                  to: last.to,
+                  hasFile: last.hasFile,
+                }
+              : null
+          }
           ignoredCodes={ignoredCodes}
         />
 

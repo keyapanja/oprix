@@ -12,6 +12,8 @@ import { mapMachineCode, reimportStoredFile, setMachineCodeIgnored } from "@/lib
 import { formatISO } from "@/lib/dates";
 import type { ImportSummary, UnmatchedCode } from "@/lib/attendance/import";
 
+type ActionResult = { ok?: boolean; error?: string };
+
 // Uploading the device's report. The upload goes to a route handler rather than a
 // server action because a year's report would clear the 1 MB action body cap.
 //
@@ -25,7 +27,7 @@ export function ImportPanel({
   ignoredCodes,
 }: {
   people: { value: string; label: string }[];
-  lastImport: { id: string; unmatched: string | null } | null;
+  lastImport: { id: string; unmatched: string | null; fileName: string; from: string; to: string; hasFile: boolean } | null;
   /** Device codes written off as nobody's; never shown as unclaimed. */
   ignoredCodes: string[];
 }) {
@@ -76,7 +78,6 @@ export function ImportPanel({
             .filter((u) => u.code)
         : [])
   ).filter((u) => !written.has(u.code.trim().toLowerCase()));
-  const reimportId = summary?.importId ?? lastImport?.id ?? null;
 
   return (
     <div className="space-y-6">
@@ -130,14 +131,67 @@ export function ImportPanel({
         </CardBody>
       </Card>
 
+      {lastImport?.hasFile && (
+        <LastImport
+          lastImport={lastImport}
+          onRan={(s) => setSummary(s)}
+        />
+      )}
+
       {summary && <SummaryCard summary={summary} />}
 
-      {pending.length > 0 && (
-        <UnclaimedCodes codes={pending} people={people} reimportId={reimportId} />
-      )}
+      {pending.length > 0 && <UnclaimedCodes codes={pending} people={people} />}
 
       {ignoredCodes.length > 0 && <IgnoredCodes codes={ignoredCodes} />}
     </div>
+  );
+}
+
+/**
+ * Re-runs the file already on disk. Lives outside the unclaimed-codes card on
+ * purpose: that card disappears once every code is mapped or written off, and
+ * it used to take the only "run it again" button with it — leaving someone who
+ * had just finished mapping with no way to apply any of it.
+ */
+function LastImport({
+  lastImport,
+  onRan,
+}: {
+  lastImport: { id: string; fileName: string; from: string; to: string };
+  onRan: (summary: ImportSummary) => void;
+}) {
+  const router = useRouter();
+  const [running, setRunning] = useState(false);
+
+  async function rerun() {
+    setRunning(true);
+    const res = await reimportStoredFile(lastImport.id);
+    setRunning(false);
+    if (res.error) {
+      toast.error(res.error);
+      return;
+    }
+    if (res.summary) onRan(res.summary);
+    toast.success(`Placed ${res.summary?.rowsSaved ?? 0} days for ${res.summary?.people ?? 0} people`);
+    router.refresh();
+  }
+
+  return (
+    <Card>
+      <CardBody className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium text-content" title={lastImport.fileName}>
+            {lastImport.fileName}
+          </p>
+          <p className="mt-0.5 text-xs text-muted">
+            {formatISO(lastImport.from)} – {formatISO(lastImport.to)} · still on disk
+          </p>
+        </div>
+        <Button variant="secondary" size="sm" className="whitespace-nowrap" onClick={rerun} disabled={running}>
+          {running ? "Running…" : "Run this file again"}
+        </Button>
+      </CardBody>
+    </Card>
   );
 }
 
@@ -196,57 +250,37 @@ function SummaryCard({ summary }: { summary: ImportSummary }) {
 function UnclaimedCodes({
   codes,
   people,
-  reimportId,
 }: {
   codes: UnmatchedCode[];
   people: { value: string; label: string }[];
-  reimportId: string | null;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [done, setDone] = useState<Set<string>>(new Set());
-  const [rerunning, setRerunning] = useState(false);
 
-  function writeOff(code: string) {
+  function act(code: string, run: () => Promise<ActionResult>, said: string) {
     start(async () => {
-      const res = await setMachineCodeIgnored(code, true);
+      const res = await run();
       if (res.error) {
         toast.error(res.error);
         return;
       }
-      toast.success(`Device code ${code} written off`);
+      setDone((d) => new Set(d).add(code));
+      toast.success(said);
       router.refresh();
     });
   }
 
   function assign(code: string, employeeId: string) {
     if (!employeeId) return;
-    start(async () => {
-      const body = new FormData();
-      body.append("employeeId", employeeId);
-      body.append("code", code);
-      const res = await mapMachineCode({}, body);
-      if (res.error) {
-        toast.error(res.error);
-        return;
-      }
-      setDone((d) => new Set(d).add(code));
-      toast.success(`Device code ${code} mapped`);
-      router.refresh();
-    });
+    const body = new FormData();
+    body.append("employeeId", employeeId);
+    body.append("code", code);
+    act(code, () => mapMachineCode({}, body), `Device code ${code} mapped`);
   }
 
-  async function rerun() {
-    if (!reimportId) return;
-    setRerunning(true);
-    const res = await reimportStoredFile(reimportId);
-    setRerunning(false);
-    if (res.error) {
-      toast.error(res.error);
-      return;
-    }
-    toast.success(`Placed ${res.summary?.rowsSaved ?? 0} days for ${res.summary?.people ?? 0} people`);
-    router.refresh();
+  function writeOff(code: string) {
+    act(code, () => setMachineCodeIgnored(code, true), `Device code ${code} written off`);
   }
 
   const mapped = done.size;
@@ -256,19 +290,6 @@ function UnclaimedCodes({
       <CardHeader
         title="Device codes nobody claims"
         description="Point each one at a person and the next run places their days. The device's own test slots have nobody behind them — write those off."
-        action={
-          reimportId ? (
-            <Button
-              variant="secondary"
-              size="sm"
-              className="whitespace-nowrap"
-              onClick={rerun}
-              disabled={rerunning || mapped === 0}
-            >
-              {rerunning ? "Running…" : "Run the file again"}
-            </Button>
-          ) : undefined
-        }
       />
       <CardBody>
         <ul className="divide-y divide-line">
@@ -282,7 +303,7 @@ function UnclaimedCodes({
               {done.has(u.code) ? (
                 <Badge tone="green">
                   <Icon name="check" className="size-3" />
-                  Mapped
+                  Done
                 </Badge>
               ) : (
                 <div className="flex w-full items-center gap-2 sm:w-auto">
@@ -310,9 +331,10 @@ function UnclaimedCodes({
             </li>
           ))}
         </ul>
-        {mapped > 0 && reimportId && (
+        {mapped > 0 && (
           <p className="mt-3 text-xs text-muted">
-            {mapped} {mapped === 1 ? "code" : "codes"} mapped. Run the file again to place the days they were holding.
+            {mapped} {mapped === 1 ? "code" : "codes"} settled. Use <span className="font-medium text-content">Run this file again</span>{" "}
+            above to place the days they were holding.
           </p>
         )}
       </CardBody>
