@@ -89,6 +89,14 @@ enum AttendanceType {
   HOLIDAY
 }
 
+// Where an attendance row came from. MACHINE rows are rewritten by the next
+// import of the same date; MANUAL marks are never overwritten by one.
+enum AttendanceSource {
+  MANUAL // an admin marked it in Oprix
+  SELF // the employee punched in the app
+  MACHINE // imported from the biometric device's report
+}
+
 enum ApprovalStatus {
   PENDING
   MANAGER_APPROVED
@@ -187,6 +195,7 @@ model Company {
   ptSlabs          ProfessionalTaxSlab[]
   forms            Form[]
   formSubmissions  FormSubmission[]
+  attendanceImports AttendanceImport[]
 }
 
 // Company holidays — shown to every employee on the calendar.
@@ -455,6 +464,7 @@ model Employee {
   id              String           @id @default(cuid())
   companyId       String
   employeeCode    String
+  machineCode     String?   // enrolment id on the biometric device ("E. Code" in its export)
   fullName        String
   email           String
   personalEmail   String?   // self-service secondary/personal contact email
@@ -503,6 +513,7 @@ model Employee {
   payslips       Payslip[]
 
   @@unique([companyId, employeeCode])
+  @@unique([companyId, machineCode])
   @@index([companyId])
   @@index([managerId])
 }
@@ -824,13 +835,29 @@ model Attendance {
   clockIn        DateTime?
   clockOut       DateTime?
   location       String?
+  source         AttendanceSource @default(MANUAL)
   createdAt      DateTime       @default(now())
+
+  // ---- Biometric-device import (source = MACHINE) -------------------------
+  // The device's own figures are kept verbatim beside ours so the UI can show
+  // "the machine said X, we read Y" instead of silently picking one. Oprix
+  // recomputes from punchLog using the employee's work shift + grace minutes.
+  importId       String?
+  shiftCode      String? // shift label the device reported, e.g. "GS" / "NS"
+  punchLog       String? // raw trail, verbatim: "09:40:in(TD),13:15:out(TD),"
+  deviceIn       String? // "09:40" as the device reported
+  deviceOut      String? // "18:00"
+  deviceWorkMin  Int? // its Work Dur. in minutes
+  deviceLateMin  Int? // its LateBy in minutes (no grace applied)
+  deviceStatus   String? // its Status text: Present / Absent / ½Present / WeeklyOff …
 
   employee Employee        @relation(fields: [employeeId], references: [id])
   breaks   AttendanceBreak[]
+  import   AttendanceImport? @relation(fields: [importId], references: [id])
 
   @@unique([employeeId, date])
   @@index([companyId, date])
+  @@index([importId])
 }
 
 model AttendanceBreak {
@@ -842,6 +869,28 @@ model AttendanceBreak {
   attendance Attendance @relation(fields: [attendanceId], references: [id])
 
   @@index([attendanceId])
+}
+
+// One upload of the biometric device's "Daily Attendance Report". Kept so HR
+// can see what period is covered and which device codes nobody claimed.
+model AttendanceImport {
+  id           String   @id @default(cuid())
+  companyId    String
+  fileName     String
+  fileKey      String? // the stored upload, so a re-run needs no second upload
+  uploadedById String // userId
+  uploadedAt   DateTime @default(now())
+  fromDate     DateTime @db.Date
+  toDate       DateTime @db.Date
+  rowsRead     Int      @default(0)
+  rowsSaved    Int      @default(0)
+  rowsSkipped  Int      @default(0) // rows whose device code matched no employee
+  unmatched    String? // the unclaimed "code — name" pairs, newline-separated
+
+  company Company      @relation(fields: [companyId], references: [id])
+  records Attendance[]
+
+  @@index([companyId, uploadedAt])
 }
 
 // ============================================================

@@ -1,5 +1,18 @@
 # Attendance & punch in/out — hidden from the frontend (2026-06-17)
 
+> **Update (2026-10-05).** Attendance came back, but from the other end: the
+> **biometric device's report is imported** instead of people clocking in inside
+> Oprix. See `docs/STATUS.md` → Attendance. What that revival touched, of the
+> list below: **`attendance:manage` is no longer hidden** from the Access matrix,
+> and the work-shift **“Grace (min)” field is back** on both shift forms plus the
+> shifts table. Everything else here is still accurate — the **punch in/out clock,
+> the punch-in gate, the admin marking grid, the monthly register, the attendance
+> report, the Active/Away dot and the late-login cron remain retired**, and the
+> restore notes below still apply to them. `Attendance.clockIn`/`clockOut` are now
+> written by the importer (first and last scan of the day), so they hold device
+> data rather than in-app punches.
+
+
 The attendance feature was retired from the UI in two phases on 2026-06-17:
 **(1)** the self-service **punch in / out** clock, then **(2)** the whole
 **attendance module** (admin grid, monthly register, attendance report, and the

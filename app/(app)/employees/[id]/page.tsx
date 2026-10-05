@@ -4,7 +4,7 @@ import Link from "next/link";
 import { BackLink } from "@/components/ui/back-link";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icons";
-import { requirePage } from "@/lib/auth/guard";
+import { requirePage, sessionCan } from "@/lib/auth/guard";
 import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/auth/permissions";
 import { Card, CardHeader, CardBody } from "@/components/ui/card";
@@ -15,6 +15,7 @@ import { DeleteEmployeeButton } from "@/components/employees/delete-employee-but
 import { ResendInvite } from "@/components/employees/resend-invite";
 import { EmployeeRole } from "@/components/employees/employee-role";
 import { AppraisalEdit } from "@/components/employees/appraisal-edit";
+import { EmployeeTabs } from "@/components/employees/employee-tabs";
 import { computeBalances } from "@/lib/leave/balance";
 import { clientRaisedFilter } from "@/lib/tasks/client-tasks";
 import { ROLE_LABELS } from "@/lib/auth/can";
@@ -50,6 +51,9 @@ export default async function EmployeeDetailPage({
   const canViewTasks = await hasPermission(session.companyId, session.role, "task:manage");
   const canViewProjects = await hasPermission(session.companyId, session.role, "project:manage");
   const canManageLeave = await hasPermission(session.companyId, session.role, "leave:manage");
+  // sessionCan, not hasPermission: the tab has to match the gate on the
+  // attendance page itself, which also honours the Department Head bucket.
+  const canViewAttendance = await sessionCan(session, "attendance:manage");
 
   const employee = await prisma.employee.findFirst({
     where: { id, companyId: session.companyId, deletedAt: null },
@@ -225,6 +229,8 @@ export default async function EmployeeDetailPage({
           )}
         </div>
       </Card>
+
+      <EmployeeTabs employeeId={employee.id} active="overview" showAttendance={canViewAttendance} />
 
       {/* Tasks summary */}
       <Card className="mb-6">

@@ -29,6 +29,7 @@ export type EmployeeInitial = {
   designationId: string | null;
   managerId: string | null;
   workShiftId: string | null;
+  machineCode: string | null;
   locationId: string | null;
 };
 
@@ -183,6 +184,14 @@ export function EmployeeForm({
           </Field>
           <Field label="Work shift">
             <Combobox name="workShiftId" defaultValue={employee?.workShiftId ?? ""} emptyLabel="— None —" placeholder="— None —" options={toOpts(shifts)} />
+          </Field>
+
+          <Field
+            label="Punch device code"
+            htmlFor="machineCode"
+            hint="Their enrolment number on the biometric device — attendance imports match on this."
+          >
+            <Input id="machineCode" name="machineCode" placeholder="e.g. 7" defaultValue={employee?.machineCode ?? ""} />
           </Field>
         </div>
       </Card>

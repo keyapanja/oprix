@@ -94,6 +94,13 @@ export const NAV: NavItem[] = [
     children: [{ label: "New employee", href: "/employees/new", action: "employee:manage" }],
   },
   {
+    label: "Attendance",
+    href: "/attendance",
+    icon: "clock",
+    action: "attendance:manage",
+    children: [{ label: "Import device report", href: "/attendance/import", icon: "download", action: "attendance:manage" }],
+  },
+  {
     label: "Payroll",
     href: "/payroll",
     icon: "chart",

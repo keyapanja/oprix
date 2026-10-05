@@ -38,6 +38,7 @@ export default async function EditEmployeePage({
           designationId: true,
           managerId: true,
           workShiftId: true,
+          machineCode: true,
           locationId: true,
         },
       }),
@@ -86,6 +87,7 @@ export default async function EditEmployeePage({
           designationId: employee.designationId,
           managerId: employee.managerId,
           workShiftId: employee.workShiftId,
+          machineCode: employee.machineCode,
           locationId: employee.locationId,
         }}
       />

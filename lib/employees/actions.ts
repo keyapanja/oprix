@@ -29,6 +29,9 @@ const EmployeeSchema = z.object({
   managerId: z.string().optional().or(z.literal("")),
   workShiftId: z.string().optional().or(z.literal("")),
   locationId: z.string().optional().or(z.literal("")),
+  // Enrolment number on the biometric device; the only reliable join key in
+  // its report, which carries first names only.
+  machineCode: z.string().trim().max(40).optional().or(z.literal("")),
 });
 
 /** Confirm every provided foreign key belongs to this company (tenant safety). */
@@ -51,6 +54,18 @@ async function assertOwnedRefs(
     checks.push(exists(prisma.location.findFirst({ where: { id: refs.locationId, companyId }, select: { id: true } })));
   const results = await Promise.all(checks);
   return results.every(Boolean);
+}
+
+/**
+ * Device codes are unique per company, so assigning one takes it off whoever
+ * held it before rather than failing: the device reuses an enrolment slot when
+ * a joiner replaces a leaver, and a clash there is a handover, not a mistake.
+ */
+async function releaseMachineCode(companyId: string, code: string, keepId?: string): Promise<void> {
+  await prisma.employee.updateMany({
+    where: { companyId, machineCode: code, ...(keepId ? { NOT: { id: keepId } } : {}) },
+    data: { machineCode: null },
+  });
 }
 
 async function exists(p: Promise<unknown>): Promise<boolean> {
@@ -98,6 +113,7 @@ export async function createEmployee(
 
   const probationMonths = d.probationMonths ? parseInt(d.probationMonths, 10) : null;
   const employeeCode = await nextEmployeeCode(session.companyId, company.employeeCodePrefix);
+  if (d.machineCode) await releaseMachineCode(session.companyId, d.machineCode);
 
   let employee;
   try {
@@ -118,6 +134,7 @@ export async function createEmployee(
         designationId: d.designationId || null,
         managerId: d.managerId || null,
         workShiftId: d.workShiftId || null,
+        machineCode: d.machineCode || null,
         locationId,
       },
     });
@@ -170,6 +187,7 @@ export async function updateEmployee(
     select: { multiLocation: true },
   });
   const probationMonths = d.probationMonths ? parseInt(d.probationMonths, 10) : null;
+  if (d.machineCode) await releaseMachineCode(session.companyId, d.machineCode, employeeId);
 
   await prisma.employee.update({
     where: { id: employeeId },
@@ -186,6 +204,7 @@ export async function updateEmployee(
       designationId: d.designationId || null,
       managerId: d.managerId || null,
       workShiftId: d.workShiftId || null,
+      machineCode: d.machineCode || null,
       // Service is managed per project, not on the employee; left untouched.
       ...(company?.multiLocation ? { locationId: d.locationId || null } : {}),
     },

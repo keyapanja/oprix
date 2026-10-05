@@ -130,7 +130,7 @@ export function OrgTabs({
               title="Work shifts"
               bulkEntity="shift"
               bulkNoun="shift"
-              headers={["Name", "Timing", ""]}
+              headers={["Name", "Timing", "Grace", ""]}
               empty="No shifts yet."
               form={
                 <AddForm action={createShift}>
@@ -143,6 +143,9 @@ export function OrgTabs({
                   <Field label="End" htmlFor="shift-end" className="w-40">
                     <Input id="shift-end" name="endTime" type="time" defaultValue="18:00" required />
                   </Field>
+                  <Field label="Grace (min)" htmlFor="shift-grace" className="w-32" hint="late starts after this">
+                    <Input id="shift-grace" name="graceMinutes" type="number" min={0} max={240} defaultValue={0} />
+                  </Field>
                 </AddForm>
               }
               rows={shifts.map((s) => ({
@@ -150,6 +153,7 @@ export function OrgTabs({
                 cells: [
                   s.name,
                   `${s.startTime} – ${s.endTime}`,
+                  s.graceMinutes ? `${s.graceMinutes} min` : "—",
                 ],
                 delete: (
                   <div className="flex items-center justify-end gap-1">

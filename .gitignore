@@ -58,3 +58,10 @@ Thumbs.db
 
 # ---- Misc temp ----
 _*.txt
+
+# ---- Attendance device exports ----
+# Real punch-in/out records for named people. Imported through
+# /attendance/import, never committed.
+*Attendance Report*.xls
+*Attendance Report*.xlsx
+*Attendance Report*.csv

@@ -85,7 +85,7 @@ export const EDITABLE_ACTIONS: Action[] = [
   "report:view",
   "employee:read",
   "employee:manage",
-  // "attendance:manage" hidden — the punch/attendance module is paused (see docs/PUNCH-MODULE.md).
+  "attendance:manage",
   "leave:manage",
   "leave:approve",
   "leave:team-notify",
@@ -105,7 +105,7 @@ export const ACTION_LABELS: Partial<Record<Action, { label: string; description:
   "report:view": { label: "Dashboard & reports", description: "Company stats and reports" },
   "employee:read": { label: "View employees", description: "Browse the directory" },
   "employee:manage": { label: "Manage employees", description: "Add, edit, remove people" },
-  "attendance:manage": { label: "Manage attendance", description: "Mark / edit attendance" },
+  "attendance:manage": { label: "Attendance", description: "Import the punch device's reports and read anyone's attendance" },
   "leave:manage": { label: "Manage leave", description: "Leave types and requests" },
   "leave:approve": { label: "Approve leave", description: "Approve / reject leave" },
   "leave:team-notify": { label: "Team leave alerts", description: "Notify the department head when someone in their department applies for leave / WFH" },

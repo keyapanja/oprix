@@ -35,6 +35,13 @@ function ShiftForm({ shift, onDone, onCancel }: { shift: ShiftRow; onDone: () =>
           <Input id="es-end" name="endTime" type="time" defaultValue={shift.endTime} required />
         </Field>
       </div>
+      <Field
+        label="Grace period (minutes)"
+        htmlFor="es-grace"
+        hint="Arrivals within this window of the start time count as on time. Attendance measures lateness from the end of it."
+      >
+        <Input id="es-grace" name="graceMinutes" type="number" min={0} max={240} defaultValue={shift.graceMinutes} />
+      </Field>
       <div className="flex justify-end gap-2">
         <Button type="button" variant="secondary" onClick={onCancel}>Cancel</Button>
         <Button type="submit" disabled={pending}>{pending ? "Saving…" : "Save shift"}</Button>
