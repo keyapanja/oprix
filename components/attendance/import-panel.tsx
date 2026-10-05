@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { Icon } from "@/components/ui/icons";
 import { toast } from "@/components/ui/toast";
-import { mapMachineCode, reimportStoredFile } from "@/lib/attendance/admin";
+import { mapMachineCode, reimportStoredFile, setMachineCodeIgnored } from "@/lib/attendance/admin";
 import { formatISO } from "@/lib/dates";
 import type { ImportSummary, UnmatchedCode } from "@/lib/attendance/import";
 
@@ -22,9 +22,12 @@ import type { ImportSummary, UnmatchedCode } from "@/lib/attendance/import";
 export function ImportPanel({
   people,
   lastImport,
+  ignoredCodes,
 }: {
   people: { value: string; label: string }[];
   lastImport: { id: string; unmatched: string | null } | null;
+  /** Device codes written off as nobody's; never shown as unclaimed. */
+  ignoredCodes: string[];
 }) {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -57,18 +60,22 @@ export function ImportPanel({
   }
 
   // The unmatched list survives a page refresh via the stored import, so mapping
-  // codes still works after a reload or on a colleague's screen.
-  const pending: UnmatchedCode[] =
-    summary?.unmatched ??
-    (lastImport?.unmatched
-      ? lastImport.unmatched
-          .split("\n")
-          .map((line) => {
-            const [code, name] = line.split(" — ");
-            return { code: (code ?? "").trim(), name: (name ?? "").trim(), rows: 0 };
-          })
-          .filter((u) => u.code)
-      : []);
+  // codes still works after a reload or on a colleague's screen. That stored
+  // string is a snapshot, so anything written off since is filtered out here —
+  // a fresh import's own summary already excludes them.
+  const written = new Set(ignoredCodes.map((c) => c.trim().toLowerCase()));
+  const pending: UnmatchedCode[] = (
+      summary?.unmatched ??
+      (lastImport?.unmatched
+        ? lastImport.unmatched
+            .split("\n")
+            .map((line) => {
+              const [code, name] = line.split(" — ");
+              return { code: (code ?? "").trim(), name: (name ?? "").trim(), rows: 0 };
+            })
+            .filter((u) => u.code)
+        : [])
+  ).filter((u) => !written.has(u.code.trim().toLowerCase()));
   const reimportId = summary?.importId ?? lastImport?.id ?? null;
 
   return (
@@ -128,6 +135,8 @@ export function ImportPanel({
       {pending.length > 0 && (
         <UnclaimedCodes codes={pending} people={people} reimportId={reimportId} />
       )}
+
+      {ignoredCodes.length > 0 && <IgnoredCodes codes={ignoredCodes} />}
     </div>
   );
 }
@@ -155,6 +164,11 @@ function SummaryCard({ summary }: { summary: ImportSummary }) {
           ))}
         </div>
         <ul className="space-y-1 text-sm text-muted">
+          {summary.ignoredRows > 0 && (
+            <li>
+              · {summary.ignoredRows} rows belonged to device codes you&apos;ve written off, and were dropped.
+            </li>
+          )}
           {summary.restDaysSkipped > 0 && (
             <li>
               · {summary.restDaysSkipped} weekly-off rows with no scans were skipped — Oprix takes non-working days from the
@@ -193,6 +207,18 @@ function UnclaimedCodes({
   const [done, setDone] = useState<Set<string>>(new Set());
   const [rerunning, setRerunning] = useState(false);
 
+  function writeOff(code: string) {
+    start(async () => {
+      const res = await setMachineCodeIgnored(code, true);
+      if (res.error) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success(`Device code ${code} written off`);
+      router.refresh();
+    });
+  }
+
   function assign(code: string, employeeId: string) {
     if (!employeeId) return;
     start(async () => {
@@ -229,10 +255,16 @@ function UnclaimedCodes({
     <Card>
       <CardHeader
         title="Device codes nobody claims"
-        description="The device identifies people by their enrolment number. Point each one at a person and the next run places their days."
+        description="Point each one at a person and the next run places their days. The device's own test slots have nobody behind them — write those off."
         action={
           reimportId ? (
-            <Button variant="secondary" size="sm" onClick={rerun} disabled={rerunning || mapped === 0}>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="whitespace-nowrap"
+              onClick={rerun}
+              disabled={rerunning || mapped === 0}
+            >
               {rerunning ? "Running…" : "Run the file again"}
             </Button>
           ) : undefined
@@ -253,14 +285,26 @@ function UnclaimedCodes({
                   Mapped
                 </Badge>
               ) : (
-                <div className="w-64">
-                  <Combobox
-                    options={people}
-                    onChange={(id) => assign(u.code, id)}
-                    placeholder="Map to…"
-                    searchPlaceholder="Find a person…"
+                <div className="flex w-full items-center gap-2 sm:w-auto">
+                  <div className="min-w-0 flex-1 sm:w-64 sm:flex-none">
+                    <Combobox
+                      options={people}
+                      onChange={(id) => assign(u.code, id)}
+                      placeholder="Map to…"
+                      searchPlaceholder="Find a person…"
+                      disabled={pending}
+                    />
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => writeOff(u.code)}
                     disabled={pending}
-                  />
+                    className="whitespace-nowrap"
+                    title={`Stop reporting ${u.code} as unclaimed`}
+                  >
+                    Not a person
+                  </Button>
                 </div>
               )}
             </li>
@@ -271,6 +315,52 @@ function UnclaimedCodes({
             {mapped} {mapped === 1 ? "code" : "codes"} mapped. Run the file again to place the days they were holding.
           </p>
         )}
+      </CardBody>
+    </Card>
+  );
+}
+
+function IgnoredCodes({ codes }: { codes: string[] }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+
+  function restore(code: string) {
+    start(async () => {
+      const res = await setMachineCodeIgnored(code, false);
+      if (res.error) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success(`${code} will be reported again`);
+      router.refresh();
+    });
+  }
+
+  return (
+    <Card>
+      <CardHeader
+        title="Written-off device codes"
+        description="Rows under these codes are dropped on import and never reported as unclaimed. Restore one if it turns out to be a person."
+      />
+      <CardBody className="flex flex-wrap gap-2">
+        {codes.map((code) => (
+          <span
+            key={code}
+            className="inline-flex items-center gap-1.5 rounded-full bg-canvas py-1 pl-3 pr-1.5 text-xs font-medium text-muted ring-1 ring-inset ring-line-strong"
+          >
+            <span className="font-mono text-content">{code}</span>
+            <button
+              type="button"
+              onClick={() => restore(code)}
+              disabled={pending}
+              className="rounded-full p-0.5 text-faint transition-colors hover:bg-surface hover:text-content disabled:opacity-50"
+              aria-label={`Restore device code ${code}`}
+              title="Report this code again"
+            >
+              <Icon name="x" className="size-3.5" />
+            </button>
+          </span>
+        ))}
       </CardBody>
     </Card>
   );

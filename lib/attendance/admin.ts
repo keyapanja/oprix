@@ -5,7 +5,7 @@ import { z } from "zod";
 import { requireCapability } from "@/lib/auth/guard";
 import { prisma } from "@/lib/db";
 import { readUpload } from "@/lib/uploads";
-import { importAttendanceFile, type ImportSummary } from "@/lib/attendance/import";
+import { importAttendanceFile, setCodeIgnored, type ImportSummary } from "@/lib/attendance/import";
 
 // Everything on this module is a callable endpoint, so each export re-checks the
 // capability for itself rather than trusting the page that rendered the form.
@@ -54,6 +54,33 @@ export async function mapMachineCode(
 
   revalidatePath("/attendance/import");
   revalidatePath("/attendance");
+  return { ok: true };
+}
+
+const IgnoreSchema = z.object({
+  code: z.string().trim().min(1, "Missing code").max(40, "That code is too long"),
+  ignored: z.boolean(),
+});
+
+/**
+ * Write a device code off, or take it back. The device ships with test and
+ * placeholder enrolments that have no person behind them, so without this they
+ * would be reported as unclaimed after every single upload and the list would
+ * never read as "done".
+ *
+ * Reversible on purpose: a code that looks like junk today may turn out to be a
+ * colleague whose enrolment nobody recorded.
+ */
+export async function setMachineCodeIgnored(
+  code: string,
+  ignored: boolean,
+): Promise<ActionState> {
+  const session = await requireCapability("attendance:manage");
+  const parsed = IgnoreSchema.safeParse({ code, ignored });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message };
+
+  await setCodeIgnored(session.companyId, parsed.data.code, parsed.data.ignored);
+  revalidatePath("/attendance/import");
   return { ok: true };
 }
 

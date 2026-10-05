@@ -9,6 +9,7 @@ import { BackLink } from "@/components/ui/back-link";
 import { ImportPanel } from "@/components/attendance/import-panel";
 import { CodeMap } from "@/components/attendance/code-map";
 import { listImports } from "@/lib/attendance/records";
+import { getIgnoredCodes } from "@/lib/attendance/import";
 import { formatISO } from "@/lib/dates";
 
 export const metadata: Metadata = { title: "Import attendance · Oprix" };
@@ -16,13 +17,14 @@ export const metadata: Metadata = { title: "Import attendance · Oprix" };
 export default async function AttendanceImportPage() {
   const session = await requirePage("attendance:manage");
 
-  const [employees, history] = await Promise.all([
+  const [employees, history, ignoredCodes] = await Promise.all([
     prisma.employee.findMany({
       where: { companyId: session.companyId, deletedAt: null },
       orderBy: { fullName: "asc" },
       select: { id: true, fullName: true, employeeCode: true, machineCode: true },
     }),
     listImports(session.companyId, 8),
+    getIgnoredCodes(session.companyId),
   ]);
 
   const people = employees.map((e) => ({ value: e.id, label: `${e.fullName} · ${e.employeeCode}` }));
@@ -40,7 +42,11 @@ export default async function AttendanceImportPage() {
       />
 
       <div className="space-y-6">
-        <ImportPanel people={people} lastImport={last ? { id: last.id, unmatched: last.unmatched } : null} />
+        <ImportPanel
+          people={people}
+          lastImport={last ? { id: last.id, unmatched: last.unmatched } : null}
+          ignoredCodes={ignoredCodes}
+        />
 
         <CodeMap
           employees={employees.map((e) => ({

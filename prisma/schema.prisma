@@ -173,6 +173,10 @@ model Company {
   portalBadgeText      String?  // muted lead-in, e.g. "Made by"
   portalBadgeName      String?  // emphasised name, e.g. "EPIC"
   portalBadgeUrl       String?  // optional link target
+  // Punch-device enrolment numbers that belong to nobody and never will —
+  // the device's own test/placeholder slots. Newline-separated; an attendance
+  // import drops their rows instead of reporting them as unclaimed.
+  ignoredMachineCodes  String?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 

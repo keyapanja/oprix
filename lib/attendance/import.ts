@@ -37,6 +37,8 @@ export type ImportSummary = {
   rowsSaved: number;
   /** Rest days with no scans at all — the device padding its grid. Not stored. */
   restDaysSkipped: number;
+  /** Rows belonging to device codes marked as nobody's. */
+  ignoredRows: number;
   /** Rows left as an admin had marked them; the punch trail was still attached. */
   manualKept: number;
   people: number;
@@ -45,6 +47,42 @@ export type ImportSummary = {
 };
 
 type Matched = { employeeId: string; row: SheetRow };
+
+const normalise = (code: string) => code.trim().toLowerCase();
+
+/**
+ * Device codes the company has written off — the device's own test and
+ * placeholder enrolments, which have no person behind them and never will.
+ * Their rows are dropped on import rather than piling up as "unclaimed" after
+ * every upload.
+ */
+export async function getIgnoredCodes(companyId: string): Promise<string[]> {
+  const company = await prisma.company.findUnique({
+    where: { id: companyId },
+    select: { ignoredMachineCodes: true },
+  });
+  return (company?.ignoredMachineCodes ?? "")
+    .split("\n")
+    .map((c) => c.trim())
+    .filter(Boolean);
+}
+
+/** Add or remove one code from that list. Idempotent either way. */
+export async function setCodeIgnored(
+  companyId: string,
+  code: string,
+  ignored: boolean,
+): Promise<void> {
+  const target = normalise(code);
+  if (!target) return;
+  const current = await getIgnoredCodes(companyId);
+  const without = current.filter((c) => normalise(c) !== target);
+  const next = ignored ? [...without, code.trim()] : without;
+  await prisma.company.update({
+    where: { id: companyId },
+    data: { ignoredMachineCodes: next.length ? next.join("\n") : null },
+  });
+}
 
 /** Device code → employee. Falls back to the Oprix employee code when the two
  *  happen to be the same string, which saves mapping anything on a fresh setup. */
@@ -56,11 +94,11 @@ async function codeIndex(companyId: string) {
   const byMachine = new Map<string, string>();
   const byEmployeeCode = new Map<string, string>();
   for (const e of employees) {
-    if (e.machineCode) byMachine.set(e.machineCode.trim().toLowerCase(), e.id);
-    byEmployeeCode.set(e.employeeCode.trim().toLowerCase(), e.id);
+    if (e.machineCode) byMachine.set(normalise(e.machineCode), e.id);
+    byEmployeeCode.set(normalise(e.employeeCode), e.id);
   }
   return (code: string): string | null => {
-    const k = code.trim().toLowerCase();
+    const k = normalise(code);
     return byMachine.get(k) ?? byEmployeeCode.get(k) ?? null;
   };
 }
@@ -77,14 +115,26 @@ export async function importAttendanceFile(args: {
   const { rows, warnings } = readAttendanceSheet(buffer, fileName);
   if (!rows.length) throw new Error("No attendance rows were found in that file.");
 
-  const resolve = await codeIndex(companyId);
+  const [resolve, ignoredList] = await Promise.all([
+    codeIndex(companyId),
+    getIgnoredCodes(companyId),
+  ]);
+  const ignored = new Set(ignoredList.map(normalise));
+
   const matched: Matched[] = [];
   const unmatched = new Map<string, UnmatchedCode>();
+  let ignoredRows = 0;
   for (const row of rows) {
+    const key = normalise(row.machineCode);
+    // A written-off code is dropped outright: it isn't a person's day, and
+    // reporting it as unclaimed every upload is the thing being written off.
+    if (ignored.has(key)) {
+      ignoredRows++;
+      continue;
+    }
     const employeeId = resolve(row.machineCode);
     if (employeeId) matched.push({ employeeId, row });
     else {
-      const key = row.machineCode.trim().toLowerCase();
       const seen = unmatched.get(key);
       if (seen) seen.rows++;
       else unmatched.set(key, { code: row.machineCode, name: row.name, rows: 1 });
@@ -207,6 +257,7 @@ export async function importAttendanceFile(args: {
     rowsRead: rows.length,
     rowsSaved: result.saved,
     restDaysSkipped,
+    ignoredRows,
     manualKept: result.manualKept,
     people: employeeIds.length,
     unmatched: [...unmatched.values()].sort((a, b) => b.rows - a.rows),
@@ -241,17 +292,4 @@ function deviceFields(row: SheetRow, importId: string) {
     clockIn: clock(row.deviceIn, row.dateISO),
     clockOut: clock(row.deviceOut, row.dateISO),
   };
-}
-
-/** Map a device code onto an employee so the next import places its rows. */
-export async function setMachineCode(
-  companyId: string,
-  employeeId: string,
-  code: string | null,
-): Promise<void> {
-  const value = code?.trim() || null;
-  await prisma.employee.updateMany({
-    where: { id: employeeId, companyId, deletedAt: null },
-    data: { machineCode: value },
-  });
 }
