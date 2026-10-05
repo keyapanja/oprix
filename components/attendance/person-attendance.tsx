@@ -248,7 +248,13 @@ export function PersonAttendance({
           <PeriodPicker from={from} to={to} covered={data.importedRange} />
           <div className="ml-auto text-right text-xs text-muted">
             <p>
-              Lateness measured from <span className="font-medium text-content">{graceNote}</span>
+              {shift.startTime ? (
+                <>
+                  Lateness measured from <span className="font-medium text-content">{graceNote}</span>
+                </>
+              ) : (
+                <span className="font-medium text-amber-600 dark:text-amber-400">Lateness not measured — no work shift</span>
+              )}
             </p>
             <p className="mt-0.5">
               {employee.machineCode
@@ -258,6 +264,22 @@ export function PersonAttendance({
           </div>
         </CardBody>
       </Card>
+
+      {!shift.startTime && (
+        <Card>
+          <CardBody className="flex flex-wrap items-center gap-3">
+            <Badge tone="amber">No work shift</Badge>
+            <p className="min-w-0 flex-1 text-sm text-muted">
+              {employee.name}{" "}has no work shift assigned, so lateness isn&apos;t measured anywhere on this page — the
+              hours and scan times below are still accurate. Assign one on their employee record and the figures fill in
+              on the next page load.
+            </p>
+            <a href={`/employees/${employee.id}/edit`} className="text-sm font-medium text-accent-strong hover:underline">
+              Assign a shift →
+            </a>
+          </CardBody>
+        </Card>
+      )}
 
       {data.days.length === 0 ? (
         <Card>
@@ -331,11 +353,23 @@ export function PersonAttendance({
             <Tile label="Typical arrival" value={facts.median === null ? "—" : to12h(hhmm(facts.median))} note="median first scan" />
             <Tile
               label="Late arrivals"
-              value={String(facts.lateDays)}
-              note={shift.startTime ? `after ${graceNote}` : "no shift to measure against"}
-              accent={facts.lateDays > 0 ? "text-amber-600 dark:text-amber-400" : undefined}
+              // Never a 0 without a shift: that would read as "always on time"
+              // when the truth is that nothing was measured.
+              value={shift.startTime ? String(facts.lateDays) : "not measured"}
+              note={shift.startTime ? `after ${graceNote}` : "assign a work shift to get this"}
+              accent={
+                !shift.startTime
+                  ? "text-amber-600 dark:text-amber-400"
+                  : facts.lateDays > 0
+                    ? "text-amber-600 dark:text-amber-400"
+                    : undefined
+              }
             />
-            <Tile label="Average lateness" value={facts.avgLate ? hoursMin(facts.avgLate) : "—"} note="on the late days" />
+            <Tile
+              label="Average lateness"
+              value={!shift.startTime ? "—" : facts.avgLate ? hoursMin(facts.avgLate) : "—"}
+              note={shift.startTime ? "on the late days" : "no shift start to measure from"}
+            />
             <Tile
               label="Absences"
               value={String(facts.absences)}
@@ -423,7 +457,13 @@ export function PersonAttendance({
                         <td className="px-4 py-2.5 tabular-nums text-muted">{r.figures.lastOut === null ? "—" : hhmm(r.figures.lastOut)}</td>
                         <td className="px-4 py-2.5 tabular-nums text-muted">{r.figures.punches.length ? hoursMin(r.figures.spanMin) : "—"}</td>
                         <td className={cn("px-4 py-2.5 tabular-nums", r.figures.lateMin > 0 ? "font-medium text-amber-600 dark:text-amber-400" : "text-muted")}>
-                          {r.figures.lateMin > 0 ? hoursMin(r.figures.lateMin) : "—"}
+                          {!shift.startTime && r.figures.firstIn !== null ? (
+                            <span className="text-xs text-amber-600 dark:text-amber-400">no shift</span>
+                          ) : r.figures.lateMin > 0 ? (
+                            hoursMin(r.figures.lateMin)
+                          ) : (
+                            "—"
+                          )}
                         </td>
                         <td className="px-4 py-2.5"><Badge tone={meta.tone}>{meta.label}</Badge></td>
                         <td className="px-4 py-2.5 text-xs text-muted">{r.record ? r.label : "not imported"}</td>
@@ -735,8 +775,16 @@ function DayDetail({
     { label: "Away in between", value: f.awayMin === null ? "can't read" : f.awayMin ? hoursMin(f.awayMin) : "none" },
     {
       label: "Late",
-      value: f.lateMin > 0 ? hoursMin(f.lateMin) : f.firstIn === null ? "—" : "on time",
-      tone: f.lateMin > 0 ? "text-amber-600 dark:text-amber-400" : undefined,
+      value:
+        shiftWindow.startMin === null
+          ? "no shift set"
+          : f.lateMin > 0
+            ? hoursMin(f.lateMin)
+            : f.firstIn === null
+              ? "—"
+              : "on time",
+      tone:
+        shiftWindow.startMin === null || f.lateMin > 0 ? "text-amber-600 dark:text-amber-400" : undefined,
     },
     { label: "Left early by", value: f.earlyMin > 0 ? hoursMin(f.earlyMin) : "—" },
     { label: "Scans", value: String(f.punches.length) },

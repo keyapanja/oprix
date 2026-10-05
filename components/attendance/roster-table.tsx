@@ -142,8 +142,18 @@ export function RosterTable({ people, from, to }: { people: RosterPerson[]; from
                   <td className="px-4 py-3 text-right tabular-nums text-muted">{p.totalMin ? hoursMin(p.totalMin) : "—"}</td>
                   <td className="px-4 py-3 text-right tabular-nums text-muted">{avg ? hoursMin(avg) : "—"}</td>
                   <td className={cn("px-4 py-3 text-right tabular-nums", p.lateDays ? "font-medium text-amber-600 dark:text-amber-400" : "text-muted")}>
-                    {p.lateDays || "—"}
-                    {p.lateDays > 0 && <span className="ml-1 text-xs font-normal text-faint">{hoursMin(Math.round(p.lateMin / p.lateDays))} avg</span>}
+                    {!p.shiftStart ? (
+                      // Not "—": no shift means lateness was never measured, which
+                      // is a different thing from measuring it and finding none.
+                      <span className="text-xs font-medium text-amber-600 dark:text-amber-400">no shift</span>
+                    ) : (
+                      <>
+                        {p.lateDays || "—"}
+                        {p.lateDays > 0 && (
+                          <span className="ml-1 text-xs font-normal text-faint">{hoursMin(Math.round(p.lateMin / p.lateDays))} avg</span>
+                        )}
+                      </>
+                    )}
                   </td>
                   <td className={cn("px-4 py-3 text-right tabular-nums", p.absences ? "font-medium text-red-600 dark:text-red-400" : "text-muted")}>
                     {p.absences || "—"}
@@ -166,7 +176,9 @@ export function RosterTable({ people, from, to }: { people: RosterPerson[]; from
       </div>
       <p className="border-t border-line px-5 py-3 text-xs text-faint">
         Lateness is measured from each person&apos;s work-shift start plus its grace window
-        (Organization → Company → Work shifts). Hours are first scan to last.
+        (Organization → Company → Work shifts). Someone with no shift assigned shows{" "}
+        <span className="font-medium text-amber-600 dark:text-amber-400">no shift</span> rather than a count —
+        their hours are still correct. Hours are first scan to last.
       </p>
     </Card>
   );

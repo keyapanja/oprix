@@ -33,6 +33,9 @@ export default async function AttendancePage({
 
   const scanned = people.filter((p) => p.daysWorked > 0 || p.absences > 0);
   const unmapped = people.filter((p) => !p.machineCode);
+  // Only people who actually turned up matter here: a leaver with no shift and no
+  // scans isn't a gap in the data, just an empty row.
+  const shiftless = people.filter((p) => !p.shiftStart && p.daysWorked > 0);
   const totals = {
     hours: scanned.reduce((s, p) => s + p.totalMin, 0),
     late: scanned.reduce((s, p) => s + p.lateDays, 0),
@@ -95,6 +98,24 @@ export default async function AttendancePage({
                 </p>
                 <Link href="/attendance/import" className="text-sm font-medium text-accent-strong hover:underline">
                   Map codes →
+                </Link>
+              </CardBody>
+            </Card>
+          )}
+
+          {shiftless.length > 0 && (
+            <Card>
+              <CardBody className="flex flex-wrap items-center gap-3">
+                <Badge tone="amber">{shiftless.length} without a work shift</Badge>
+                <p className="min-w-0 flex-1 text-sm text-muted">
+                  No lateness is measured for {shiftless.length === 1 ? "this person" : "these people"} — their hours are
+                  right, but there&apos;s no shift start to be late against:{" "}
+                  {shiftless.slice(0, 6).map((p) => p.name).join(", ")}
+                  {shiftless.length > 6 ? ` and ${shiftless.length - 6} more` : ""}. Assign a work shift on their
+                  employee record.
+                </p>
+                <Link href="/employees" className="text-sm font-medium text-accent-strong hover:underline">
+                  Open employees →
                 </Link>
               </CardBody>
             </Card>
