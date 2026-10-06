@@ -2,7 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/db";
 import { dateAtUTC, shiftISO, todayISO } from "@/lib/dates";
 import { isWorkingDay, parseWorkWeek, type WorkWeek } from "@/lib/leave/work-week";
-import { computeDay, dayFlags, parseDeviceStatus, toMin } from "@/lib/attendance/punches";
+import { computeDay, dayFlags, parseDeviceStatus, readBreaks, toMin, type BreakRule } from "@/lib/attendance/punches";
 
 // Everything the attendance views read. The per-day arithmetic deliberately
 // isn't done here: the browser recomputes it from the punch trail (see
@@ -35,6 +35,23 @@ export type PersonShift = {
 };
 
 type ShiftRow = { name: string; startTime: string; endTime: string; graceMinutes: number } | null;
+
+/** The company's break limit as stored, switched on or not. */
+export type BreakLimit = BreakRule & { on: boolean };
+
+const BREAK_LIMIT_SELECT = { breakLimitOn: true, breakLimitMinutes: true, breakLimitCount: true } as const;
+
+function breakLimitOf(
+  c: { breakLimitOn: boolean; breakLimitMinutes: number; breakLimitCount: number } | null,
+): BreakLimit {
+  // A missing company row reads as the schema defaults, not as "no limit".
+  return { on: c?.breakLimitOn ?? true, minutes: c?.breakLimitMinutes ?? 10, count: c?.breakLimitCount ?? 2 };
+}
+
+/** The rule to judge days by — null while the limit is switched off. */
+export function ruleOf(limit: BreakLimit): BreakRule | null {
+  return limit.on ? { minutes: limit.minutes, count: limit.count } : null;
+}
 
 /**
  * The shift that applies to someone: their own, or the company default when
@@ -71,6 +88,8 @@ export type PersonAttendance = {
   /** Company holidays within the window. */
   holidays: { dateISO: string; name: string }[];
   workWeek: WorkWeek;
+  /** Days with more breaks than this are highlighted; null when switched off. */
+  breakRule: BreakRule | null;
   /** Null when no attendance has ever been imported for this company. */
   importedRange: { from: string; to: string } | null;
 };
@@ -159,6 +178,7 @@ export async function getPersonAttendance(args: {
       select: {
         workWeek: true,
         defaultWorkShift: { select: { name: true, startTime: true, endTime: true, graceMinutes: true } },
+        ...BREAK_LIMIT_SELECT,
       },
     }),
   ]);
@@ -198,6 +218,7 @@ export async function getPersonAttendance(args: {
     leaveDays,
     holidays: holidays.map((h) => ({ dateISO: iso(h.date), name: h.name })),
     workWeek: parseWorkWeek(company?.workWeek),
+    breakRule: ruleOf(breakLimitOf(company)),
     importedRange: covered,
   };
 }
@@ -231,6 +252,10 @@ export type RosterPerson = {
   lateMin: number;
   /** Days carrying something a person should look at. */
   flagged: number;
+  /** Working days certainly over the break limit. 0 while it's switched off. */
+  longBreakDays: number;
+  /** Working days a missing scan leaves undecided — counted neither way. */
+  breakUnclearDays: number;
   /** Null when nothing has been imported for them. */
   lastDay: string | null;
 };
@@ -244,7 +269,7 @@ export async function getRoster(args: {
   companyId: string;
   from: string;
   to: string;
-}): Promise<{ people: RosterPerson[]; from: string; to: string }> {
+}): Promise<{ people: RosterPerson[]; from: string; to: string; breakLimit: BreakLimit }> {
   const { companyId, from, to } = args;
   // The work calendar is loaded here too, so the roster's "late" is the same
   // number you see on opening that person — lateness is only counted on days
@@ -277,6 +302,7 @@ export async function getRoster(args: {
       select: {
         workWeek: true,
         defaultWorkShift: { select: { name: true, startTime: true, endTime: true, graceMinutes: true } },
+        ...BREAK_LIMIT_SELECT,
       },
     }),
     prisma.holiday.findMany({
@@ -296,6 +322,8 @@ export async function getRoster(args: {
   }
 
   const fallback = company?.defaultWorkShift ?? null;
+  const breakLimit = breakLimitOf(company);
+  const rule = ruleOf(breakLimit);
 
   const people: RosterPerson[] = employees.map((e) => {
     const applies = resolveShift(e.workShift, fallback);
@@ -311,11 +339,14 @@ export async function getRoster(args: {
     let lateDays = 0;
     let lateMin = 0;
     let flagged = 0;
+    let longBreakDays = 0;
+    let breakUnclearDays = 0;
     let lastDay: string | null = null;
 
     for (const r of mine) {
       const d = iso(r.date);
-      const f = computeDay(r.punchLog, { ...shift, expected: isWorkingDay(d, workWeek, holidays) });
+      const expected = isWorkingDay(d, workWeek, holidays);
+      const f = computeDay(r.punchLog, { ...shift, expected });
       const st = parseDeviceStatus(r.deviceStatus);
       if (f.punches.length) {
         daysWorked++;
@@ -334,6 +365,11 @@ export async function getRoster(args: {
       ) {
         flagged++;
       }
+      // Like lateness, only on days someone was due in: a few hours on a day off
+      // isn't a working day to police the breaks of.
+      const breaks = rule && expected ? readBreaks(f, rule) : null;
+      if (breaks?.verdict === "over") longBreakDays++;
+      else if (breaks?.verdict === "unclear") breakUnclearDays++;
       if (!lastDay || d > lastDay) lastDay = d;
     }
 
@@ -353,11 +389,13 @@ export async function getRoster(args: {
       lateDays,
       lateMin,
       flagged,
+      longBreakDays,
+      breakUnclearDays,
       lastDay,
     };
   });
 
-  return { people, from, to };
+  return { people, from, to, breakLimit };
 }
 
 /** Recent uploads, for the import screen's history. */

@@ -14,6 +14,7 @@ import { cn } from "@/lib/cn";
 import { formatISO, shiftISO, to12h, todayISO } from "@/lib/dates";
 import { isWorkingDay } from "@/lib/leave/work-week";
 import {
+  breakRuleText,
   computeDay,
   dayFlags,
   FLAG_LABELS,
@@ -21,7 +22,10 @@ import {
   hoursDec,
   hoursMin,
   parseDeviceStatus,
+  readBreaks,
   toMin,
+  type BreakReading,
+  type BreakRule,
   type DayFigures,
   type DayFlag,
 } from "@/lib/attendance/punches";
@@ -68,12 +72,15 @@ type Row = {
   record: PersonData["days"][number] | null;
   figures: DayFigures;
   flags: DayFlag[];
+  /** Held against the break limit; null when the limit is off, nobody was due
+   *  in that day, or there weren't two scans to read a break between. */
+  breaks: BreakReading | null;
   bucket: Bucket;
   /** What to show in a status cell. */
   label: string;
 };
 
-type SortKey = "date" | "in" | "out" | "hours" | "late";
+type SortKey = "date" | "in" | "out" | "hours" | "late" | "breaks";
 
 export function PersonAttendance({
   data,
@@ -83,7 +90,7 @@ export function PersonAttendance({
   people: { value: string; label: string }[];
 }) {
   const router = useRouter();
-  const { employee, shift, from, to } = data;
+  const { employee, shift, from, to, breakRule } = data;
 
   const shiftWindow = useMemo(
     () => ({
@@ -113,6 +120,8 @@ export function PersonAttendance({
             deviceWorkMin: record.deviceWorkMin,
           })
         : [];
+      // Like lateness, only on days someone was due in.
+      const breaks = breakRule && expected ? readBreaks(figures, breakRule) : null;
       const holiday = holidays.get(d) ?? null;
       const leave = leaves.get(d) ?? null;
       const device = parseDeviceStatus(record?.deviceStatus);
@@ -134,21 +143,22 @@ export function PersonAttendance({
       else if (record?.manual) label = `${device.label || "Marked by hand"} · set by hand`;
       else label = device.label || (scanned ? "Present" : "Absent");
 
-      out.push({ dateISO: d, dow: new Date(`${d}T00:00:00Z`).getUTCDay(), expected, holiday, leave, record, figures, flags, bucket, label });
+      out.push({ dateISO: d, dow: new Date(`${d}T00:00:00Z`).getUTCDay(), expected, holiday, leave, record, figures, flags, breaks, bucket, label });
     }
     return out;
-  }, [data.days, data.holidays, data.leaveDays, data.workWeek, from, to, shiftWindow]);
+  }, [data.days, data.holidays, data.leaveDays, data.workWeek, from, to, shiftWindow, breakRule]);
 
   // ---- filters ------------------------------------------------------------
   const [buckets, setBuckets] = useState<Set<Bucket>>(new Set());
   const [weekdays, setWeekdays] = useState<Set<number>>(new Set());
   const [lateOver, setLateOver] = useState("");
   const [onlyFlagged, setOnlyFlagged] = useState(false);
+  const [onlyLongBreaks, setOnlyLongBreaks] = useState(false);
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: "date", desc: true });
   const [picked, setPicked] = useState<string | null>(null);
 
   const lateThreshold = Number.isFinite(Number(lateOver)) && lateOver.trim() !== "" ? Math.max(0, Number(lateOver)) : null;
-  const filtersOn = buckets.size > 0 || weekdays.size > 0 || lateThreshold !== null || onlyFlagged;
+  const filtersOn = buckets.size > 0 || weekdays.size > 0 || lateThreshold !== null || onlyFlagged || onlyLongBreaks;
 
   const matches = useMemo(() => {
     const set = new Set<string>();
@@ -157,10 +167,11 @@ export function PersonAttendance({
       if (weekdays.size && !weekdays.has(r.dow)) continue;
       if (lateThreshold !== null && r.figures.lateMin <= lateThreshold) continue;
       if (onlyFlagged && r.flags.length === 0) continue;
+      if (onlyLongBreaks && r.breaks?.verdict !== "over") continue;
       set.add(r.dateISO);
     }
     return set;
-  }, [rows, buckets, weekdays, lateThreshold, onlyFlagged]);
+  }, [rows, buckets, weekdays, lateThreshold, onlyFlagged, onlyLongBreaks]);
 
   const kept = useMemo(() => rows.filter((r) => matches.has(r.dateISO)), [rows, matches]);
 
@@ -186,6 +197,8 @@ export function PersonAttendance({
       leaveDays: kept.filter((r) => r.bucket === "leave").length,
       restWorked: kept.filter((r) => r.bucket === "rest-worked").length,
       flagged: kept.filter((r) => r.flags.length > 0).length,
+      overBreaks: kept.filter((r) => r.breaks?.verdict === "over").length,
+      unclearBreaks: kept.filter((r) => r.breaks?.verdict === "unclear").length,
     };
   }, [kept]);
 
@@ -212,6 +225,10 @@ export function PersonAttendance({
           return r.figures.spanMin;
         case "late":
           return r.figures.lateMin;
+        case "breaks":
+          // The fewest the scans allow, so a day that's surely over outranks
+          // one that only might be.
+          return r.breaks ? r.breaks.longMin : -1;
         default:
           return 0;
       }
@@ -226,6 +243,7 @@ export function PersonAttendance({
     setWeekdays(new Set());
     setLateOver("");
     setOnlyFlagged(false);
+    setOnlyLongBreaks(false);
   };
 
   const graceNote = shift.startTime
@@ -335,6 +353,15 @@ export function PersonAttendance({
                 <Chip on={onlyFlagged} onClick={() => setOnlyFlagged(!onlyFlagged)} count={rows.filter((r) => r.flags.length > 0).length}>
                   Needs a decision
                 </Chip>
+                {breakRule && (
+                  <Chip
+                    on={onlyLongBreaks}
+                    onClick={() => setOnlyLongBreaks(!onlyLongBreaks)}
+                    count={rows.filter((r) => r.breaks?.verdict === "over").length}
+                  >
+                    Over the break limit
+                  </Chip>
+                )}
                 <div className="ml-auto flex items-center gap-3 text-xs text-muted">
                   <span>
                     {kept.length} of {rows.length} days shown
@@ -350,7 +377,9 @@ export function PersonAttendance({
           </Card>
 
           {/* ---- the numbers --------------------------------------------- */}
-          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+          {/* Five across with the break limit on, its tile spanning two, so both
+              layouts come out as whole rows. */}
+          <div className={cn("grid grid-cols-2 gap-2.5", breakRule ? "sm:grid-cols-3 lg:grid-cols-5" : "sm:grid-cols-4")}>
             <Tile label="Days worked" value={String(facts.workedDays)} note={`of ${facts.expectedDays} expected`} />
             <Tile label="Hours on site" value={hoursMin(facts.totalMin)} note="first scan to last, per day" />
             <Tile label="Average day" value={hoursMin(facts.avgMin)} note={`${facts.readable} of ${facts.workedDays} days pair in/out cleanly`} />
@@ -374,6 +403,15 @@ export function PersonAttendance({
               value={!shift.startTime ? "—" : facts.avgLate ? hoursMin(facts.avgLate) : "—"}
               note={shift.startTime ? "on the late days" : "no shift start to measure from"}
             />
+            {breakRule && (
+              <Tile
+                label="Long breaks"
+                value={String(facts.overBreaks)}
+                note={`days with ${breakRuleText(breakRule)}${facts.unclearBreaks ? ` · ${facts.unclearBreaks} more can't be told` : ""}`}
+                accent={facts.overBreaks > 0 ? "text-amber-600 dark:text-amber-400" : undefined}
+                className="col-span-2 sm:col-span-1 lg:col-span-2"
+              />
+            )}
             <Tile
               label="Absences"
               value={String(facts.absences)}
@@ -392,7 +430,7 @@ export function PersonAttendance({
           <Card>
             <CardHeader
               title="Day by day"
-              description="Hours are first scan to last. A dot marks a day where the device's own figures don't hold up."
+              description={`Hours are first scan to last. A dot marks a day where the device's own figures don't hold up${breakRule ? "; a clock, a day over the break limit" : ""}.`}
             />
             <CardBody>
               <MonthGrid rows={rows} matches={matches} dimUnmatched={filtersOn} openDate={openDate} onPick={setPicked} />
@@ -400,7 +438,7 @@ export function PersonAttendance({
           </Card>
 
           {/* ---- the open day -------------------------------------------- */}
-          {open && <DayDetail row={open} shift={shift} shiftWindow={shiftWindow} />}
+          {open && <DayDetail row={open} shift={shift} shiftWindow={shiftWindow} breakRule={breakRule} />}
 
           {/* ---- charts --------------------------------------------------- */}
           <div className="grid gap-6 xl:grid-cols-2">
@@ -430,6 +468,11 @@ export function PersonAttendance({
                     <SortTh col="out" sort={sort} onSort={setSort}>Last out</SortTh>
                     <SortTh col="hours" sort={sort} onSort={setSort}>Hours</SortTh>
                     <SortTh col="late" sort={sort} onSort={setSort}>Late</SortTh>
+                    {breakRule && (
+                      <SortTh col="breaks" sort={sort} onSort={setSort} title={`Breaks over ${breakRule.minutes} min`}>
+                        Long breaks
+                      </SortTh>
+                    )}
                     <th className="px-4 py-3">Status</th>
                     <th className="px-4 py-3">Device said</th>
                   </tr>
@@ -437,7 +480,7 @@ export function PersonAttendance({
                 <tbody className="divide-y divide-line">
                   {log.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="px-4 py-10 text-center text-sm text-muted">
+                      <td colSpan={breakRule ? 8 : 7} className="px-4 py-10 text-center text-sm text-muted">
                         No days match these filters.
                       </td>
                     </tr>
@@ -469,6 +512,17 @@ export function PersonAttendance({
                             "—"
                           )}
                         </td>
+                        {breakRule && (
+                          <td
+                            className={cn(
+                              "px-4 py-2.5 tabular-nums",
+                              r.breaks?.verdict === "over" ? "font-medium text-amber-600 dark:text-amber-400" : "text-muted",
+                            )}
+                            title={r.breaks ? breakTitle(r.breaks, breakRule) : undefined}
+                          >
+                            {breakCell(r.breaks)}
+                          </td>
+                        )}
                         <td className="px-4 py-2.5"><Badge tone={meta.tone}>{meta.label}</Badge></td>
                         <td className="px-4 py-2.5 text-xs text-muted">{r.record ? r.label : "not imported"}</td>
                       </tr>
@@ -605,9 +659,21 @@ function Chip({
   );
 }
 
-function Tile({ label, value, note, accent }: { label: string; value: string; note?: string; accent?: string }) {
+function Tile({
+  label,
+  value,
+  note,
+  accent,
+  className,
+}: {
+  label: string;
+  value: string;
+  note?: string;
+  accent?: string;
+  className?: string;
+}) {
   return (
-    <div className="rounded-xl bg-surface px-3.5 py-3 ring-1 ring-inset ring-line">
+    <div className={cn("rounded-xl bg-surface px-3.5 py-3 ring-1 ring-inset ring-line", className)}>
       <p className="text-xs text-muted">{label}</p>
       <p className={cn("mt-1 text-xl font-semibold leading-none", accent ?? "text-content")}>{value}</p>
       {note && <p className="mt-1.5 text-[11px] leading-tight text-faint">{note}</p>}
@@ -619,16 +685,18 @@ function SortTh({
   col,
   sort,
   onSort,
+  title,
   children,
 }: {
   col: SortKey;
   sort: { key: SortKey; desc: boolean };
   onSort: (s: { key: SortKey; desc: boolean }) => void;
+  title?: string;
   children: React.ReactNode;
 }) {
   const on = sort.key === col;
   return (
-    <th className="px-4 py-3">
+    <th className="px-4 py-3" title={title}>
       <button
         type="button"
         onClick={() => onSort({ key: col, desc: on ? !sort.desc : true })}
@@ -639,6 +707,28 @@ function SortTh({
       </button>
     </th>
   );
+}
+
+/**
+ * A day's long breaks in a few characters. Exact on a day that pairs cleanly;
+ * with a scan missing, only the bound that settles the verdict — "3+" for at
+ * least three, "≤ 2" for at most two, "?" when it could go either way.
+ */
+function breakCell(b: BreakReading | null): string {
+  if (!b) return "—";
+  if (b.breaks) return b.longMin ? String(b.longMin) : "—";
+  if (b.verdict === "over") return `${b.longMin}+`;
+  if (b.verdict === "within") return b.longMax ? `≤ ${b.longMax}` : "—";
+  return "?";
+}
+
+function breakTitle(b: BreakReading, rule: BreakRule): string {
+  const over = `over ${rule.minutes} min`;
+  const n = (k: number) => `${k} ${k === 1 ? "break" : "breaks"}`;
+  if (b.breaks) return `${n(b.longMin)} ${over} — the limit is ${rule.count} a day`;
+  if (b.verdict === "over") return `At least ${n(b.longMin)} ${over} — a scan is missing, but however it's read`;
+  if (b.verdict === "within") return `No more than ${n(b.longMax)} ${over} — a scan is missing, but however it's read`;
+  return `Between ${b.longMin} and ${n(b.longMax)} ${over}, depending on which scan is missing — not counted either way`;
 }
 
 // ---- calendar -------------------------------------------------------------
@@ -710,11 +800,12 @@ const CELL_TONE: Record<Bucket, string> = {
 
 function DayCell({ row, dim, open, onPick }: { row: Row; dim: boolean; open: boolean; onPick: (d: string) => void }) {
   const worked = row.figures.punches.length > 0;
+  const longBreaks = row.breaks?.verdict === "over";
   return (
     <button
       type="button"
       onClick={() => onPick(row.dateISO)}
-      title={`${formatISO(row.dateISO)} — ${row.label}`}
+      title={`${formatISO(row.dateISO)} — ${row.label}${longBreaks ? " · over the break limit" : ""}`}
       className={cn(
         "relative flex h-16 flex-col items-start justify-between rounded-lg px-2 py-1.5 text-left ring-1 ring-inset transition-all",
         CELL_TONE[row.bucket],
@@ -736,7 +827,12 @@ function DayCell({ row, dim, open, onPick }: { row: Row; dim: boolean; open: boo
           {row.bucket === "off" ? "off" : row.bucket === "holiday" ? "holiday" : row.bucket === "leave" ? "leave" : "absent"}
         </span>
       )}
-      {row.flags.length > 0 && <span className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-amber-500" />}
+      {(longBreaks || row.flags.length > 0) && (
+        <span className="absolute right-1.5 top-1 flex items-center gap-1">
+          {longBreaks && <Icon name="clock" className="size-3 text-amber-600 dark:text-amber-400" />}
+          {row.flags.length > 0 && <span className="size-1.5 rounded-full bg-amber-500" />}
+        </span>
+      )}
     </button>
   );
 }
@@ -754,10 +850,12 @@ function DayDetail({
   row,
   shift,
   shiftWindow,
+  breakRule,
 }: {
   row: Row;
   shift: PersonData["shift"];
   shiftWindow: { startMin: number | null; endMin: number | null; graceMin: number };
+  breakRule: BreakRule | null;
 }) {
   const f = row.figures;
   const device = parseDeviceStatus(row.record?.deviceStatus);
@@ -822,9 +920,9 @@ function DayDetail({
       />
       <CardBody className="space-y-5">
         {/* The day on a clock. One bar from the first scan to the last, with a
-            dot per scan — not split into in/out stretches, because the device's
-            direction labels only pair up on about half the days and splitting on
-            them invents breaks that weren't there. */}
+            dot per scan. Breaks are cut into it only on a day whose scans pair
+            cleanly — on the rest a missing scan shifts every in/out label after
+            it, and cutting on those would invent breaks that weren't there. */}
         <div>
           <div className="relative">
             {/* hour labels, positioned along the track */}
@@ -871,6 +969,19 @@ function DayDetail({
                   title={`${hhmm(f.firstIn)} – ${hhmm(f.lastOut)}`}
                 />
               )}
+              {/* breaks: a long one in amber, a short one as a gap in the bar */}
+              {breakRule &&
+                row.breaks?.breaks?.map((b) => (
+                  <div
+                    key={`break-${b.from}`}
+                    className={cn(
+                      "absolute top-1/2 h-2.5 -translate-y-1/2",
+                      b.to - b.from > breakRule.minutes ? "bg-amber-400" : "bg-canvas",
+                    )}
+                    style={{ left: `${pct(b.from)}%`, width: `${pct(b.to) - pct(b.from)}%` }}
+                    title={`Break ${to12h(hhmm(b.from))} – ${to12h(hhmm(b.to))} · ${hoursMin(b.to - b.from)}`}
+                  />
+                ))}
               {clusterScans(f.punches.map((p) => p.min)).map((group) => {
                 const at = group.reduce((a, b) => a + b, 0) / group.length;
                 const times = group.map((m) => to12h(hhmm(m))).join(", ");
@@ -912,6 +1023,18 @@ function DayDetail({
                 {hoursMin(f.lateMin)} late
               </span>
             )}
+            {breakRule && row.breaks?.breaks?.some((b) => b.to - b.from > breakRule.minutes) && (
+              <span className="inline-flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
+                <span className="h-1.5 w-4 bg-amber-400" />
+                Break over {breakRule.minutes} min
+              </span>
+            )}
+            {breakRule && row.breaks?.breaks?.some((b) => b.to - b.from <= breakRule.minutes) && (
+              <span className="inline-flex items-center gap-1.5">
+                <span className="h-1.5 w-4 rounded-sm bg-canvas ring-1 ring-inset ring-line-strong" />
+                Shorter break
+              </span>
+            )}
             {shiftWindow.startMin !== null && (
               <span className="inline-flex items-center gap-1.5">
                 <span className="h-3 w-4 rounded-sm border-x border-brand-500/40 bg-brand-500/[0.12]" />
@@ -929,6 +1052,8 @@ function DayDetail({
             </div>
           ))}
         </div>
+
+        {breakRule && <BreaksPanel row={row} rule={breakRule} />}
 
         {row.flags.length > 0 && (
           <div className="rounded-xl bg-amber-50 px-4 py-3 ring-1 ring-inset ring-amber-200 dark:bg-amber-500/10 dark:ring-amber-500/25">
@@ -968,6 +1093,88 @@ function DayDetail({
         )}
       </CardBody>
     </Card>
+  );
+}
+
+/**
+ * The day against the break limit, in words: the breaks themselves on a day
+ * that pairs cleanly, and on one that doesn't, what holds however the missing
+ * scan is read — or, when nothing does, that the day isn't counted.
+ */
+function BreaksPanel({ row, rule }: { row: Row; rule: BreakRule }) {
+  const b = row.breaks;
+  if (!b) {
+    // Scanned on a day off: say why nothing is judged rather than go quiet.
+    return !row.expected && row.figures.punches.length > 1 ? (
+      <p className="text-sm text-muted">Not a working day, so the break limit doesn&apos;t apply.</p>
+    ) : null;
+  }
+
+  const over = b.verdict === "over";
+  const len = `over ${rule.minutes} min`;
+  const limit = rule.count === 0 ? "none allowed" : `limit ${rule.count} a day`;
+  const plural = (k: number) => `${k} ${k === 1 ? "break" : "breaks"}`;
+  const slip = "A scan is missing or extra, so the breaks can't be listed";
+
+  let summary: string;
+  if (b.breaks) {
+    if (b.breaks.length === 0) summary = "No breaks — one stretch from the first scan to the last.";
+    else if (b.longMin === 0) summary = `None of the ${plural(b.breaks.length)} ran ${len}.`;
+    else summary = `${b.longMin} of ${plural(b.breaks.length)} ran ${len} (${limit}).`;
+  } else if (over) {
+    summary = `${slip} — but however they're read, at least ${b.longMin} ran ${len} (${limit}).`;
+  } else if (b.verdict === "within") {
+    summary = b.longMax
+      ? `${slip} — but however they're read, no more than ${b.longMax} ran ${len} (${limit}).`
+      : `${slip} — but however they're read, none ran ${len}.`;
+  } else {
+    summary = `A scan is missing or extra, and where it was decides it: between ${b.longMin} and ${plural(b.longMax)} ran ${len}. This day isn't counted either way.`;
+  }
+
+  return (
+    <div
+      className={cn(
+        "rounded-xl px-4 py-3 ring-1 ring-inset",
+        over
+          ? "bg-amber-50 ring-amber-200 dark:bg-amber-500/10 dark:ring-amber-500/25"
+          : "bg-canvas ring-line",
+      )}
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <p
+          className={cn(
+            "text-xs font-semibold uppercase tracking-wide",
+            over ? "text-amber-700 dark:text-amber-300" : "text-faint",
+          )}
+        >
+          Breaks
+        </p>
+        {over && <Badge tone="amber">Over the limit</Badge>}
+        {b.verdict === "unclear" && <Badge tone="gray">Can&apos;t tell</Badge>}
+      </div>
+      <p className={cn("mt-1 text-sm", over ? "text-amber-800 dark:text-amber-200" : "text-muted")}>{summary}</p>
+      {b.breaks && b.breaks.length > 0 && (
+        <ul className="mt-2.5 flex flex-wrap gap-1.5">
+          {b.breaks.map((x) => {
+            const long = x.to - x.from > rule.minutes;
+            return (
+              <li
+                key={x.from}
+                className={cn(
+                  "rounded-lg px-2 py-1 text-xs tabular-nums ring-1 ring-inset",
+                  long
+                    ? "bg-amber-100 text-amber-900 ring-amber-300 dark:bg-amber-500/15 dark:text-amber-100 dark:ring-amber-500/30"
+                    : "bg-surface text-muted ring-line",
+                )}
+              >
+                {to12h(hhmm(x.from))} – {to12h(hhmm(x.to))}
+                <span className="ml-1.5 font-semibold">{hoursMin(x.to - x.from)}</span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
   );
 }
 

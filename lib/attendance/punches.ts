@@ -88,23 +88,23 @@ export function parsePunchLog(raw: string | null | undefined): Punch[] {
 export type Session = { in: number; out: number | null };
 
 /**
- * The scans that are real events, with the device's echoes dropped.
+ * The scans that are real events, with the device's re-reads dropped.
  *
- * The device re-reads a badge a minute or two after it accepts one and writes
- * the second read with no direction — "09:15:out(TD),09:16:(TD)". Treating
- * those as events makes nonsense of any pairing: on 1 Sep, Mann's trail pairs
- * down to 51 minutes "inside" across a nine-hour day. Dropping a directionless
- * scan that lands within ECHO_MIN of the one before it takes the sample export
- * from 93 coherently-paired days to 194.
+ * The device re-reads a badge a moment after it accepts one and writes the
+ * second read with no direction — "09:15:out(TD),09:16:(TD)". It doesn't count
+ * them itself: its in/out labels simply alternate, and across the sample export
+ * they alternate cleanly on 417 of 418 days once every directionless scan is
+ * skipped — and every one of those landed 0–5 minutes after the scan before it.
+ * Treating them as events makes nonsense of any pairing: on 1 Sep, Mann's trail
+ * pairs down to 51 minutes "inside" across a nine-hour day, and a re-read just
+ * after the day's last scan gets taken for the exit, inventing a few minutes in.
  *
- * Only directionless scans are dropped, and only for pairing — the first and
- * last scan of the day are still taken from the full trail, because that is
- * what the device's own In/Out columns report.
+ * Only for pairing — the first and last scan of the day are still taken from
+ * the full trail, because that is what the device's own In/Out columns report.
  */
-const ECHO_MIN = 3;
-
 export function realScans(punches: Punch[]): Punch[] {
-  return punches.filter((p, i) => !(p.dir === null && i > 0 && p.min - punches[i - 1].min <= ECHO_MIN));
+  // A directionless first scan is kept: there's nothing before it to re-read.
+  return punches.filter((p, i) => i === 0 || p.dir !== null);
 }
 
 /**
@@ -132,9 +132,9 @@ export function pairSessions(punches: Punch[]): Session[] {
 
 /**
  * Whether the day's scans read as clean in/out pairs. Only then does the time
- * between them mean anything: on the other 54% of days the directions are too
- * garbled to say where the breaks were, and a figure derived from them would
- * look exactly as authoritative as one that isn't wrong.
+ * between them mean anything: on the other 47% of days a scan is missing (or
+ * one too many), every label after it is off by one, and a figure derived from
+ * them would look exactly as authoritative as one that isn't wrong.
  */
 export function isCoherent(sessions: Session[]): boolean {
   return sessions.length > 0 && sessions.every((x) => x.out !== null);
@@ -204,6 +204,114 @@ export function computeDay(punchLog: string | null | undefined, shift: ShiftWind
     rawLateMin: late(0),
     earlyMin: lastOut === null || endMin === null ? 0 : Math.max(0, endMin - lastOut),
   };
+}
+
+// ---- Breaks ----------------------------------------------------------------
+
+/**
+ * The company's break limit: a day is over it when it holds more than `count`
+ * breaks that each ran longer than `minutes`.
+ */
+export type BreakRule = { minutes: number; count: number };
+
+/** Out at `from`, back in at `to`. */
+export type Break = { from: number; to: number };
+
+export type BreakReading = {
+  /**
+   * The day's breaks, in order — null when the scans don't pair up, because
+   * then nobody can say which gaps were breaks and which were work.
+   */
+  breaks: Break[] | null;
+  /**
+   * How many breaks ran over the rule's length: the fewest and the most the
+   * scans allow. One number when the breaks are known.
+   */
+  longMin: number;
+  longMax: number;
+  /** "unclear" only when the answer turns on how the scans are read. */
+  verdict: "over" | "within" | "unclear";
+};
+
+/** "more than 2 breaks over 10 min" — the rule as a phrase, for labels. */
+export function breakRuleText(rule: BreakRule): string {
+  const length = `over ${rule.minutes} min`;
+  if (rule.count === 0) return `any break ${length}`;
+  return `more than ${rule.count} ${rule.count === 1 ? "break" : "breaks"} ${length}`;
+}
+
+/**
+ * Hold a day's breaks against the limit. A break is the time between an exit
+ * scan and the next entry, so lunch is a break like any other.
+ *
+ * On a day that pairs cleanly they are simply counted. On the rest a scan is
+ * missing or one too many, and because the device labels by alternating, every
+ * label after the slip is off by one — which gaps were breaks is genuinely
+ * unknown. Rather than guess, every single-slip reading is tried (a scan missed
+ * at each point in the day, or each scan being the spurious one) and the day is
+ * called over, or within, only when all of them agree. Across the sample export
+ * that settles 111 of the 171 such days without a guess among them; the other
+ * 60 are "unclear" and count neither way.
+ *
+ * Null when there's nothing to judge: fewer than two scans.
+ */
+export function readBreaks(figures: DayFigures, rule: BreakRule): BreakReading | null {
+  const t = realScans(figures.punches).map((p) => p.min);
+  if (t.length < 2) return null;
+  const isLong = (min: number) => min > rule.minutes;
+  const verdict = (lo: number, hi: number): BreakReading["verdict"] =>
+    lo > rule.count ? "over" : hi <= rule.count ? "within" : "unclear";
+
+  // Clean pairs that used every scan (a stray leading "out" is skipped by the
+  // pairing, which would otherwise pass for clean).
+  if (figures.coherent && figures.sessions.length * 2 === t.length) {
+    const s = figures.sessions;
+    const breaks = s.slice(1).map((x, i) => ({ from: s[i].out!, to: x.in }));
+    const long = breaks.filter((b) => isLong(b.to - b.from)).length;
+    return { breaks, longMin: long, longMax: long, verdict: verdict(long, long) };
+  }
+
+  let lo = Infinity;
+  let hi = -Infinity;
+  const consider = (fewest: number, most: number) => {
+    lo = Math.min(lo, fewest);
+    hi = Math.max(hi, most);
+  };
+
+  if (t.length % 2 === 1) {
+    // A scan missed just before t[j] (j = t.length: after the last one). Every
+    // scan past that point moves one place along, and odd places are exits. The
+    // gap the missing scan sits in holds a break of anything from no time to
+    // all of it, so it counts towards the most but never the fewest.
+    for (let j = 0; j <= t.length; j++) {
+      let sure = 0;
+      let maybe = 0;
+      for (let i = 0; i + 1 < t.length; i++) {
+        const gap = t[i + 1] - t[i];
+        if (i + 1 === j) {
+          if (isLong(gap)) maybe = 1;
+        } else if ((i < j ? i : i + 1) % 2 === 1 && isLong(gap)) {
+          sure++;
+        }
+      }
+      consider(sure, sure + maybe);
+    }
+    // One scan too many: drop each in turn and read the rest as clean pairs.
+    for (let k = 0; k < t.length; k++) {
+      const rest = t.filter((_, i) => i !== k);
+      let long = 0;
+      for (let i = 1; i + 1 < rest.length; i += 2) if (isLong(rest[i + 1] - rest[i])) long++;
+      consider(long, long);
+    }
+  } else {
+    // An even count that still won't pair: the labels are out of step with the
+    // clock itself (a scan written out of order). Nothing says where the breaks
+    // fell — only that there can't be more long ones than long gaps.
+    let gaps = 0;
+    for (let i = 0; i + 1 < t.length; i++) if (isLong(t[i + 1] - t[i])) gaps++;
+    consider(0, gaps);
+  }
+  return { breaks: null, longMin: lo, longMax: hi, verdict: verdict(lo, hi) };
 }
 
 // ---- The device's Status column -------------------------------------------

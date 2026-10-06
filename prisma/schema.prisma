@@ -181,6 +181,13 @@ model Company {
   // measure lateness. Resolved at read time, never copied onto employees — a
   // change here applies to everyone relying on it immediately.
   defaultWorkShiftId   String?
+  // Attendance: a day is highlighted when it holds more than breakLimitCount
+  // breaks that each ran longer than breakLimitMinutes. Applied whenever
+  // attendance is shown, never stored per day, so a change re-judges every
+  // day at once. Off leaves the minutes and count as they were.
+  breakLimitOn         Boolean  @default(true)
+  breakLimitMinutes    Int      @default(10)
+  breakLimitCount      Int      @default(2)
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 

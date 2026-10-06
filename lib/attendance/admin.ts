@@ -129,3 +129,37 @@ export async function reimportStoredFile(importId: string): Promise<ReimportStat
     return { error: err instanceof Error ? err.message : "Import failed." };
   }
 }
+
+const BreakLimitSchema = z.object({
+  on: z.boolean(),
+  minutes: z
+    .number()
+    .int("Break length must be a whole number of minutes")
+    .min(1, "A break has to run at least 1 minute to count")
+    .max(240, "Keep the break length to 240 minutes or less"),
+  count: z
+    .number()
+    .int("The number of breaks must be a whole number")
+    .min(0, "The number of breaks can't be negative")
+    .max(20, "Keep the number of breaks to 20 or fewer"),
+});
+
+/**
+ * The company's break limit: how long a break has to run, and how many of those
+ * a day can hold, before the day is highlighted. Nothing is stored per day — the
+ * limit is applied whenever attendance is read — so a change re-judges every
+ * day already imported, which is exactly what tuning it needs.
+ */
+export async function setBreakLimit(input: { on: boolean; minutes: number; count: number }): Promise<ActionState> {
+  const session = await requireCapability("attendance:manage");
+  const parsed = BreakLimitSchema.safeParse(input);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "That break limit isn't valid." };
+  const { on, minutes, count } = parsed.data;
+
+  await prisma.company.update({
+    where: { id: session.companyId },
+    data: { breakLimitOn: on, breakLimitMinutes: minutes, breakLimitCount: count },
+  });
+  revalidatePath("/attendance");
+  return { ok: true };
+}

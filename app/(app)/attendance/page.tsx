@@ -6,11 +6,12 @@ import { Card, CardBody } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icons";
-import { getRoster, importedRange } from "@/lib/attendance/records";
+import { getRoster, importedRange, ruleOf } from "@/lib/attendance/records";
 import { hoursMin } from "@/lib/attendance/punches";
 import { formatISO, shiftISO, todayISO } from "@/lib/dates";
 import { RosterTable } from "@/components/attendance/roster-table";
 import { RangeNav } from "@/components/attendance/range-nav";
+import { BreakLimitSetting } from "@/components/attendance/break-limit";
 
 export const metadata: Metadata = { title: "Attendance · Oprix" };
 
@@ -29,7 +30,8 @@ export default async function AttendancePage({
   const to = rawTo && ISO.test(rawTo) ? min(rawTo, today) : min(covered?.to ?? today, today);
   const from = rawFrom && ISO.test(rawFrom) ? min(rawFrom, to) : min(covered?.from ?? shiftISO(to, -29), to);
 
-  const { people } = await getRoster({ companyId: session.companyId, from, to });
+  const { people, breakLimit } = await getRoster({ companyId: session.companyId, from, to });
+  const breakRule = ruleOf(breakLimit);
 
   const scanned = people.filter((p) => p.daysWorked > 0 || p.absences > 0);
   const unmapped = people.filter((p) => !p.machineCode);
@@ -41,6 +43,7 @@ export default async function AttendancePage({
     late: scanned.reduce((s, p) => s + p.lateDays, 0),
     absent: scanned.reduce((s, p) => s + p.absences, 0),
     flagged: scanned.reduce((s, p) => s + p.flagged, 0),
+    longBreaks: scanned.reduce((s, p) => s + p.longBreakDays, 0),
   };
 
   return (
@@ -83,8 +86,14 @@ export default async function AttendancePage({
                 <Stat label="Late arrivals" value={String(totals.late)} tone={totals.late ? "amber" : undefined} />
                 <Stat label="Absences" value={String(totals.absent)} tone={totals.absent ? "red" : undefined} />
                 <Stat label="Need a decision" value={String(totals.flagged)} tone={totals.flagged ? "amber" : undefined} />
+                {breakRule && (
+                  <Stat label="Long breaks" value={String(totals.longBreaks)} tone={totals.longBreaks ? "amber" : undefined} />
+                )}
               </div>
             </CardBody>
+            <div className="border-t border-line px-5 py-3">
+              <BreakLimitSetting initial={breakLimit} />
+            </div>
           </Card>
 
           {unmapped.length > 0 && (
@@ -121,7 +130,7 @@ export default async function AttendancePage({
             </Card>
           )}
 
-          <RosterTable people={people} from={from} to={to} />
+          <RosterTable people={people} from={from} to={to} breakRule={breakRule} />
         </div>
       )}
     </>

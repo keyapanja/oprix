@@ -8,10 +8,10 @@ import { Icon } from "@/components/ui/icons";
 import { Input } from "@/components/ui/input";
 import { rowLinkProps, RowLink } from "@/components/ui/row-link";
 import { cn } from "@/lib/cn";
-import { hoursMin } from "@/lib/attendance/punches";
+import { breakRuleText, hoursMin, type BreakRule } from "@/lib/attendance/punches";
 import type { RosterPerson } from "@/lib/attendance/records";
 
-type Col = "name" | "days" | "hours" | "avg" | "late" | "absent" | "flagged";
+type Col = "name" | "days" | "hours" | "avg" | "late" | "breaks" | "absent" | "flagged";
 
 const COLUMNS: { key: Col; label: string; align?: "right" }[] = [
   { key: "name", label: "Person" },
@@ -19,12 +19,25 @@ const COLUMNS: { key: Col; label: string; align?: "right" }[] = [
   { key: "hours", label: "Hours", align: "right" },
   { key: "avg", label: "Avg / day", align: "right" },
   { key: "late", label: "Late", align: "right" },
+  { key: "breaks", label: "Long breaks", align: "right" },
   { key: "absent", label: "Absent", align: "right" },
   { key: "flagged", label: "Needs a look", align: "right" },
 ];
 
-export function RosterTable({ people, from, to }: { people: RosterPerson[]; from: string; to: string }) {
+export function RosterTable({
+  people,
+  from,
+  to,
+  breakRule,
+}: {
+  people: RosterPerson[];
+  from: string;
+  to: string;
+  /** Null while the break limit is switched off — the column goes with it. */
+  breakRule: BreakRule | null;
+}) {
   const router = useRouter();
+  const columns = breakRule ? COLUMNS : COLUMNS.filter((c) => c.key !== "breaks");
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<{ key: Col; desc: boolean }>({ key: "name", desc: false });
   const [hideQuiet, setHideQuiet] = useState(true);
@@ -38,6 +51,7 @@ export function RosterTable({ people, from, to }: { people: RosterPerson[]; from
         case "hours": return p.totalMin;
         case "avg": return avg(p);
         case "late": return p.lateDays;
+        case "breaks": return p.longBreakDays;
         case "absent": return p.absences;
         case "flagged": return p.flagged;
         default: return 0;
@@ -94,10 +108,14 @@ export function RosterTable({ people, from, to }: { people: RosterPerson[]; from
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wider text-faint">
-              {COLUMNS.map((c) => {
+              {columns.map((c) => {
                 const on = sort.key === c.key;
                 return (
-                  <th key={c.key} className={cn("px-4 py-3", c.align === "right" && "text-right")}>
+                  <th
+                    key={c.key}
+                    className={cn("px-4 py-3", c.align === "right" && "text-right")}
+                    title={c.key === "breaks" && breakRule ? `Days with ${breakRuleText(breakRule)}` : undefined}
+                  >
                     <button
                       type="button"
                       onClick={() => setSort({ key: c.key, desc: on ? !sort.desc : c.key !== "name" })}
@@ -114,7 +132,7 @@ export function RosterTable({ people, from, to }: { people: RosterPerson[]; from
           <tbody className="divide-y divide-line">
             {rows.length === 0 && (
               <tr>
-                <td colSpan={COLUMNS.length} className="px-4 py-12 text-center text-sm text-muted">
+                <td colSpan={columns.length} className="px-4 py-12 text-center text-sm text-muted">
                   Nobody matches that.
                 </td>
               </tr>
@@ -156,6 +174,14 @@ export function RosterTable({ people, from, to }: { people: RosterPerson[]; from
                       </>
                     )}
                   </td>
+                  {breakRule && (
+                    <td
+                      className={cn("px-4 py-3 text-right tabular-nums", p.longBreakDays ? "font-medium text-amber-600 dark:text-amber-400" : "text-muted")}
+                      title={breakTitle(p, breakRule)}
+                    >
+                      {p.longBreakDays || "—"}
+                    </td>
+                  )}
                   <td className={cn("px-4 py-3 text-right tabular-nums", p.absences ? "font-medium text-red-600 dark:text-red-400" : "text-muted")}>
                     {p.absences || "—"}
                   </td>
@@ -177,4 +203,12 @@ export function RosterTable({ people, from, to }: { people: RosterPerson[]; from
       </div>
     </Card>
   );
+}
+
+/** What the long-breaks number stands for, and what it leaves out. */
+function breakTitle(p: RosterPerson, rule: BreakRule): string | undefined {
+  const days = (n: number) => `${n} ${n === 1 ? "day" : "days"}`;
+  const unclear = p.breakUnclearDays ? `${days(p.breakUnclearDays)} can't be told — a scan is missing` : "";
+  if (!p.longBreakDays) return unclear || undefined;
+  return `${days(p.longBreakDays)} with ${breakRuleText(rule)}${unclear ? ` · ${unclear}` : ""}`;
 }
