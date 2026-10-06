@@ -470,10 +470,17 @@ export function PersonAttendance({
           <Card>
             <CardHeader
               title="Day by day"
-              description={`Hours are first scan to last. A dot marks a day where the device's own figures don't hold up${breakRule ? "; a clock, a day over the break limit" : ""}.`}
+              description={`Hours are first scan to last.${dailyStandard !== null ? ` Yellow marks a day under the ${hoursMin(dailyStandard)} standard.` : ""} A dot marks a day where the device's own figures don't hold up${breakRule ? "; a clock, a day over the break limit" : ""}.`}
             />
             <CardBody>
-              <MonthGrid rows={rows} matches={matches} dimUnmatched={filtersOn} openDate={openDate} onPick={setPicked} />
+              <MonthGrid
+                rows={rows}
+                matches={matches}
+                dimUnmatched={filtersOn}
+                openDate={openDate}
+                onPick={setPicked}
+                dailyStandard={dailyStandard}
+              />
             </CardBody>
           </Card>
 
@@ -786,12 +793,14 @@ function MonthGrid({
   dimUnmatched,
   openDate,
   onPick,
+  dailyStandard,
 }: {
   rows: Row[];
   matches: Set<string>;
   dimUnmatched: boolean;
   openDate: string | null;
   onPick: (d: string) => void;
+  dailyStandard: number | null;
 }) {
   const months = useMemo(() => {
     const map = new Map<string, Row[]>();
@@ -825,6 +834,7 @@ function MonthGrid({
                   dim={dimUnmatched && !matches.has(r.dateISO)}
                   open={r.dateISO === openDate}
                   onPick={onPick}
+                  dailyStandard={dailyStandard}
                 />
               ))}
             </div>
@@ -845,17 +855,35 @@ const CELL_TONE: Record<Bucket, string> = {
   off: "bg-canvas ring-line",
 };
 
-function DayCell({ row, dim, open, onPick }: { row: Row; dim: boolean; open: boolean; onPick: (d: string) => void }) {
+function DayCell({
+  row,
+  dim,
+  open,
+  onPick,
+  dailyStandard,
+}: {
+  row: Row;
+  dim: boolean;
+  open: boolean;
+  onPick: (d: string) => void;
+  dailyStandard: number | null;
+}) {
   const worked = row.figures.punches.length > 0;
   const longBreaks = row.breaks?.verdict === "over";
+  // A working day that came in under the standard reads yellow, like a half
+  // day — both are days short of what the shift asks for.
+  let shortNote = "";
+  if (dailyStandard !== null && row.bucket === "worked" && row.figures.spanMin < dailyStandard) {
+    shortNote = ` · ${hoursMin(dailyStandard - row.figures.spanMin)} under the ${hoursMin(dailyStandard)} standard`;
+  }
   return (
     <button
       type="button"
       onClick={() => onPick(row.dateISO)}
-      title={`${formatISO(row.dateISO)} — ${row.label}${longBreaks ? " · over the break limit" : ""}`}
+      title={`${formatISO(row.dateISO)} — ${row.label}${shortNote}${longBreaks ? " · over the break limit" : ""}`}
       className={cn(
         "relative flex h-16 flex-col items-start justify-between rounded-lg px-2 py-1.5 text-left ring-1 ring-inset transition-all",
-        CELL_TONE[row.bucket],
+        shortNote ? CELL_TONE.half : CELL_TONE[row.bucket],
         dim && "opacity-35",
         open && "ring-2 ring-brand-500",
         "hover:ring-brand-400",
