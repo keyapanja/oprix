@@ -4,11 +4,16 @@ import { Input, Textarea } from "@/components/ui/input";
 import { Combobox } from "@/components/ui/combobox";
 import { Icon } from "@/components/ui/icons";
 import { cn } from "@/lib/cn";
-import { CHIP_COLORS, CHIP_DOT, hasOptions, isInputField, newId, WIDTH_OPTIONS, type ChipColor, type CondOp, type FieldDef, type FieldOption, type RefSource } from "@/lib/forms/types";
+import { CHIP_COLORS, CHIP_DOT, hasOptions, isInputField, newId, WIDTH_OPTIONS, type ChipColor, type CondOp, type FieldDef, type FieldOption, type RefSource, type HelpPosition } from "@/lib/forms/types";
 import { RepeaterFieldsEditor } from "@/components/forms/repeater-fields-editor";
 import { FormulaEditor } from "@/components/forms/formula-editor";
 
 const TEXTY = new Set(["text", "textarea", "number", "email", "phone", "dropdown", "reference", "list"]);
+const HELP_POS_OPTS = [
+  { value: "", label: "Form default" },
+  { value: "label", label: "Below the label" },
+  { value: "field", label: "Below the field" },
+];
 const SOURCE_OPTS = [
   { value: "clients", label: "Clients" },
   { value: "projects", label: "Projects" },
@@ -124,14 +129,25 @@ export function FieldConfigPanel({
       )}
 
       {input && (
-        <label className="block">
-          <span className="mb-1 block text-xs font-medium text-muted">Help text</span>
-          <Input
-            value={field.helpText ?? ""}
-            onChange={(e) => onChange({ helpText: e.target.value })}
-            placeholder="Optional hint under the field"
-          />
-        </label>
+        <>
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-muted">Help text</span>
+            <Textarea
+              value={field.helpText ?? ""}
+              onChange={(e) => onChange({ helpText: e.target.value })}
+              placeholder="Optional hint. A little HTML is fine: <b>, <i>, <a href>, <br>, lists."
+              className="min-h-16"
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-muted">Help text position</span>
+            <Combobox
+              value={field.helpPosition ?? ""}
+              onChange={(v) => onChange({ helpPosition: (v || undefined) as HelpPosition | undefined })}
+              options={HELP_POS_OPTS}
+            />
+          </label>
+        </>
       )}
 
       {field.type === "reference" && (

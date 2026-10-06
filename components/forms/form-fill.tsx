@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icons";
 import { toast } from "@/components/ui/toast";
 import { FieldInput, type FieldValue } from "@/components/forms/field-input";
-import { computeCalc, formatCalc, isInputField, isVisible, WIDTH_SPAN_CLASS, type FieldDef, type Lookups } from "@/lib/forms/types";
+import { computeCalc, formatCalc, isInputField, isVisible, WIDTH_SPAN_CLASS, type FieldDef, type HelpPosition, type Lookups } from "@/lib/forms/types";
 
 type SubmitResult = { ok?: boolean; error?: string; fieldErrors?: Record<string, string> };
 
@@ -16,7 +16,7 @@ export function FormFill({
   action,
   lookups,
 }: {
-  form: { id: string; title: string; description: string | null; schema: { fields: FieldDef[] } };
+  form: { id: string; title: string; description: string | null; schema: { fields: FieldDef[]; helpPosition?: HelpPosition } };
   allowMultiple: boolean;
   action: (formId: string, data: Record<string, unknown>) => Promise<SubmitResult>;
   lookups?: Lookups;
@@ -105,6 +105,7 @@ export function FormFill({
                 onChange={(v) => setValue(f.id, v)}
                 error={errors[f.id]}
                 lookups={lookups}
+                helpDefault={form.schema.helpPosition}
               />
             </div>
           ))}

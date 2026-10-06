@@ -96,12 +96,17 @@ export const CHIP_DOT: Record<ChipColor, string> = {
 /** Chip colour classes for a value, defaulting to gray. */
 export const chipClass = (color?: string | null): string => CHIP_CLASSES[(color as ChipColor)] ?? CHIP_CLASSES.gray;
 
+/** Where a field's help text sits: under the label, or under the control. */
+export type HelpPosition = "label" | "field";
+export const HELP_POSITION_DEFAULT: HelpPosition = "field";
+
 export type FieldDef = {
   id: string; // stable key — used in submission data; never reused
   type: FieldType;
   label: string;
   placeholder?: string;
-  helpText?: string;
+  helpText?: string; // may hold a little HTML — sanitised at render, see lib/forms/sanitize-html.ts
+  helpPosition?: HelpPosition; // unset = the form's default
   required?: boolean;
   options?: FieldOption[]; // dropdown / multiselect / radio / checkbox
   source?: RefSource; // reference
@@ -122,6 +127,8 @@ export type FormSchema = {
   fields: FieldDef[];
   /** Default entries grouping the builder set: "" (none), "__submitter", or a field id. */
   defaultGroupBy?: string;
+  /** Where help text sits for fields that don't say. Unset = under the control. */
+  helpPosition?: HelpPosition;
 };
 
 // ---- Value model ----------------------------------------------------------
@@ -249,7 +256,8 @@ const FieldDefZ: z.ZodType<FieldDef> = z.lazy(() =>
     type: TypeZ,
     label: z.string().trim().min(1, "Field label is required").max(20000),
     placeholder: z.string().trim().max(200).optional(),
-    helpText: z.string().trim().max(500).optional(),
+    helpText: z.string().trim().max(2000).optional(), // room for a little markup
+    helpPosition: z.enum(["label", "field"]).optional(),
     required: z.boolean().optional(),
     options: z.array(OptionZ).max(100).optional(),
     source: SourceZ.optional(),
@@ -288,6 +296,7 @@ const FieldDefZ: z.ZodType<FieldDef> = z.lazy(() =>
 export const FormSchemaZ = z.object({
   fields: z.array(FieldDefZ).max(200),
   defaultGroupBy: z.string().max(40).optional(),
+  helpPosition: z.enum(["label", "field"]).optional(),
 });
 
 /** Parse a stored Form.schema Json into a typed FormSchema (never throws). */

@@ -25,8 +25,7 @@ import {
   makeField,
   type FieldDef,
   type FieldMeta,
-  type FieldType,
-} from "@/lib/forms/types";
+  type FieldType, type HelpPosition } from "@/lib/forms/types";
 import { EDITABLE_ROLES, ROLE_LABELS } from "@/lib/auth/can";
 import { WEEKDAY_LABELS, type FormNotifySchedule, type ScheduleFrequency } from "@/lib/forms/schedule";
 import { FieldInput } from "@/components/forms/field-input";
@@ -38,6 +37,7 @@ import { Combobox } from "@/components/ui/combobox";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Icon } from "@/components/ui/icons";
 import { BackLink } from "@/components/ui/back-link";
+import { PublicLink } from "@/components/forms/public-link";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/cn";
 
@@ -46,15 +46,24 @@ type Initial = {
   title: string;
   description: string | null;
   status: "DRAFT" | "PUBLISHED" | "CLOSED";
-  schema: { fields: FieldDef[]; defaultGroupBy?: string };
+  schema: { fields: FieldDef[]; defaultGroupBy?: string; helpPosition?: HelpPosition };
   audienceRoles: string[];
   viewAllRoles: string[];
   portalEnabled: boolean;
   allowMultiple: boolean;
   inMenu: boolean;
+  publicEnabled: boolean;
+  publicToken: string | null;
+  dedupeFieldId: string | null;
   notifyEnabled: boolean;
   notifySchedule: FormNotifySchedule | null;
 };
+
+const HELP_POS_DEFAULT_OPTS = [
+  { value: "", label: "Below the field" },
+  { value: "label", label: "Below the label" },
+  { value: "field", label: "Below the field" },
+];
 
 const STATUS_OPTS = [
   { value: "DRAFT", label: "Draft" },
@@ -147,6 +156,9 @@ export function FormBuilder({ initial }: { initial: Initial }) {
   const [portalEnabled, setPortalEnabled] = useState(initial.portalEnabled);
   const [allowMultiple, setAllowMultiple] = useState(initial.allowMultiple);
   const [inMenu, setInMenu] = useState(initial.inMenu);
+  const [publicEnabled, setPublicEnabled] = useState(initial.publicEnabled);
+  const [dedupeFieldId, setDedupeFieldId] = useState(initial.dedupeFieldId ?? "");
+  const [helpPosition, setHelpPosition] = useState<HelpPosition | "">(initial.schema.helpPosition ?? "");
   const [defaultGroupBy, setDefaultGroupBy] = useState(initial.schema.defaultGroupBy ?? "");
   const [notifyEnabled, setNotifyEnabled] = useState(initial.notifyEnabled);
   const [notifyFreq, setNotifyFreq] = useState<ScheduleFrequency>(initial.notifySchedule?.frequency ?? "WEEKLY");
@@ -239,12 +251,14 @@ export function FormBuilder({ initial }: { initial: Initial }) {
         id: initial.id,
         title: title.trim(),
         description: description.trim() || null,
-        schema: { fields, defaultGroupBy: defaultGroupBy || undefined },
+        schema: { fields, defaultGroupBy: defaultGroupBy || undefined, helpPosition: helpPosition || undefined },
         audienceRoles,
         viewAllRoles,
         portalEnabled,
         allowMultiple,
         inMenu,
+        publicEnabled,
+        dedupeFieldId: dedupeFieldId || null,
         status,
         notifyEnabled,
         notifySchedule,
@@ -259,6 +273,12 @@ export function FormBuilder({ initial }: { initial: Initial }) {
   }
 
   const overlayMeta = activeId?.startsWith("palette:") ? fieldMeta(activeId.slice(8) as FieldType) : null;
+  const dedupeChoices = [
+    { value: "", label: "Allow duplicates" },
+    ...fields
+      .filter((f) => f.type === "email" || f.type === "phone" || f.type === "text")
+      .map((f) => ({ value: f.id, label: `Block repeats of "${f.label}"` })),
+  ];
   const groupChoices = [
     { value: "", label: "No grouping" },
     { value: "__submitter", label: "Submitter" },
@@ -371,6 +391,11 @@ export function FormBuilder({ initial }: { initial: Initial }) {
                   <Combobox value={defaultGroupBy} onChange={setDefaultGroupBy} options={groupChoices} />
                   <span className="mt-1 block text-xs text-muted">How the entries table groups by default — viewers can still change it.</span>
                 </label>
+                <label className="block">
+                  <span className="mb-1 block text-xs font-medium text-muted">Help text position</span>
+                  <Combobox value={helpPosition} onChange={(v) => setHelpPosition(v as HelpPosition | "")} options={HELP_POS_DEFAULT_OPTS} />
+                  <span className="mt-1 block text-xs text-muted">For fields that don&apos;t set their own.</span>
+                </label>
 
                 <div className="border-t border-line pt-3">
                   <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-faint">Who can fill this</p>
@@ -399,6 +424,35 @@ export function FormBuilder({ initial }: { initial: Initial }) {
                       onChange={(e) => setPortalEnabled(e.target.checked)}
                       className="size-4 rounded border-line-strong text-brand-600 focus:ring-brand-500"
                     />
+                  </label>
+                </div>
+
+                <div className="space-y-2 border-t border-line pt-3">
+                  <label className="flex items-center justify-between text-sm text-content">
+                    <span>
+                      Public link
+                      <span className="mt-0.5 block text-xs font-normal text-muted">
+                        Anyone with the link can fill this without signing in.
+                      </span>
+                    </span>
+                    <input
+                      type="checkbox"
+                      checked={publicEnabled}
+                      onChange={(e) => setPublicEnabled(e.target.checked)}
+                      className="size-4 rounded border-line-strong text-brand-600 focus:ring-brand-500"
+                    />
+                  </label>
+                  {publicEnabled && (
+                    <PublicLink formId={initial.id} token={initial.publicToken} published={status === "PUBLISHED"} />
+                  )}
+                  <label className="block">
+                    <span className="mb-1 block text-xs font-medium text-muted">Duplicate entries</span>
+                    <Combobox value={dedupeFieldId} onChange={setDedupeFieldId} options={dedupeChoices} />
+                    <span className="mt-1 block text-xs text-muted">
+                      {dedupeFieldId
+                        ? "A second entry with the same answer here is refused."
+                        : "Pick an email or phone field to refuse repeat entries from the same person."}
+                    </span>
                   </label>
                 </div>
 

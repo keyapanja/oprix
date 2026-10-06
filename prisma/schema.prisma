@@ -1254,6 +1254,15 @@ model Form {
   portalEnabled Boolean    @default(false)
   allowMultiple Boolean    @default(true) // can one person submit more than once?
   inMenu        Boolean    @default(false) // pin the entries page as a sidebar sub-item under Forms
+  // Public access: anyone with the link can fill the form without signing in.
+  // The token is the whole secret — the form id is never the public handle, so
+  // the link can be revoked by minting a new token without touching the form.
+  publicEnabled Boolean    @default(false)
+  publicToken   String? // indexed, not @unique: 144 random bits can't collide, and a
+  //                       unique constraint stalls the boot-time `db push` on a y/N prompt
+  // Field whose answer identifies a respondent (an email or phone field). When
+  // set, a second entry with the same normalised answer is refused.
+  dedupeFieldId String?
   // Scheduled "please fill this out" reminders to the audience roles.
   notifyEnabled    Boolean @default(false)
   notifySchedule   Json? // { frequency, time, weekday?, monthday?, date? } — see lib/forms/schedule.ts
@@ -1268,6 +1277,7 @@ model Form {
   submissions FormSubmission[]
 
   @@index([companyId])
+  @@index([publicToken])
 }
 
 // One filled-in entry. Answers live in `data`, keyed by field id (repeater rows
@@ -1279,6 +1289,10 @@ model FormSubmission {
   data                Json // { [fieldId]: value }
   submittedByUserId   String? // staff submitter (userId)
   submittedByClientId String? // portal submitter (clientId)
+  // Normalised answer to the form's dedupeFieldId at submit time, so a repeat
+  // can be found with an index lookup instead of a JSON scan. Both submitter
+  // ids null = an anonymous entry through the public link.
+  dedupeKey           String?
   editedAt            DateTime? // last time the answers were edited after submission
   editedById          String? // userId who last edited (full history in ActivityLog)
   deletedAt           DateTime?
@@ -1291,4 +1305,5 @@ model FormSubmission {
 
   @@index([companyId])
   @@index([formId])
+  @@index([formId, dedupeKey])
 }

@@ -9,6 +9,11 @@ import { jwtVerify } from "jose";
 
 const COOKIE_NAME = "oprix_session";
 const PUBLIC_PATHS = ["/login", "/set-password", "/forgot-password"];
+// Reachable by anyone, signed in or not. Unlike PUBLIC_PATHS these never
+// redirect a signed-in user to their home — a form manager has to be able to
+// open their own public link to check it. "/fill/" keeps its slash: a bare
+// "/f" prefix would also match "/forms".
+const OPEN_PATHS = ["/fill/"];
 
 function secret(): Uint8Array {
   return new TextEncoder().encode(process.env.AUTH_SECRET ?? "");
@@ -58,6 +63,7 @@ export async function proxy(req: NextRequest) {
   // /login. It must stay reachable even with a stale-but-valid JWT, or the
   // role/portal redirects below would bounce a deactivated user in a loop.
   if (pathname === "/logout") return NextResponse.next();
+  if (OPEN_PATHS.some((p) => pathname.startsWith(p))) return NextResponse.next();
 
   const isPublic = PUBLIC_PATHS.some((p) => pathname.startsWith(p));
   const session = await readSession(req);

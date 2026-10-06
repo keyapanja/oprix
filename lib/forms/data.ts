@@ -170,6 +170,7 @@ export async function listSubmissions(
       submitterName:
         (r.submittedByUserId && userName.get(r.submittedByUserId)) ||
         (r.submittedByClientId && `${clientName.get(r.submittedByClientId) ?? "Client"} (client)`) ||
+        (!r.submittedByUserId && !r.submittedByClientId && "Public link") ||
         "—",
       mine: r.submittedByUserId === session.userId,
       createdAt: r.createdAt.toISOString(),
@@ -223,4 +224,26 @@ export async function companyHasPortalForms(companyId: string): Promise<boolean>
     where: { companyId, deletedAt: null, status: "PUBLISHED", portalEnabled: true },
   });
   return n > 0;
+}
+
+/**
+ * A form by its public token, for the no-login fill page. Only a published form
+ * with the link switched on resolves; everything else is a 404, which is also
+ * what a guessed token gets.
+ */
+export async function getPublicForm(token: string) {
+  if (!token || token.length > 64) return null;
+  const form = await prisma.form.findFirst({
+    where: { publicToken: token, publicEnabled: true, status: "PUBLISHED", deletedAt: null },
+    select: {
+      id: true,
+      title: true,
+      description: true,
+      schema: true,
+      allowMultiple: true,
+      company: { select: { name: true, logoUrl: true } },
+    },
+  });
+  if (!form) return null;
+  return { ...form, schema: parseSchema(form.schema) as FormSchema };
 }

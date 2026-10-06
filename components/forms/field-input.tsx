@@ -6,9 +6,24 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { Icon } from "@/components/ui/icons";
 import { cn } from "@/lib/cn";
 import { addDaysISO, chipClass, computeCalc, formatCalc, isVisible, WIDTH_SPAN_CLASS } from "@/lib/forms/types";
-import type { FieldDef, FieldValue, Lookups, RepeaterRows, ScalarValue } from "@/lib/forms/types";
+import type { FieldDef, FieldValue, HelpPosition, Lookups, RepeaterRows, ScalarValue } from "@/lib/forms/types";
+import { HELP_POSITION_DEFAULT } from "@/lib/forms/types";
+import { looksLikeHtml, sanitizeHelpHtml } from "@/lib/forms/sanitize-html";
 
 export type { FieldValue } from "@/lib/forms/types";
+
+/**
+ * A field's help text, rendered at one of its two possible positions. The
+ * builder may put a little HTML in it; that goes through the allowlist
+ * sanitiser at render time, and plain text skips innerHTML altogether.
+ */
+function Help({ field, at, fallback }: { field: FieldDef; at: HelpPosition; fallback?: HelpPosition }) {
+  if (!field.helpText) return null;
+  if ((field.helpPosition ?? fallback ?? HELP_POSITION_DEFAULT) !== at) return null;
+  const cls = at === "label" ? "-mt-0.5 mb-1.5 text-xs text-muted" : "mt-1 text-xs text-muted";
+  if (!looksLikeHtml(field.helpText)) return <p className={cls}>{field.helpText}</p>;
+  return <div className={cls} dangerouslySetInnerHTML={{ __html: sanitizeHelpHtml(field.helpText) }} />;
+}
 
 function toggle(arr: string[], v: string): string[] {
   return arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v];
@@ -27,6 +42,7 @@ export function FieldInput({
   error,
   disabled,
   lookups,
+  helpDefault,
 }: {
   field: FieldDef;
   value?: FieldValue;
@@ -34,6 +50,8 @@ export function FieldInput({
   error?: string;
   disabled?: boolean;
   lookups?: Lookups;
+  /** The form's help-text position, for fields that don't set their own. */
+  helpDefault?: HelpPosition;
 }) {
   if (field.type === "heading") {
     return <h3 className="text-base font-semibold text-content">{field.label}</h3>;
@@ -51,6 +69,7 @@ export function FieldInput({
           {field.label}
           {field.required && <span className="text-red-500"> *</span>}
         </label>
+        <Help field={field} at="label" fallback={helpDefault} />
         <label
           className={cn(
             "flex h-10 items-center rounded-xl bg-surface px-3.5 shadow-sm ring-1 ring-inset ring-line-strong",
@@ -66,7 +85,7 @@ export function FieldInput({
             className="size-5 rounded border-line-strong text-brand-600 focus:ring-brand-500"
           />
         </label>
-        {field.helpText && <p className="mt-1 text-xs text-muted">{field.helpText}</p>}
+        <Help field={field} at="field" fallback={helpDefault} />
         {error && <p className="mt-1 text-xs font-medium text-red-600 dark:text-red-400">{error}</p>}
       </div>
     );
@@ -299,8 +318,9 @@ export function FieldInput({
         {field.label}
         {field.required && <span className="text-red-500"> *</span>}
       </label>
+      <Help field={field} at="label" fallback={helpDefault} />
       {control}
-      {field.helpText && <p className="mt-1 text-xs text-muted">{field.helpText}</p>}
+      <Help field={field} at="field" fallback={helpDefault} />
       {error && <p className="mt-1 text-xs font-medium text-red-600 dark:text-red-400">{error}</p>}
     </div>
   );

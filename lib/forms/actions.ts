@@ -1,6 +1,8 @@
 "use server";
 
 import { z } from "zod";
+import { randomBytes } from "crypto";
+import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { Prisma, type Role } from "@prisma/client";
 import { prisma } from "@/lib/db";
@@ -11,6 +13,7 @@ import { FormSchemaZ, validateAnswers, parseSchema, answerToText, isInputField, 
 import { ScheduleZ } from "@/lib/forms/schedule";
 import { EDITABLE_ROLES } from "@/lib/auth/can";
 import { logActivity, actorLabel } from "@/lib/activity";
+import { rateLimited, clientIp } from "@/lib/auth/rate-limit";
 
 export type FormActionState = {
   ok?: boolean;
@@ -75,6 +78,8 @@ const UpdateZ = z.object({
   portalEnabled: z.boolean(),
   allowMultiple: z.boolean(),
   inMenu: z.boolean().optional(),
+  publicEnabled: z.boolean().optional(),
+  dedupeFieldId: z.string().max(40).nullish(),
   status: z.enum(["DRAFT", "PUBLISHED", "CLOSED"]),
   notifyEnabled: z.boolean().optional(),
   notifySchedule: ScheduleZ.nullish(),
@@ -91,6 +96,18 @@ export async function updateForm(input: UpdateFormInput): Promise<FormActionStat
   }
   const d = parsed.data;
 
+  // The duplicate rule has to point at a field that still exists on the form.
+  const dedupeFieldId =
+    d.dedupeFieldId && d.schema.fields.some((f) => f.id === d.dedupeFieldId) ? d.dedupeFieldId : null;
+  // Mint the public token the first time the link is switched on; keep it
+  // across later saves so a link already handed out keeps working.
+  const current = await prisma.form.findFirst({
+    where: { id: d.id, companyId: session.companyId, deletedAt: null },
+    select: { publicToken: true },
+  });
+  if (!current) return { error: "Form not found." };
+  const publicToken = d.publicEnabled && !current.publicToken ? newPublicToken() : current.publicToken;
+
   const audience = d.audienceRoles.filter((r) => VALID_ROLES.has(r)) as Role[];
   // You can only see "all entries" for a role that can actually access the form.
   const viewAll = d.viewAllRoles.filter((r) => VALID_ROLES.has(r) && audience.includes(r as Role)) as Role[];
@@ -106,6 +123,9 @@ export async function updateForm(input: UpdateFormInput): Promise<FormActionStat
       portalEnabled: d.portalEnabled,
       allowMultiple: d.allowMultiple,
       inMenu: !!d.inMenu,
+      publicEnabled: !!d.publicEnabled,
+      publicToken,
+      dedupeFieldId,
       status: d.status,
       notifyEnabled: !!d.notifyEnabled,
       notifySchedule: d.notifySchedule ? asJson(d.notifySchedule) : Prisma.DbNull,
@@ -172,6 +192,9 @@ export async function submitForm(
   const { ok, errors, clean } = validateAnswers(schema.fields, data);
   if (!ok) return { error: "Please fix the highlighted fields.", fieldErrors: errors };
 
+  const dedupeKey = dedupeKeyFor(form, schema.fields, clean);
+  if (await isRepeat(form.id, dedupeKey)) return { error: REPEAT_MESSAGE };
+
   if (!form.allowMultiple) {
     const existing = await prisma.formSubmission.findFirst({
       where: { formId, companyId: session.companyId, submittedByUserId: session.userId, deletedAt: null },
@@ -185,6 +208,7 @@ export async function submitForm(
       companyId: session.companyId,
       formId,
       data: asJson(clean),
+      dedupeKey,
       submittedByUserId: session.userId,
     },
   });
@@ -207,6 +231,9 @@ export async function submitPortalForm(
   const { ok, errors, clean } = validateAnswers(schema.fields, data);
   if (!ok) return { error: "Please fix the highlighted fields.", fieldErrors: errors };
 
+  const dedupeKey = dedupeKeyFor(form, schema.fields, clean);
+  if (await isRepeat(form.id, dedupeKey)) return { error: REPEAT_MESSAGE };
+
   if (!form.allowMultiple) {
     const existing = await prisma.formSubmission.findFirst({
       where: { formId, companyId: session.companyId, submittedByClientId: session.clientId, deletedAt: null },
@@ -220,6 +247,7 @@ export async function submitPortalForm(
       companyId: session.companyId,
       formId,
       data: asJson(clean),
+      dedupeKey,
       submittedByClientId: session.clientId,
     },
   });
@@ -378,4 +406,92 @@ export async function deleteSubmission(id: string): Promise<FormActionState> {
   });
   revalidatePath(`/forms/${sub.formId}/entries`);
   return { ok: true };
+}
+
+// ---- Public link ------------------------------------------------------------
+
+const REPEAT_MESSAGE = "An entry with these details has already been received.";
+
+function newPublicToken(): string {
+  return randomBytes(18).toString("base64url");
+}
+
+/** The answer that identifies a respondent, normalised so case and spacing
+ *  can't turn one person into two. Null when the form doesn't dedupe. */
+function dedupeKeyFor(
+  form: { dedupeFieldId: string | null },
+  fields: FieldDef[],
+  clean: Record<string, unknown>,
+): string | null {
+  if (!form.dedupeFieldId) return null;
+  const field = fields.find((f) => f.id === form.dedupeFieldId);
+  if (!field) return null;
+  const raw = clean[field.id];
+  if (typeof raw !== "string") return null;
+  const v = raw.trim().toLowerCase();
+  if (!v) return null;
+  // A phone number is the same number with or without its punctuation.
+  return field.type === "phone" ? v.replace(/[ ().-]/g, "") : v;
+}
+
+async function isRepeat(formId: string, dedupeKey: string | null): Promise<boolean> {
+  if (!dedupeKey) return false;
+  const hit = await prisma.formSubmission.findFirst({
+    where: { formId, dedupeKey, deletedAt: null },
+    select: { id: true },
+  });
+  return !!hit;
+}
+
+/**
+ * Dynamic-list fields draw their options from the company's clients, projects
+ * and employees. None of that belongs on a page anyone can open, so a public
+ * form is served and validated without them.
+ */
+export async function publicFields(fields: FieldDef[]): Promise<FieldDef[]> {
+  return fields.filter((f) => f.type !== "reference");
+}
+
+/** Submit through the public link — no session, so the token is the whole
+ *  authorisation and the rate limit is the only brake on a script. */
+export async function submitPublicForm(
+  token: string,
+  data: Record<string, unknown>,
+): Promise<FormActionState> {
+  const ip = clientIp(await headers());
+  if (rateLimited(`form-public:${ip}`, 20, 10 * 60_000)) {
+    return { error: "Too many submissions from this connection. Try again in a few minutes." };
+  }
+  if (!token || token.length > 64) return { error: "Form not found." };
+
+  const form = await prisma.form.findFirst({
+    where: { publicToken: token, publicEnabled: true, status: "PUBLISHED", deletedAt: null },
+  });
+  if (!form) return { error: "This form is not open." };
+
+  const fields = await publicFields(parseSchema(form.schema).fields);
+  const { ok, errors, clean } = validateAnswers(fields, data);
+  if (!ok) return { error: "Please fix the highlighted fields.", fieldErrors: errors };
+
+  const dedupeKey = dedupeKeyFor(form, fields, clean);
+  if (await isRepeat(form.id, dedupeKey)) return { error: REPEAT_MESSAGE };
+
+  await prisma.formSubmission.create({
+    data: { companyId: form.companyId, formId: form.id, data: asJson(clean), dedupeKey },
+  });
+  revalidatePath(`/forms/${form.id}/entries`);
+  return { ok: true };
+}
+
+/** Replace the public token. The old link stops working the moment this returns. */
+export async function rotatePublicLink(id: string): Promise<FormActionState & { token?: string }> {
+  const session = await requireCapability("form:manage");
+  const token = newPublicToken();
+  const res = await prisma.form.updateMany({
+    where: { id, companyId: session.companyId, deletedAt: null },
+    data: { publicToken: token },
+  });
+  if (res.count === 0) return { error: "Form not found." };
+  revalidatePath(`/forms/${id}/edit`);
+  return { ok: true, token };
 }
