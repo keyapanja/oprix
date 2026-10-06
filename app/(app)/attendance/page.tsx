@@ -7,8 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icons";
 import { getRoster, importedRange, ruleOf } from "@/lib/attendance/records";
-import { hoursMin } from "@/lib/attendance/punches";
-import { formatISO, shiftISO, todayISO } from "@/lib/dates";
+import { formatISO, todayISO } from "@/lib/dates";
 import { RosterTable } from "@/components/attendance/roster-table";
 import { RangeNav } from "@/components/attendance/range-nav";
 import { BreakLimitSetting } from "@/components/attendance/break-limit";
@@ -27,24 +26,18 @@ export default async function AttendancePage({
 
   const covered = await importedRange(session.companyId);
   const today = todayISO();
-  const to = rawTo && ISO.test(rawTo) ? min(rawTo, today) : min(covered?.to ?? today, today);
-  const from = rawFrom && ISO.test(rawFrom) ? min(rawFrom, to) : min(covered?.from ?? shiftISO(to, -29), to);
+  // This month so far by default — exactly what the picker's "This month"
+  // preset writes, so that's what it shows as selected.
+  const to = rawTo && ISO.test(rawTo) ? min(rawTo, today) : today;
+  const from = rawFrom && ISO.test(rawFrom) ? min(rawFrom, to) : min(`${today.slice(0, 7)}-01`, to);
 
   const { people, breakLimit } = await getRoster({ companyId: session.companyId, from, to });
   const breakRule = ruleOf(breakLimit);
 
-  const scanned = people.filter((p) => p.daysWorked > 0 || p.absences > 0);
   const unmapped = people.filter((p) => !p.machineCode);
   // Only people who actually turned up matter here: a leaver with no shift and no
   // scans isn't a gap in the data, just an empty row.
   const shiftless = people.filter((p) => !p.shiftStart && p.daysWorked > 0);
-  const totals = {
-    hours: scanned.reduce((s, p) => s + p.totalMin, 0),
-    late: scanned.reduce((s, p) => s + p.lateDays, 0),
-    absent: scanned.reduce((s, p) => s + p.absences, 0),
-    flagged: scanned.reduce((s, p) => s + p.flagged, 0),
-    longBreaks: scanned.reduce((s, p) => s + p.longBreakDays, 0),
-  };
 
   return (
     <>
@@ -81,15 +74,6 @@ export default async function AttendancePage({
           <Card>
             <CardBody className="flex flex-wrap items-end gap-x-6 gap-y-4">
               <RangeNav from={from} to={to} covered={covered} />
-              <div className="ml-auto flex flex-wrap gap-x-6 gap-y-2 text-sm">
-                <Stat label="On site" value={hoursMin(totals.hours)} />
-                <Stat label="Late arrivals" value={String(totals.late)} tone={totals.late ? "amber" : undefined} />
-                <Stat label="Absences" value={String(totals.absent)} tone={totals.absent ? "red" : undefined} />
-                <Stat label="Need a decision" value={String(totals.flagged)} tone={totals.flagged ? "amber" : undefined} />
-                {breakRule && (
-                  <Stat label="Long breaks" value={String(totals.longBreaks)} tone={totals.longBreaks ? "amber" : undefined} />
-                )}
-              </div>
             </CardBody>
             <div className="border-t border-line px-5 py-3">
               <BreakLimitSetting initial={breakLimit} />
@@ -134,25 +118,6 @@ export default async function AttendancePage({
         </div>
       )}
     </>
-  );
-}
-
-function Stat({ label, value, tone }: { label: string; value: string; tone?: "amber" | "red" }) {
-  return (
-    <div>
-      <p className="text-xs text-faint">{label}</p>
-      <p
-        className={
-          tone === "red"
-            ? "text-base font-semibold text-red-600 dark:text-red-400"
-            : tone === "amber"
-              ? "text-base font-semibold text-amber-600 dark:text-amber-400"
-              : "text-base font-semibold text-content"
-        }
-      >
-        {value}
-      </p>
-    </div>
   );
 }
 

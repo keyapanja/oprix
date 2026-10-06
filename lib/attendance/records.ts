@@ -88,6 +88,8 @@ export type PersonAttendance = {
   /** Company holidays within the window. */
   holidays: { dateISO: string; name: string }[];
   workWeek: WorkWeek;
+  /** The limit as stored, for the control that changes it. */
+  breakLimit: BreakLimit;
   /** Days with more breaks than this are highlighted; null when switched off. */
   breakRule: BreakRule | null;
   /** Null when no attendance has ever been imported for this company. */
@@ -135,11 +137,12 @@ export async function getPersonAttendance(args: {
   if (!employee) return null;
 
   const covered = await importedRange(companyId);
-  // Default window: everything imported, but never beyond today — a report run
-  // "to the end of the month" otherwise paints a fortnight of fake absences.
+  // Default window: this month so far, as the roster opens on. Never beyond
+  // today; days past the latest import are left out by the view, not shown as
+  // absences.
   const today = todayISO();
-  const from = args.from ?? covered?.from ?? shiftISO(today, -30);
-  const to = minISO(args.to ?? covered?.to ?? today, today);
+  const to = minISO(args.to ?? today, today);
+  const from = minISO(args.from ?? `${today.slice(0, 7)}-01`, to);
 
   const [days, leave, holidays, company] = await Promise.all([
     prisma.attendance.findMany({
@@ -183,6 +186,7 @@ export async function getPersonAttendance(args: {
     }),
   ]);
 
+  const breakLimit = breakLimitOf(company);
   const leaveDays: PersonAttendance["leaveDays"] = [];
   for (const l of leave) {
     const label = l.kind === "WFH" ? "Work from home" : (l.leaveType?.name ?? "Leave");
@@ -218,7 +222,8 @@ export async function getPersonAttendance(args: {
     leaveDays,
     holidays: holidays.map((h) => ({ dateISO: iso(h.date), name: h.name })),
     workWeek: parseWorkWeek(company?.workWeek),
-    breakRule: ruleOf(breakLimitOf(company)),
+    breakLimit,
+    breakRule: ruleOf(breakLimit),
     importedRange: covered,
   };
 }

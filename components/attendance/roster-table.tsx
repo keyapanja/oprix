@@ -133,7 +133,9 @@ export function RosterTable({
             {rows.length === 0 && (
               <tr>
                 <td colSpan={columns.length} className="px-4 py-12 text-center text-sm text-muted">
-                  Nobody matches that.
+                  {quiet === people.length && !query.trim()
+                    ? "Nothing has been imported for this period yet."
+                    : "Nobody matches that."}
                 </td>
               </tr>
             )}

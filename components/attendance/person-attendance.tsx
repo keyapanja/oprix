@@ -30,6 +30,7 @@ import {
   type DayFlag,
 } from "@/lib/attendance/punches";
 import type { PersonAttendance as PersonData } from "@/lib/attendance/records";
+import { BreakLimitSetting } from "@/components/attendance/break-limit";
 
 // The attendance tab on a person's profile.
 //
@@ -64,7 +65,6 @@ const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
 
 type Row = {
   dateISO: string;
-  dow: number;
   /** A day this person was expected in, per the company work week + holidays. */
   expected: boolean;
   holiday: string | null;
@@ -108,8 +108,14 @@ export function PersonAttendance({
     const leaves = new Map(data.leaveDays.map((l) => [l.dateISO, l]));
     const holidaySet = new Set(holidays.keys());
 
+    // Only days an import covered. Past the latest report a day isn't an
+    // absence, it just hasn't been imported yet — and "this month" nearly
+    // always runs ahead of the last report.
+    const covered = data.importedRange;
+    const first = covered && covered.from > from ? covered.from : from;
+    const last = covered && covered.to < to ? covered.to : to;
     const out: Row[] = [];
-    for (let d = from; d <= to; d = shiftISO(d, 1)) {
+    for (let d = first; d <= last; d = shiftISO(d, 1)) {
       const record = byDate.get(d) ?? null;
       const expected = isWorkingDay(d, data.workWeek, holidaySet);
       const figures = computeDay(record?.punchLog, { ...shiftWindow, expected });
@@ -143,14 +149,13 @@ export function PersonAttendance({
       else if (record?.manual) label = `${device.label || "Marked by hand"} · set by hand`;
       else label = device.label || (scanned ? "Present" : "Absent");
 
-      out.push({ dateISO: d, dow: new Date(`${d}T00:00:00Z`).getUTCDay(), expected, holiday, leave, record, figures, flags, breaks, bucket, label });
+      out.push({ dateISO: d, expected, holiday, leave, record, figures, flags, breaks, bucket, label });
     }
     return out;
-  }, [data.days, data.holidays, data.leaveDays, data.workWeek, from, to, shiftWindow, breakRule]);
+  }, [data.days, data.holidays, data.leaveDays, data.workWeek, data.importedRange, from, to, shiftWindow, breakRule]);
 
   // ---- filters ------------------------------------------------------------
   const [buckets, setBuckets] = useState<Set<Bucket>>(new Set());
-  const [weekdays, setWeekdays] = useState<Set<number>>(new Set());
   const [lateOver, setLateOver] = useState("");
   const [onlyFlagged, setOnlyFlagged] = useState(false);
   const [onlyLongBreaks, setOnlyLongBreaks] = useState(false);
@@ -158,20 +163,19 @@ export function PersonAttendance({
   const [picked, setPicked] = useState<string | null>(null);
 
   const lateThreshold = Number.isFinite(Number(lateOver)) && lateOver.trim() !== "" ? Math.max(0, Number(lateOver)) : null;
-  const filtersOn = buckets.size > 0 || weekdays.size > 0 || lateThreshold !== null || onlyFlagged || onlyLongBreaks;
+  const filtersOn = buckets.size > 0 || lateThreshold !== null || onlyFlagged || onlyLongBreaks;
 
   const matches = useMemo(() => {
     const set = new Set<string>();
     for (const r of rows) {
       if (buckets.size && !buckets.has(r.bucket)) continue;
-      if (weekdays.size && !weekdays.has(r.dow)) continue;
       if (lateThreshold !== null && r.figures.lateMin <= lateThreshold) continue;
       if (onlyFlagged && r.flags.length === 0) continue;
       if (onlyLongBreaks && r.breaks?.verdict !== "over") continue;
       set.add(r.dateISO);
     }
     return set;
-  }, [rows, buckets, weekdays, lateThreshold, onlyFlagged, onlyLongBreaks]);
+  }, [rows, buckets, lateThreshold, onlyFlagged, onlyLongBreaks]);
 
   const kept = useMemo(() => rows.filter((r) => matches.has(r.dateISO)), [rows, matches]);
 
@@ -240,7 +244,6 @@ export function PersonAttendance({
 
   const reset = () => {
     setBuckets(new Set());
-    setWeekdays(new Set());
     setLateOver("");
     setOnlyFlagged(false);
     setOnlyLongBreaks(false);
@@ -285,6 +288,11 @@ export function PersonAttendance({
             </p>
           </div>
         </CardBody>
+        {/* The same company-wide limit as on the roster: tuning it while looking
+            at one person's days re-judges them on the spot. */}
+        <div className="border-t border-line px-5 py-3">
+          <BreakLimitSetting initial={data.breakLimit} />
+        </div>
       </Card>
 
       {!shift.startTime && (
@@ -328,13 +336,6 @@ export function PersonAttendance({
                     count={rows.filter((r) => r.bucket === b.key).length}
                   >
                     {b.label}
-                  </Chip>
-                ))}
-              </ChipRow>
-              <ChipRow label="Weekday">
-                {WEEK_ORDER.map((d) => (
-                  <Chip key={d} on={weekdays.has(d)} onClick={() => setWeekdays(toggled(weekdays, d))}>
-                    {DOW_LABELS[d]}
                   </Chip>
                 ))}
               </ChipRow>
