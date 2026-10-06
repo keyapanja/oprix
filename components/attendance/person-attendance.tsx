@@ -231,6 +231,10 @@ export function PersonAttendance({
     const due = kept.filter((r) => r.standard !== null);
     const share = (r: Row) => (r.leave ? (r.leave.half ? 0.5 : 0) : 1);
     const standardDays = due.reduce((n, r) => n + share(r), 0);
+    // Counted apart so the note reads "21 days × 8h + 1 half day", in step with
+    // the days-worked tile, which counts a half day's leave as a day due in.
+    const fullDays = due.filter((r) => share(r) === 1).length;
+    const halfDays = due.filter((r) => share(r) === 0.5).length;
     const standardTotal = due.reduce((n, r) => n + share(r) * r.standard!, 0);
     // One figure when every working day asks the same, so a note can say "× 8h".
     const dailies = new Set(due.map((r) => r.standard!));
@@ -251,6 +255,8 @@ export function PersonAttendance({
       overBreaks: kept.filter((r) => r.breaks?.verdict === "over").length,
       unclearBreaks: kept.filter((r) => r.breaks?.verdict === "unclear").length,
       standardDays,
+      fullDays,
+      halfDays,
       standardMin: shift.startTime ? Math.round(standardTotal) : null,
       uniformDaily: dailies.size === 1 ? [...dailies][0] : null,
     };
@@ -445,9 +451,11 @@ export function PersonAttendance({
               note={
                 facts.standardMin === null
                   ? "first scan to last, per day"
-                  : facts.uniformDaily !== null
-                    ? `of ${hoursMin(facts.standardMin)} · ${dayCount(facts.standardDays)} × ${hoursMin(facts.uniformDaily)}`
-                    : `of ${hoursMin(facts.standardMin)} · ${dayCount(facts.standardDays)}, each at its own hours`
+                  : `of ${hoursMin(facts.standardMin)} · ${dayCount(facts.fullDays)}${
+                      facts.uniformDaily !== null ? ` × ${hoursMin(facts.uniformDaily)}` : ""
+                    }${facts.halfDays ? ` + ${facts.halfDays} half ${facts.halfDays === 1 ? "day" : "days"}` : ""}${
+                      facts.uniformDaily === null ? ", each at its own hours" : ""
+                    }`
               }
               accent={
                 facts.standardMin !== null && facts.totalMin < facts.standardMin
@@ -1438,9 +1446,9 @@ function ArrivalChart({
   );
 }
 
-/** 26 → "26 days", 25.5 → "25.5 days" (a half day's leave halves a day). */
+/** 26 → "26 days", 1 → "1 day". */
 function dayCount(n: number): string {
-  return `${Number.isInteger(n) ? n : n.toFixed(1)} ${n === 1 ? "day" : "days"}`;
+  return `${n} ${n === 1 ? "day" : "days"}`;
 }
 
 /** What the day asked for, in words: whose hours they were, and what they were. */
