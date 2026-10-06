@@ -14,6 +14,7 @@ import {
   formatCalc,
   isInputField,
   isVisible,
+  WIDTH_SPAN_CLASS,
   type FieldDef,
   type Lookups,
 } from "@/lib/forms/types";
@@ -27,6 +28,37 @@ type Entry = {
   editedAt: string | null;
   editedByName: string | null;
 };
+
+/** Past this many characters an answer reads better across the full width. */
+const WIDE_TEXT = 60;
+
+/**
+ * Two answers to a row, in form order. Long ones (lists, repeaters, anything
+ * past WIDE_TEXT) take the whole row; a short one that would otherwise sit
+ * alone — before a long answer, or last — stretches across it too, so the grid
+ * never leaves a gap and nothing moves out of the order the form asked it in.
+ */
+function answerLayout(fields: FieldDef[], data: Record<string, unknown>): { field: FieldDef; wide: boolean }[] {
+  const long = fields.map(
+    (f) => f.type === "repeater" || f.type === "list" || answerToText(f, data[f.id]).length > WIDE_TEXT,
+  );
+  const out: { field: FieldDef; wide: boolean }[] = [];
+  let rowStart = true;
+  for (let i = 0; i < fields.length; i++) {
+    if (long[i]) {
+      out.push({ field: fields[i], wide: true });
+      rowStart = true;
+    } else if (rowStart) {
+      const alone = i + 1 >= fields.length || long[i + 1];
+      out.push({ field: fields[i], wide: alone });
+      rowStart = alone;
+    } else {
+      out.push({ field: fields[i], wide: false });
+      rowStart = true;
+    }
+  }
+  return out;
+}
 
 /** Read-only display of one stored answer (repeater rows expanded). */
 function ViewValue({ field, value }: { field: FieldDef; value: unknown }) {
@@ -167,7 +199,7 @@ export function EntryDetailModal({
   }
 
   return (
-    <Modal onClose={onClose} title={editing ? "Edit entry" : "Entry"}>
+    <Modal onClose={onClose} title={editing ? "Edit entry" : "Entry"} size="xl">
       <div className="space-y-4">
         <div className="space-y-2 border-b border-line pb-3">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
@@ -231,32 +263,31 @@ export function EntryDetailModal({
         </div>
 
         {editing ? (
-          <div className="space-y-4">
+          <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-12">
             {inputFields
               .filter((f) => isVisible(f, values as Record<string, unknown>))
               .map((f) => (
+                <div key={f.id} className={WIDTH_SPAN_CLASS[f.width ?? "full"]}>
                 <FieldInput
-                  key={f.id}
                   field={f}
                   value={f.type === "calculation" ? formatCalc(f, computeCalc(f, fields, values as Record<string, unknown>)) : values[f.id]}
                   onChange={(v) => setValue(f.id, v)}
                   error={errors[f.id]}
                   lookups={lookups}
                 />
+                </div>
               ))}
           </div>
         ) : (
-          <dl className="space-y-3">
-            {inputFields
-              .filter((f) => isVisible(f, entry.data))
-              .map((f) => (
-                <div key={f.id}>
-                  <dt className="text-xs font-medium uppercase tracking-wide text-faint">{f.label}</dt>
-                  <dd className="mt-0.5">
-                    <ViewValue field={f} value={entry.data[f.id]} />
-                  </dd>
-                </div>
-              ))}
+          <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
+            {answerLayout(inputFields.filter((f) => isVisible(f, entry.data)), entry.data).map(({ field: f, wide }) => (
+              <div key={f.id} className={wide ? "sm:col-span-2" : undefined}>
+                <dt className="text-xs font-medium uppercase tracking-wide text-faint">{f.label}</dt>
+                <dd className="mt-0.5">
+                  <ViewValue field={f} value={entry.data[f.id]} />
+                </dd>
+              </div>
+            ))}
           </dl>
         )}
 

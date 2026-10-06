@@ -4,14 +4,24 @@ import { useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "@/components/ui/icons";
 
+/** Panel widths. "md" is the default every existing dialog was built for. */
+const SIZES = {
+  md: "max-w-lg",
+  lg: "max-w-2xl",
+  xl: "max-w-4xl",
+} as const;
+
 export function Modal({
   onClose,
   title,
   children,
+  size = "md",
 }: {
   onClose: () => void;
   title: ReactNode;
   children: ReactNode;
+  /** Reading-heavy dialogs (a form entry) want room; prompts don't. */
+  size?: keyof typeof SIZES;
 }) {
   // Render after mount so document.body exists; portaling escapes any
   // transformed ancestor (e.g. the page's animate-rise wrapper), which would
@@ -53,7 +63,7 @@ export function Modal({
     >
       <div className="flex min-h-full items-center justify-center p-4 sm:p-6">
         <div
-          className="animate-rise w-full max-w-lg rounded-2xl border border-line bg-surface shadow-card-hover"
+          className={`animate-rise w-full ${SIZES[size]} rounded-2xl border border-line bg-surface shadow-card-hover`}
           onMouseDown={(e) => e.stopPropagation()}
         >
           <div className="flex items-center justify-between border-b border-line px-5 py-3.5">
