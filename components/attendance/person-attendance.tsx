@@ -988,8 +988,8 @@ function monthLabel(month: string): string {
 
 /** Minutes either side of the shift (or the scans) so nothing sits on the edge. */
 const TRACK_PAD = 20;
-/** Room one punch label takes ("Out 12:45 PM" at 11px), with a little air. */
-const LABEL_PX = 76;
+/** How far either side of a punch's dot hovering still finds it, in px. */
+const DOT_REACH_PX = 12;
 
 /** An element's rendered width, kept current as it resizes. Null until mounted. */
 function useWidth<T extends HTMLElement>(): [React.RefObject<T | null>, number | null] {
@@ -1058,33 +1058,6 @@ function punchPairs(punches: Punch[]): { in: number | null; out: number | null }
   return pairs;
 }
 
-/**
- * Punch times beside the bar: ins above it, outs below, the nearer line first
- * and a second only when two would collide. Wide screens only — on a phone the
- * punch pairs under the track carry the same times.
- */
-function PunchLane({ items, dir }: { items: { min: number; at: number; line: number }[]; dir: "in" | "out" }) {
-  const lines = items.some((p) => p.line === 1) ? 2 : 1;
-  return (
-    <div className={cn("relative hidden sm:block", lines === 2 ? "h-9" : "h-5")}>
-      {items.map((p) => (
-        <span
-          key={p.min}
-          className={cn(
-            "absolute whitespace-nowrap text-[11px] font-medium tabular-nums",
-            dir === "in" ? "text-emerald-700 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400",
-            dir === "in" ? (p.line === 0 ? "bottom-1" : "bottom-5") : p.line === 0 ? "top-1" : "top-5",
-            edgeAlign(p.at),
-          )}
-          style={{ left: `${p.at}%` }}
-        >
-          {dir === "in" ? "In" : "Out"} {to12h(hhmm(p.min))}
-        </span>
-      ))}
-    </div>
-  );
-}
-
 function DayDetail({
   row,
   shift,
@@ -1107,31 +1080,29 @@ function DayDetail({
   const [lo, hi] = trackSpan(shiftWindow.startMin, shiftWindow.endMin, f.firstIn, f.lastOut);
   const pct = (min: number) => ((min - lo) / (hi - lo)) * 100;
   const pairs = punchPairs(f.punches);
-  // Ins above the bar, outs below, so a punch and the one after it never share
-  // a line. A time too close to the one before it to print without overlapping
-  // steps out to a second line; only a third in a crowd is left to its dot,
-  // which still names it on hover. "Too close" is a label's width at the
-  // track's real size, measured once it's mounted.
+  // The track's real width, measured once mounted: it spaces the hour labels
+  // and sizes each dot's hover reach.
   const [trackRef, trackWidth] = useWidth<HTMLDivElement>();
-  const gapPct = trackWidth ? (LABEL_PX / trackWidth) * 100 : 10;
   // A faint line every hour across a shift; labels every hour while there's room
   // for one, every two or three on a narrow screen.
   const pxPerHour = trackWidth ? trackWidth / ((hi - lo) / 60) : 100;
   const gridStep = hi - lo <= 13 * 60 ? 60 : 120;
   const gridHours = axisHours(lo, hi, gridStep);
   const labelHours = axisHours(lo, hi, Math.max(gridStep, pxPerHour >= 44 ? 60 : pxPerHour >= 22 ? 120 : 180));
-  const lane = (dir: "in" | "out") => {
-    const lastAt = [-Infinity, -Infinity];
-    return realScans(f.punches)
-      .filter((p) => (p.dir ?? "in") === dir)
-      .flatMap((p) => {
-        const at = pct(p.min);
-        const line = at - lastAt[0] >= gapPct ? 0 : at - lastAt[1] >= gapPct ? 1 : -1;
-        if (line < 0) return [];
-        lastAt[line] = at;
-        return [{ min: p.min, at, line }];
-      });
-  };
+  // A dot per punch — the device's re-reads left out — in green for an in and
+  // red for an out, its time shown on hover. Each owns the stretch of track
+  // nearest to it (up to DOT_REACH_PX either side), so two punches minutes
+  // apart are still two separate things to point at.
+  const reach = trackWidth ? (DOT_REACH_PX / trackWidth) * 100 : 1.2;
+  const marks = realScans(f.punches).map((p) => ({ min: p.min, dir: p.dir ?? "in", at: pct(p.min) }));
+  const dots = marks.map((m, i) => {
+    const prev = marks[i - 1];
+    const next = marks[i + 1];
+    const from = Math.max(m.at - reach, prev ? (prev.at + m.at) / 2 : -Infinity);
+    const to = Math.min(m.at + reach, next ? (m.at + next.at) / 2 : Infinity);
+    const width = Math.max(to - from, 0.2);
+    return { ...m, from, width, offset: ((m.at - from) / width) * 100 };
+  });
 
   const facts: { label: string; value: string; tone?: string }[] = [
     { label: "In", value: f.firstIn === null ? "—" : to12h(hhmm(f.firstIn)) },
@@ -1187,13 +1158,12 @@ function DayDetail({
       />
       <CardBody className="space-y-5">
         {/* The day on a clock, across its shift. One bar from the first scan to
-            the last, a dot per scan, each in-punch named above it and each
-            out-punch below. Breaks are cut into the bar only on a day whose scans
-            pair cleanly — on the rest a missing scan shifts every in/out label
-            after it, and cutting on those would invent breaks that weren't there. */}
+            the last, a dot per punch — green in, red out — that names its time
+            on hover. Breaks are cut into the bar only on a day whose scans pair
+            cleanly — on the rest a missing scan shifts every in/out label after
+            it, and cutting on those would invent breaks that weren't there. */}
         <div ref={trackRef}>
-          <PunchLane items={lane("in")} dir="in" />
-          <div className="relative h-12 overflow-hidden rounded-xl bg-canvas ring-1 ring-inset ring-line">
+          <div className="relative h-12 rounded-xl bg-canvas ring-1 ring-inset ring-line">
             {/* the shift, as one labelled band */}
             {shiftWindow.startMin !== null && shiftWindow.endMin !== null && (
               <div
@@ -1241,21 +1211,31 @@ function DayDetail({
                   title={`Break ${to12h(hhmm(b.from))} – ${to12h(hhmm(b.to))} · ${hoursMin(b.to - b.from)}`}
                 />
               ))}
-            {clusterScans(f.punches.map((p) => p.min)).map((group) => {
-              const at = group.reduce((a, b) => a + b, 0) / group.length;
-              const times = group.map((m) => to12h(hhmm(m))).join(", ");
+            {dots.map((d) => {
+              const label = `${d.dir === "in" ? "In" : "Out"} ${to12h(hhmm(d.min))}`;
               return (
                 <div
-                  key={group[0]}
+                  key={`${d.min}-${d.dir}`}
                   role="img"
-                  aria-label={`${group.length === 1 ? "Scan" : `${group.length} scans`} at ${times}`}
-                  className="group absolute top-1/2 z-10 flex size-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center hover:z-20"
-                  style={{ left: `${pct(at)}%` }}
+                  aria-label={label}
+                  className="group absolute top-1/2 z-10 h-8 -translate-y-1/2 hover:z-20"
+                  style={{ left: `${d.from}%`, width: `${d.width}%` }}
                 >
-                  <span className="size-2.5 rounded-full bg-white shadow-sm ring-2 ring-emerald-600 transition-transform group-hover:scale-125 dark:bg-surface" />
-                  <span className="pointer-events-none absolute bottom-full left-1/2 mb-1 -translate-x-1/2 whitespace-nowrap rounded-md bg-content px-2 py-1 text-[11px] font-medium text-surface opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
-                    {times}
-                    {group.length > 1 && <span className="ml-1 opacity-60">· {group.length} scans</span>}
+                  <span
+                    className={cn(
+                      "absolute top-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow-sm ring-[2.5px] transition-transform group-hover:scale-125 dark:bg-surface",
+                      d.dir === "in" ? "ring-emerald-600" : "ring-rose-500",
+                    )}
+                    style={{ left: `${d.offset}%` }}
+                  />
+                  <span
+                    className={cn(
+                      "pointer-events-none absolute bottom-full mb-1 -translate-x-1/2 whitespace-nowrap rounded-md px-2 py-1 text-[11px] font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100",
+                      d.dir === "in" ? "bg-emerald-700" : "bg-rose-600",
+                    )}
+                    style={{ left: `${d.offset}%` }}
+                  >
+                    {label}
                   </span>
                 </div>
               );
@@ -1266,7 +1246,6 @@ function DayDetail({
               </span>
             )}
           </div>
-          <PunchLane items={lane("out")} dir="out" />
           {/* hour labels along the bottom */}
           <div className="relative mt-1 h-4">
             {labelHours.map((h) => (
@@ -1310,6 +1289,18 @@ function DayDetail({
           )}
 
           <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted">
+            {dots.length > 0 && (
+              <>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="size-2.5 rounded-full bg-white ring-2 ring-emerald-600 dark:bg-surface" />
+                  In
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="size-2.5 rounded-full bg-white ring-2 ring-rose-500 dark:bg-surface" />
+                  Out
+                </span>
+              </>
+            )}
             {f.lateMin > 0 && (
               <span className="inline-flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
                 <span className="h-1.5 w-4 rounded-full bg-amber-400" />
@@ -1469,26 +1460,6 @@ function BreaksPanel({ row, rule }: { row: Row; rule: BreakRule }) {
       )}
     </div>
   );
-}
-
-/**
- * Scans close enough to draw on top of each other, merged into one dot.
- *
- * The device writes an echo 1–3 minutes after a real scan, and at this scale
- * a few minutes is a few pixels: two separate dots would sit one over the
- * other and the hidden one could never be hovered. One dot that names every
- * time it stands for keeps them all reachable.
- */
-const SCAN_CLUSTER_MIN = 8;
-
-function clusterScans(mins: number[]): number[][] {
-  const groups: number[][] = [];
-  for (const m of mins) {
-    const last = groups[groups.length - 1];
-    if (last && m - last[last.length - 1] <= SCAN_CLUSTER_MIN) last.push(m);
-    else groups.push([m]);
-  }
-  return groups;
 }
 
 /** Hour marks across the track, every `step` minutes on the hour. */
