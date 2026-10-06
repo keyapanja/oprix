@@ -101,6 +101,12 @@ export function PersonAttendance({
     [shift.startTime, shift.endTime, shift.graceMinutes],
   );
 
+  // What a day asks for: the shift's length less an hour — the lunch nobody is
+  // expected on site for — so a 9–6 shift asks for 8 hours. Null without a
+  // shift, and then nothing on this page is held against a standard.
+  const shiftLen = shiftLengthMin(shiftWindow.startMin, shiftWindow.endMin);
+  const dailyStandard = shiftLen !== null && shiftLen > LUNCH_MIN ? shiftLen - LUNCH_MIN : null;
+
   // ---- one Row per calendar day in the loaded window ----------------------
   const rows = useMemo<Row[]>(() => {
     const byDate = new Map(data.days.map((d) => [d.dateISO, d]));
@@ -188,6 +194,11 @@ export function PersonAttendance({
     const lateMin = late.reduce((s, r) => s + r.figures.lateMin, 0);
     const arrivals = worked.map((r) => r.figures.firstIn!).sort((a, b) => a - b);
     const median = arrivals.length ? arrivals[Math.floor(arrivals.length / 2)] : null;
+    // The period's standard: the daily one on every working day, half of it on a
+    // half day's approved leave (or work from home), none on a full day's.
+    const standardDays = kept
+      .filter((r) => r.expected)
+      .reduce((n, r) => n + (r.leave ? (r.leave.half ? 0.5 : 0) : 1), 0);
     return {
       workedDays: worked.length,
       expectedDays: kept.filter((r) => r.expected).length,
@@ -203,8 +214,10 @@ export function PersonAttendance({
       flagged: kept.filter((r) => r.flags.length > 0).length,
       overBreaks: kept.filter((r) => r.breaks?.verdict === "over").length,
       unclearBreaks: kept.filter((r) => r.breaks?.verdict === "unclear").length,
+      standardDays,
+      standardMin: dailyStandard === null ? null : Math.round(standardDays * dailyStandard),
     };
-  }, [kept]);
+  }, [kept, dailyStandard]);
 
   // ---- the open day -------------------------------------------------------
   const byDate = useMemo(() => new Map(rows.map((r) => [r.dateISO, r])), [rows]);
@@ -382,8 +395,34 @@ export function PersonAttendance({
               layouts come out as whole rows. */}
           <div className={cn("grid grid-cols-2 gap-2.5", breakRule ? "sm:grid-cols-3 lg:grid-cols-5" : "sm:grid-cols-4")}>
             <Tile label="Days worked" value={String(facts.workedDays)} note={`of ${facts.expectedDays} expected`} />
-            <Tile label="Hours on site" value={hoursMin(facts.totalMin)} note="first scan to last, per day" />
-            <Tile label="Average day" value={hoursMin(facts.avgMin)} note={`${facts.readable} of ${facts.workedDays} days pair in/out cleanly`} />
+            <Tile
+              label="Hours on site"
+              value={hoursMin(facts.totalMin)}
+              note={
+                facts.standardMin !== null && dailyStandard !== null
+                  ? `of ${hoursMin(facts.standardMin)} · ${dayCount(facts.standardDays)} × ${hoursMin(dailyStandard)}`
+                  : "first scan to last, per day"
+              }
+              accent={
+                facts.standardMin !== null && facts.totalMin < facts.standardMin
+                  ? "text-amber-600 dark:text-amber-400"
+                  : undefined
+              }
+            />
+            <Tile
+              label="Average day"
+              value={hoursMin(facts.avgMin)}
+              note={
+                dailyStandard !== null && shiftLen !== null
+                  ? `of ${hoursMin(dailyStandard)} a day · ${hoursMin(shiftLen)} shift less 1h`
+                  : `${facts.readable} of ${facts.workedDays} days pair in/out cleanly`
+              }
+              accent={
+                dailyStandard !== null && facts.workedDays > 0 && facts.avgMin < dailyStandard
+                  ? "text-amber-600 dark:text-amber-400"
+                  : undefined
+              }
+            />
             <Tile label="Typical arrival" value={facts.median === null ? "—" : to12h(hhmm(facts.median))} note="median first scan" />
             <Tile
               label="Late arrivals"
@@ -450,9 +489,16 @@ export function PersonAttendance({
               </CardBody>
             </Card>
             <Card>
-              <CardHeader title="Hours per day" description="First scan to last, per day." />
+              <CardHeader
+                title="Hours per day"
+                description={
+                  dailyStandard !== null && shiftLen !== null
+                    ? `First scan to last, against the ${hoursMin(dailyStandard)} standard — the ${hoursMin(shiftLen)} shift (${shift.startTime}–${shift.endTime}) less an hour.`
+                    : "First scan to last. No work shift, so there's no day to measure against."
+                }
+              />
               <CardBody>
-                <HoursChart rows={kept} onPick={setPicked} openDate={openDate} />
+                <HoursChart rows={kept} target={dailyStandard} onPick={setPicked} openDate={openDate} />
               </CardBody>
             </Card>
           </div>
@@ -1302,18 +1348,69 @@ function ArrivalChart({
   );
 }
 
-function HoursChart({ rows, onPick, openDate }: { rows: Row[]; onPick: (d: string) => void; openDate: string | null }) {
+/** Taken off a shift's length to give the hours a day asks for on site. */
+const LUNCH_MIN = 60;
+
+/** 26 → "26 days", 25.5 → "25.5 days" (a half day's leave halves a day). */
+function dayCount(n: number): string {
+  return `${Number.isInteger(n) ? n : n.toFixed(1)} ${n === 1 ? "day" : "days"}`;
+}
+
+/** A shift's length in minutes, across midnight for a night shift. Null without one. */
+function shiftLengthMin(start: number | null, end: number | null): number | null {
+  if (start === null || end === null || start === end) return null;
+  return end > start ? end - start : end + 1440 - start;
+}
+
+const BAR_FULL = "rgb(16 185 129 / 0.8)";
+const BAR_SHORT = "rgb(245 158 11 / 0.75)";
+const BAR_OFF = "rgb(148 163 184 / 0.7)";
+const BAR_OPEN = "rgb(79 70 229)";
+
+/**
+ * Each scanned day's hours against the person's daily standard (their shift
+ * less an hour): the dashed line is the standard, and a bar is green when it
+ * reaches it, amber when it falls short. A day nobody was due in is grey —
+ * there was no standard to fall short of.
+ */
+function HoursChart({
+  rows,
+  target,
+  onPick,
+  openDate,
+}: {
+  rows: Row[];
+  /** The daily standard in minutes; null when the person has no shift. */
+  target: number | null;
+  onPick: (d: string) => void;
+  openDate: string | null;
+}) {
   const bars = rows.filter((r) => r.figures.punches.length > 0);
   if (bars.length === 0) return <p className="py-10 text-center text-sm text-muted">No scanned days in this selection.</p>;
-  const max = Math.max(...bars.map((r) => r.figures.spanMin), 9 * 60);
+  const peak = Math.max(...bars.map((r) => r.figures.spanMin));
+  // Tall enough for the standard's line even when every day fell short of it.
+  const max = Math.max(peak, target ?? 0, 60);
   const width = 100 / bars.length;
+  const yAt = (min: number) => CHART_H - (min / max) * CHART_H;
+  const anyOff = bars.some((r) => !r.expected);
 
   return (
     <div className="space-y-2">
       <svg viewBox={`0 0 100 ${CHART_H}`} preserveAspectRatio="none" className="h-40 w-full">
-        <line x1={0} x2={100} y1={CHART_H - (540 / max) * CHART_H} y2={CHART_H - (540 / max) * CHART_H} stroke="rgb(99 102 241 / 0.5)" strokeWidth={1} strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />
+        {target !== null && (
+          <line x1={0} x2={100} y1={yAt(target)} y2={yAt(target)} stroke="rgb(99 102 241 / 0.5)" strokeWidth={1} strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />
+        )}
         {bars.map((r, i) => {
-          const h = (r.figures.spanMin / max) * CHART_H;
+          const span = r.figures.spanMin;
+          const h = (span / max) * CHART_H;
+          const short = target !== null && r.expected && span < target;
+          const note = !r.expected
+            ? " · not a working day"
+            : short
+              ? ` · ${hoursMin(target - span)} short of the ${hoursMin(target)} standard`
+              : target !== null
+                ? " · standard met"
+                : "";
           return (
             <rect
               key={r.dateISO}
@@ -1323,18 +1420,37 @@ function HoursChart({ rows, onPick, openDate }: { rows: Row[]; onPick: (d: strin
               height={h}
               rx={0.6}
               className="cursor-pointer"
-              fill={r.dateISO === openDate ? "rgb(79 70 229)" : r.figures.spanMin < 480 ? "rgb(245 158 11 / 0.75)" : "rgb(16 185 129 / 0.8)"}
+              fill={r.dateISO === openDate ? BAR_OPEN : !r.expected ? BAR_OFF : short ? BAR_SHORT : BAR_FULL}
               onClick={() => onPick(r.dateISO)}
             >
-              <title>{`${formatISO(r.dateISO)} — ${hoursMin(r.figures.spanMin)}`}</title>
+              <title>{`${formatISO(r.dateISO)} — ${hoursMin(span)}${note}`}</title>
             </rect>
           );
         })}
       </svg>
-      <div className="flex items-center justify-between text-[11px] text-faint">
-        <span>Peak {hoursMin(max)}</span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="h-px w-4 border-t border-dashed border-brand-500/60" /> 9h
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-[11px] text-faint">
+        <span>Peak {hoursMin(peak)}</span>
+        <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          {target !== null && (
+            <>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="size-2 rounded-sm" style={{ background: BAR_FULL }} /> met
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="size-2 rounded-sm" style={{ background: BAR_SHORT }} /> short
+              </span>
+            </>
+          )}
+          {anyOff && (
+            <span className="inline-flex items-center gap-1.5">
+              <span className="size-2 rounded-sm" style={{ background: BAR_OFF }} /> day off
+            </span>
+          )}
+          {target !== null && (
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-px w-4 border-t border-dashed border-brand-500/60" /> {hoursMin(target)} standard
+            </span>
+          )}
         </span>
       </div>
     </div>
