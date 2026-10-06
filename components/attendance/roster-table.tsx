@@ -175,12 +175,6 @@ export function RosterTable({ people, from, to }: { people: RosterPerson[]; from
           </tbody>
         </table>
       </div>
-      <p className="border-t border-line px-5 py-3 text-xs text-faint">
-        Lateness is measured from each person&apos;s work-shift start plus its grace window
-        (Organization → Company → Work shifts). Someone with no shift assigned shows{" "}
-        <span className="font-medium text-amber-600 dark:text-amber-400">no shift</span> rather than a count —
-        their hours are still correct. Hours are first scan to last.
-      </p>
     </Card>
   );
 }
