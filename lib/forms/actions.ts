@@ -516,3 +516,55 @@ export async function rotatePublicLink(id: string): Promise<FormActionState & { 
   revalidatePath(`/forms/${id}/edit`);
   return { ok: true, token };
 }
+
+/**
+ * Give an entry its own no-login page, or take it away. Only someone who could
+ * edit the entry may, and only on a published form with its public link on —
+ * the same terms the page itself is served on. Stopping clears the token, so
+ * sharing again mints a new one and a withdrawn link stays dead.
+ */
+export async function setEntryShared(
+  id: string,
+  shared: boolean,
+): Promise<FormActionState & { token?: string | null }> {
+  const session = await getSession();
+  if (!session) return { error: "Not authenticated." };
+  const sub = await prisma.formSubmission.findFirst({
+    where: { id, companyId: session.companyId, deletedAt: null },
+    select: {
+      id: true,
+      formId: true,
+      submittedByUserId: true,
+      shareToken: true,
+      form: { select: { publicEnabled: true, status: true, deletedAt: true } },
+    },
+  });
+  if (!sub) return { error: "Entry not found." };
+  const manage = await canManageForms(session);
+  if (!manage && sub.submittedByUserId !== session.userId) {
+    return { error: "You can't share this entry." };
+  }
+
+  if (shared) {
+    if (!sub.form.publicEnabled || sub.form.status !== "PUBLISHED" || sub.form.deletedAt) {
+      return { error: "Entries can only be shared while the form is published with its public link on." };
+    }
+    if (sub.shareToken) return { ok: true, token: sub.shareToken };
+  } else if (!sub.shareToken) {
+    return { ok: true, token: null };
+  }
+
+  const token = shared ? newPublicToken() : null;
+  await prisma.formSubmission.update({ where: { id }, data: { shareToken: token } });
+  // Making someone's answers public is worth a line in the entry's history.
+  await logActivity({
+    companyId: session.companyId,
+    actorId: session.userId,
+    actorLabel: await actorLabel(session.userId),
+    entityType: "FORM_SUBMISSION",
+    entityId: id,
+    message: shared ? "Shared the entry publicly" : "Stopped sharing the entry",
+  });
+  revalidatePath(`/forms/${sub.formId}/entries`);
+  return { ok: true, token };
+}

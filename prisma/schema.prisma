@@ -1300,6 +1300,11 @@ model FormSubmission {
   // can be found with an index lookup instead of a JSON scan. Both submitter
   // ids null = an anonymous entry through the public link.
   dedupeKey           String?
+  // Set while the entry has its own no-login page (/fill/e/[shareToken]).
+  // Minted only when someone shares the entry, cleared when they stop, and
+  // only honoured while the form's public link is on. Indexed rather than
+  // @unique for the same reason as Form.publicToken.
+  shareToken          String?
   editedAt            DateTime? // last time the answers were edited after submission
   editedById          String? // userId who last edited (full history in ActivityLog)
   deletedAt           DateTime?
@@ -1313,4 +1318,5 @@ model FormSubmission {
   @@index([companyId])
   @@index([formId])
   @@index([formId, dedupeKey])
+  @@index([shareToken])
 }

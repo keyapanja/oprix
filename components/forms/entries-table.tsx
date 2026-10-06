@@ -23,6 +23,7 @@ type Row = {
   createdAt: string;
   editedAt: string | null;
   editedByName: string | null;
+  shareToken: string | null;
 };
 
 type Col = {
@@ -47,6 +48,7 @@ export function EntriesTable({
   rows,
   canDeleteAny,
   showSubmitter,
+  sharable,
   lookups,
   defaultGroupBy,
 }: {
@@ -56,6 +58,8 @@ export function EntriesTable({
   rows: Row[];
   canDeleteAny: boolean;
   showSubmitter: boolean;
+  /** The form is published with its public link on, so entries can be shared. */
+  sharable: boolean;
   lookups?: Lookups;
   defaultGroupBy?: string;
 }) {
@@ -260,6 +264,11 @@ export function EntriesTable({
                       Edited
                     </span>
                   )}
+                  {sharable && r.shareToken && (
+                    <span title="Shared — this entry has a public page" className="text-accent-strong">
+                      <Icon name="link" className="size-3.5" />
+                    </span>
+                  )}
                 </span>
               ) : (
                 c.display(r) || "—"
@@ -399,6 +408,7 @@ export function EntriesTable({
         lookups={lookups}
         canEdit={canDeleteAny || view.mine}
         showSubmitter={showSubmitter}
+        sharable={sharable}
         onClose={() => setView(null)}
       />
     )}

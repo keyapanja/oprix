@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { getPublicForm } from "@/lib/forms/data";
 import { publicFields, submitPublicForm } from "@/lib/forms/actions";
 import { FormFill } from "@/components/forms/form-fill";
+import { publicLogoSrc } from "@/lib/forms/public-logo";
 
 export const metadata: Metadata = { title: "Form" };
 
@@ -17,7 +18,7 @@ export default async function PublicFillPage({ params }: { params: Promise<{ tok
   // Dynamic-list fields (clients, projects, employees) are company data and
   // don't go out on a public page; the submit path drops them the same way.
   const fields = await publicFields(form.schema.fields);
-  const logo = publicLogoSrc(token, form.company);
+  const logo = publicLogoSrc(`/fill/${token}/logo`, form.company);
   const submit = async (_formId: string, data: Record<string, unknown>) => {
     "use server";
     return submitPublicForm(token, data);
@@ -53,19 +54,4 @@ export default async function PublicFillPage({ params }: { params: Promise<{ tok
       </p>
     </div>
   );
-}
-
-/**
- * Where the public page should load the logo from. An uploaded logo is served
- * through this form's own token route, since the internal one needs a session;
- * an older absolute URL is already public and is used as it is.
- */
-function publicLogoSrc(token: string, company: { logoUrl: string | null; logoKey: string | null }): string | null {
-  if (company.logoKey) {
-    // Carry the upload's ?v= stamp across so a replaced logo is a new URL.
-    const v = company.logoUrl?.match(/[?&]v=([^&]+)/)?.[1];
-    return `/fill/${token}/logo${v ? `?v=${v}` : ""}`;
-  }
-  if (company.logoUrl && /^https?:\/\//i.test(company.logoUrl)) return company.logoUrl;
-  return null;
 }

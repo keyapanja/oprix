@@ -7,9 +7,9 @@ import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
 import { updateSubmission, getSubmissionHistory, type SubmissionEvent } from "@/lib/forms/actions";
 import { FieldInput, type FieldValue } from "@/components/forms/field-input";
-import { OptionChip } from "@/components/forms/option-chip";
+import { EntryAnswers } from "@/components/forms/entry-answers";
+import { EntryShare } from "@/components/forms/entry-share";
 import {
-  answerToText,
   computeCalc,
   formatCalc,
   isInputField,
@@ -27,97 +27,8 @@ type Entry = {
   mine: boolean;
   editedAt: string | null;
   editedByName: string | null;
+  shareToken: string | null;
 };
-
-/** Past this many characters an answer reads better across the full width. */
-const WIDE_TEXT = 60;
-
-/**
- * Two answers to a row, in form order. Long ones (lists, repeaters, anything
- * past WIDE_TEXT) take the whole row; a short one that would otherwise sit
- * alone — before a long answer, or last — stretches across it too, so the grid
- * never leaves a gap and nothing moves out of the order the form asked it in.
- */
-function answerLayout(fields: FieldDef[], data: Record<string, unknown>): { field: FieldDef; wide: boolean }[] {
-  const long = fields.map(
-    (f) => f.type === "repeater" || f.type === "list" || answerToText(f, data[f.id]).length > WIDE_TEXT,
-  );
-  const out: { field: FieldDef; wide: boolean }[] = [];
-  let rowStart = true;
-  for (let i = 0; i < fields.length; i++) {
-    if (long[i]) {
-      out.push({ field: fields[i], wide: true });
-      rowStart = true;
-    } else if (rowStart) {
-      const alone = i + 1 >= fields.length || long[i + 1];
-      out.push({ field: fields[i], wide: alone });
-      rowStart = alone;
-    } else {
-      out.push({ field: fields[i], wide: false });
-      rowStart = true;
-    }
-  }
-  return out;
-}
-
-/** Read-only display of one stored answer (repeater rows expanded). */
-function ViewValue({ field, value }: { field: FieldDef; value: unknown }) {
-  if (field.type === "repeater") {
-    const rows = Array.isArray(value) ? value : [];
-    const subs = field.subFields ?? [];
-    if (rows.length === 0) return <span className="text-sm text-muted">—</span>;
-    return (
-      <div className="space-y-2">
-        {rows.map((row, i) => (
-          <div key={i} className="rounded-lg bg-canvas/50 p-2.5 ring-1 ring-inset ring-line">
-            <p className="mb-1 text-xs font-medium uppercase tracking-wide text-faint">Row {i + 1}</p>
-            <dl className="space-y-0.5">
-              {subs.map((sf) => (
-                <div key={sf.id} className="flex gap-2 text-sm">
-                  <dt className="shrink-0 text-muted">{sf.label}:</dt>
-                  <dd className="break-words text-content">{answerToText(sf, (row as Record<string, unknown>)?.[sf.id]) || "—"}</dd>
-                </div>
-              ))}
-            </dl>
-          </div>
-        ))}
-      </div>
-    );
-  }
-  if (field.type === "list") {
-    const items = Array.isArray(value) ? (value as unknown[]).filter((x) => typeof x === "string" && x.trim() !== "") : [];
-    if (items.length === 0) return <span className="text-sm text-muted">—</span>;
-    return (
-      <ul className="list-disc space-y-0.5 pl-5 text-sm text-content">
-        {items.map((it, i) => (
-          <li key={i} className="break-words">
-            {String(it)}
-          </li>
-        ))}
-      </ul>
-    );
-  }
-
-  if (field.type === "dropdown" && field.chips) {
-    const s = answerToText(field, value);
-    return s ? <OptionChip field={field} value={s} /> : <span className="text-sm text-muted">—</span>;
-  }
-
-  if (field.type === "check") {
-    return (
-      <input
-        type="checkbox"
-        checked={value === true || value === "true"}
-        readOnly
-        aria-label={answerToText(field, value)}
-        className="pointer-events-none size-4 rounded border-line-strong text-brand-600"
-      />
-    );
-  }
-
-  const text = answerToText(field, value);
-  return <span className="whitespace-pre-wrap break-words text-sm text-content">{text || "—"}</span>;
-}
 
 export function EntryDetailModal({
   fields,
@@ -125,6 +36,7 @@ export function EntryDetailModal({
   lookups,
   canEdit,
   showSubmitter,
+  sharable,
   onClose,
 }: {
   fields: FieldDef[];
@@ -132,6 +44,8 @@ export function EntryDetailModal({
   lookups?: Lookups;
   canEdit: boolean;
   showSubmitter: boolean;
+  /** The form is published with its public link on, so entries can have pages. */
+  sharable: boolean;
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -279,17 +193,10 @@ export function EntryDetailModal({
               ))}
           </div>
         ) : (
-          <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
-            {answerLayout(inputFields.filter((f) => isVisible(f, entry.data)), entry.data).map(({ field: f, wide }) => (
-              <div key={f.id} className={wide ? "sm:col-span-2" : undefined}>
-                <dt className="text-xs font-medium uppercase tracking-wide text-faint">{f.label}</dt>
-                <dd className="mt-0.5">
-                  <ViewValue field={f} value={entry.data[f.id]} />
-                </dd>
-              </div>
-            ))}
-          </dl>
+          <EntryAnswers fields={inputFields.filter((f) => isVisible(f, entry.data))} data={entry.data} />
         )}
+
+        {sharable && !editing && <EntryShare entryId={entry.id} initialToken={entry.shareToken} canShare={canEdit} />}
 
         <div className="flex items-center justify-between gap-2 border-t border-line pt-3">
           {editing ? (

@@ -102,6 +102,8 @@ export type EntryRow = {
   createdAt: string;
   editedAt: string | null;
   editedByName: string | null;
+  /** Set while the entry has its own public page. */
+  shareToken: string | null;
 };
 
 /** Submissions for a form the user can access. Managers + viewAll roles see all;
@@ -113,6 +115,8 @@ export async function listSubmissions(
   form: { id: string; title: string; schema: FormSchema };
   canViewAll: boolean;
   canManage: boolean;
+  /** Published with its public link on — the only time entries can be shared. */
+  sharable: boolean;
   rows: EntryRow[];
 } | null> {
   const access = await getFormForFill(session, formId);
@@ -136,6 +140,7 @@ export async function listSubmissions(
       editedById: true,
       editedAt: true,
       createdAt: true,
+      shareToken: true,
     },
   });
 
@@ -164,6 +169,7 @@ export async function listSubmissions(
     form: { id: form.id, title: form.title, schema: form.schema },
     canViewAll,
     canManage,
+    sharable: form.publicEnabled && form.status === "PUBLISHED",
     rows: rows.map((r) => ({
       id: r.id,
       data: (r.data && typeof r.data === "object" ? r.data : {}) as Record<string, unknown>,
@@ -176,6 +182,7 @@ export async function listSubmissions(
       createdAt: r.createdAt.toISOString(),
       editedAt: r.editedAt ? r.editedAt.toISOString() : null,
       editedByName: r.editedById ? userName.get(r.editedById) ?? "—" : null,
+      shareToken: r.shareToken,
     })),
   };
 }
@@ -246,4 +253,40 @@ export async function getPublicForm(token: string) {
   });
   if (!form) return null;
   return { ...form, schema: parseSchema(form.schema) as FormSchema };
+}
+
+/**
+ * One entry by its share token, for its no-login page. Resolves only while the
+ * entry is shared and its form is published with the public link on; anything
+ * else is a 404, which is also what a guessed token gets.
+ */
+export async function getSharedEntry(token: string) {
+  if (!token || token.length > 64) return null;
+  const sub = await prisma.formSubmission.findFirst({
+    where: {
+      shareToken: token,
+      deletedAt: null,
+      form: { publicEnabled: true, status: "PUBLISHED", deletedAt: null },
+    },
+    select: {
+      data: true,
+      createdAt: true,
+      editedAt: true,
+      form: {
+        select: {
+          title: true,
+          schema: true,
+          company: { select: { name: true, logoUrl: true, logoKey: true, timezone: true } },
+        },
+      },
+    },
+  });
+  if (!sub) return null;
+  return {
+    data: (sub.data && typeof sub.data === "object" ? sub.data : {}) as Record<string, unknown>,
+    createdAt: sub.createdAt,
+    editedAt: sub.editedAt,
+    form: { title: sub.form.title, schema: parseSchema(sub.form.schema) as FormSchema },
+    company: sub.form.company,
+  };
 }

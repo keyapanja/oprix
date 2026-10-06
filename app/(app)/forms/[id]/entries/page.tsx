@@ -33,6 +33,7 @@ export default async function FormEntriesPage({ params }: { params: Promise<{ id
         rows={data.rows}
         canDeleteAny={data.canManage}
         showSubmitter={data.canViewAll}
+        sharable={data.sharable}
         lookups={lookups}
         defaultGroupBy={data.form.schema.defaultGroupBy ?? ""}
       />
