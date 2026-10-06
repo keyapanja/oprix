@@ -871,14 +871,25 @@ function DayDetail({
                   title={`${hhmm(f.firstIn)} – ${hhmm(f.lastOut)}`}
                 />
               )}
-              {f.punches.map((p, i) => (
-                <div
-                  key={i}
-                  className="absolute top-1/2 size-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/90 ring-1 ring-emerald-700/40"
-                  style={{ left: `${pct(p.min)}%` }}
-                  title={`Scan at ${to12h(hhmm(p.min))}`}
-                />
-              ))}
+              {clusterScans(f.punches.map((p) => p.min)).map((group) => {
+                const at = group.reduce((a, b) => a + b, 0) / group.length;
+                const times = group.map((m) => to12h(hhmm(m))).join(", ");
+                return (
+                  <div
+                    key={group[0]}
+                    role="img"
+                    aria-label={`${group.length === 1 ? "Scan" : `${group.length} scans`} at ${times}`}
+                    className="group absolute top-1/2 z-10 flex size-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center hover:z-20"
+                    style={{ left: `${pct(at)}%` }}
+                  >
+                    <span className="size-2.5 rounded-full bg-white shadow-sm ring-2 ring-emerald-600 transition-transform group-hover:scale-125 dark:bg-surface" />
+                    <span className="pointer-events-none absolute bottom-full left-1/2 mb-1 -translate-x-1/2 whitespace-nowrap rounded-md bg-content px-2 py-1 text-[11px] font-medium text-surface opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+                      {times}
+                      {group.length > 1 && <span className="ml-1 opacity-60">· {group.length} scans</span>}
+                    </span>
+                  </div>
+                );
+              })}
               {f.punches.length === 0 && (
                 <span className="absolute inset-0 flex items-center justify-center text-xs text-faint">
                   No scans on this day
@@ -958,6 +969,26 @@ function DayDetail({
       </CardBody>
     </Card>
   );
+}
+
+/**
+ * Scans close enough to draw on top of each other, merged into one dot.
+ *
+ * The device writes an echo 1–3 minutes after a real scan, and at this scale
+ * a few minutes is a few pixels: two separate dots would sit one over the
+ * other and the hidden one could never be hovered. One dot that names every
+ * time it stands for keeps them all reachable.
+ */
+const SCAN_CLUSTER_MIN = 8;
+
+function clusterScans(mins: number[]): number[][] {
+  const groups: number[][] = [];
+  for (const m of mins) {
+    const last = groups[groups.length - 1];
+    if (last && m - last[last.length - 1] <= SCAN_CLUSTER_MIN) last.push(m);
+    else groups.push([m]);
+  }
+  return groups;
 }
 
 /** Hour marks across the track — every 3 hours, so the labels can be words. */
