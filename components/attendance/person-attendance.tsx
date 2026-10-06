@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -23,8 +23,10 @@ import {
   hoursMin,
   parseDeviceStatus,
   readBreaks,
+  realScans,
   toMin,
   type BreakReading,
+  type Punch,
   type BreakRule,
   type DayFigures,
   type DayFlag,
@@ -984,8 +986,104 @@ function monthLabel(month: string): string {
 
 // ---- one day -------------------------------------------------------------
 
-const TRACK_FROM = 6 * 60;
-const TRACK_TO = 23 * 60;
+/** Minutes either side of the shift (or the scans) so nothing sits on the edge. */
+const TRACK_PAD = 20;
+/** Room one punch label takes ("Out 12:45 PM" at 11px), with a little air. */
+const LABEL_PX = 76;
+
+/** An element's rendered width, kept current as it resizes. Null until mounted. */
+function useWidth<T extends HTMLElement>(): [React.RefObject<T | null>, number | null] {
+  const ref = useRef<T>(null);
+  const [width, setWidth] = useState<number | null>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const observer = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  return [ref, width];
+}
+
+/** [from, to] in minutes for a day's track: its shift, stretched to the scans. */
+function trackSpan(start: number | null, end: number | null, firstIn: number | null, lastOut: number | null): [number, number] {
+  let lo: number;
+  let hi: number;
+  if (start !== null && end !== null) {
+    // A night shift's end is the next morning; on this date's track it runs to midnight.
+    const shiftEnd = end > start ? end : 1440;
+    lo = Math.min(start, firstIn ?? start);
+    hi = Math.max(shiftEnd, lastOut ?? shiftEnd);
+  } else if (firstIn !== null && lastOut !== null) {
+    lo = firstIn;
+    hi = lastOut;
+  } else {
+    lo = 9 * 60;
+    hi = 18 * 60;
+  }
+  lo -= TRACK_PAD;
+  hi += TRACK_PAD;
+  // A day of two scans a few minutes apart still gets a readable two hours.
+  if (hi - lo < 120) {
+    const mid = (lo + hi) / 2;
+    lo = mid - 60;
+    hi = mid + 60;
+  }
+  return [lo, hi];
+}
+
+/** A label near either end of the track hangs inward instead of off the edge. */
+function edgeAlign(at: number): string {
+  return at < 5 ? "" : at > 95 ? "-translate-x-full" : "-translate-x-1/2";
+}
+
+/**
+ * The punches as in → out pairs, in the device's own labelling with its
+ * re-reads dropped. An in with no out before the next in, or an out with no in
+ * before it, is kept as half a pair rather than matched to a guess.
+ */
+function punchPairs(punches: Punch[]): { in: number | null; out: number | null }[] {
+  const pairs: { in: number | null; out: number | null }[] = [];
+  let open: number | null = null;
+  for (const p of realScans(punches)) {
+    if ((p.dir ?? "in") === "in") {
+      if (open !== null) pairs.push({ in: open, out: null });
+      open = p.min;
+    } else {
+      pairs.push({ in: open, out: p.min });
+      open = null;
+    }
+  }
+  if (open !== null) pairs.push({ in: open, out: null });
+  return pairs;
+}
+
+/**
+ * Punch times beside the bar: ins above it, outs below, the nearer line first
+ * and a second only when two would collide. Wide screens only — on a phone the
+ * punch pairs under the track carry the same times.
+ */
+function PunchLane({ items, dir }: { items: { min: number; at: number; line: number }[]; dir: "in" | "out" }) {
+  const lines = items.some((p) => p.line === 1) ? 2 : 1;
+  return (
+    <div className={cn("relative hidden sm:block", lines === 2 ? "h-9" : "h-5")}>
+      {items.map((p) => (
+        <span
+          key={p.min}
+          className={cn(
+            "absolute whitespace-nowrap text-[11px] font-medium tabular-nums",
+            dir === "in" ? "text-emerald-700 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400",
+            dir === "in" ? (p.line === 0 ? "bottom-1" : "bottom-5") : p.line === 0 ? "top-1" : "top-5",
+            edgeAlign(p.at),
+          )}
+          style={{ left: `${p.at}%` }}
+        >
+          {dir === "in" ? "In" : "Out"} {to12h(hhmm(p.min))}
+        </span>
+      ))}
+    </div>
+  );
+}
 
 function DayDetail({
   row,
@@ -1002,10 +1100,38 @@ function DayDetail({
   const device = parseDeviceStatus(row.record?.deviceStatus);
   const meta = BUCKET_META.get(row.bucket)!;
 
-  // Widen the track if someone punched outside the default 06:00–23:00 band.
-  const lo = Math.min(TRACK_FROM, f.firstIn ?? TRACK_FROM, shiftWindow.startMin ?? TRACK_FROM) - 15;
-  const hi = Math.max(TRACK_TO, f.lastOut ?? TRACK_TO, shiftWindow.endMin ?? TRACK_TO) + 15;
+  // The track spans the day's own shift — a short Saturday's or a special day's
+  // hours where they apply — so the working day fills the width. It stretches
+  // only to take in a scan before the start or after the end. No shift: the
+  // scans themselves.
+  const [lo, hi] = trackSpan(shiftWindow.startMin, shiftWindow.endMin, f.firstIn, f.lastOut);
   const pct = (min: number) => ((min - lo) / (hi - lo)) * 100;
+  const pairs = punchPairs(f.punches);
+  // Ins above the bar, outs below, so a punch and the one after it never share
+  // a line. A time too close to the one before it to print without overlapping
+  // steps out to a second line; only a third in a crowd is left to its dot,
+  // which still names it on hover. "Too close" is a label's width at the
+  // track's real size, measured once it's mounted.
+  const [trackRef, trackWidth] = useWidth<HTMLDivElement>();
+  const gapPct = trackWidth ? (LABEL_PX / trackWidth) * 100 : 10;
+  // A faint line every hour across a shift; labels every hour while there's room
+  // for one, every two or three on a narrow screen.
+  const pxPerHour = trackWidth ? trackWidth / ((hi - lo) / 60) : 100;
+  const gridStep = hi - lo <= 13 * 60 ? 60 : 120;
+  const gridHours = axisHours(lo, hi, gridStep);
+  const labelHours = axisHours(lo, hi, Math.max(gridStep, pxPerHour >= 44 ? 60 : pxPerHour >= 22 ? 120 : 180));
+  const lane = (dir: "in" | "out") => {
+    const lastAt = [-Infinity, -Infinity];
+    return realScans(f.punches)
+      .filter((p) => (p.dir ?? "in") === dir)
+      .flatMap((p) => {
+        const at = pct(p.min);
+        const line = at - lastAt[0] >= gapPct ? 0 : at - lastAt[1] >= gapPct ? 1 : -1;
+        if (line < 0) return [];
+        lastAt[line] = at;
+        return [{ min: p.min, at, line }];
+      });
+  };
 
   const facts: { label: string; value: string; tone?: string }[] = [
     { label: "In", value: f.firstIn === null ? "—" : to12h(hhmm(f.firstIn)) },
@@ -1060,104 +1186,130 @@ function DayDetail({
         description={timingLine(row, shift)}
       />
       <CardBody className="space-y-5">
-        {/* The day on a clock. One bar from the first scan to the last, with a
-            dot per scan. Breaks are cut into it only on a day whose scans pair
-            cleanly — on the rest a missing scan shifts every in/out label after
-            it, and cutting on those would invent breaks that weren't there. */}
-        <div>
-          <div className="relative">
-            {/* hour labels, positioned along the track */}
-            <div className="relative h-4">
-              {axisHours(lo, hi).map((h) => (
-                <span
-                  key={h}
-                  className="absolute -translate-x-1/2 text-[11px] tabular-nums text-faint"
-                  style={{ left: `${pct(h)}%` }}
-                >
-                  {clockLabel(h)}
-                </span>
+        {/* The day on a clock, across its shift. One bar from the first scan to
+            the last, a dot per scan, each in-punch named above it and each
+            out-punch below. Breaks are cut into the bar only on a day whose scans
+            pair cleanly — on the rest a missing scan shifts every in/out label
+            after it, and cutting on those would invent breaks that weren't there. */}
+        <div ref={trackRef}>
+          <PunchLane items={lane("in")} dir="in" />
+          <div className="relative h-12 overflow-hidden rounded-xl bg-canvas ring-1 ring-inset ring-line">
+            {/* the shift, as one labelled band */}
+            {shiftWindow.startMin !== null && shiftWindow.endMin !== null && (
+              <div
+                className="absolute inset-y-0 border-x border-brand-500/40 bg-brand-500/[0.06]"
+                style={{
+                  left: `${pct(shiftWindow.startMin)}%`,
+                  width: `${pct(shiftWindow.endMin > shiftWindow.startMin ? shiftWindow.endMin : 1440) - pct(shiftWindow.startMin)}%`,
+                }}
+                title={`Shift ${hhmm(shiftWindow.startMin)} – ${hhmm(shiftWindow.endMin)}`}
+              />
+            )}
+            {/* an hour line every hour mark, faint, to read times off */}
+            {gridHours.map((h) => (
+              <div key={`grid-${h}`} className="absolute inset-y-0 w-px bg-line" style={{ left: `${pct(h)}%` }} />
+            ))}
+            {/* the late stretch: from the end of grace to when they arrived */}
+            {shiftWindow.startMin !== null && f.lateMin > 0 && f.firstIn !== null && (
+              <div
+                className="absolute top-1/2 h-2.5 -translate-y-1/2 rounded-l-full bg-amber-400/70"
+                style={{
+                  left: `${pct(shiftWindow.startMin + shiftWindow.graceMin)}%`,
+                  width: `${Math.max(0.3, pct(f.firstIn) - pct(shiftWindow.startMin + shiftWindow.graceMin))}%`,
+                }}
+                title={`${hoursMin(f.lateMin)} late`}
+              />
+            )}
+            {/* the day itself */}
+            {f.firstIn !== null && f.lastOut !== null && (
+              <div
+                className="absolute top-1/2 h-2.5 -translate-y-1/2 rounded-full bg-emerald-500"
+                style={{ left: `${pct(f.firstIn)}%`, width: `${Math.max(0.4, pct(f.lastOut) - pct(f.firstIn))}%` }}
+                title={`${hhmm(f.firstIn)} – ${hhmm(f.lastOut)}`}
+              />
+            )}
+            {/* breaks: a long one in amber, a short one as a gap in the bar */}
+            {breakRule &&
+              row.breaks?.breaks?.map((b) => (
+                <div
+                  key={`break-${b.from}`}
+                  className={cn(
+                    "absolute top-1/2 h-2.5 -translate-y-1/2",
+                    b.to - b.from > breakRule.minutes ? "bg-amber-400" : "bg-canvas",
+                  )}
+                  style={{ left: `${pct(b.from)}%`, width: `${pct(b.to) - pct(b.from)}%` }}
+                  title={`Break ${to12h(hhmm(b.from))} – ${to12h(hhmm(b.to))} · ${hoursMin(b.to - b.from)}`}
+                />
               ))}
-            </div>
-
-            <div className="relative h-12 rounded-xl bg-canvas ring-1 ring-inset ring-line">
-              {/* the shift, as one labelled band */}
-              {shiftWindow.startMin !== null && shiftWindow.endMin !== null && (
+            {clusterScans(f.punches.map((p) => p.min)).map((group) => {
+              const at = group.reduce((a, b) => a + b, 0) / group.length;
+              const times = group.map((m) => to12h(hhmm(m))).join(", ");
+              return (
                 <div
-                  className="absolute inset-y-0 border-x border-brand-500/40 bg-brand-500/[0.06]"
-                  style={{
-                    left: `${pct(shiftWindow.startMin)}%`,
-                    width: `${pct(shiftWindow.endMin) - pct(shiftWindow.startMin)}%`,
-                  }}
-                  title={`Shift ${hhmm(shiftWindow.startMin)} – ${hhmm(shiftWindow.endMin)}`}
-                />
-              )}
-              {/* the late stretch: from the end of grace to when they arrived */}
-              {shiftWindow.startMin !== null && f.lateMin > 0 && f.firstIn !== null && (
-                <div
-                  className="absolute top-1/2 h-2.5 -translate-y-1/2 rounded-l-full bg-amber-400/70"
-                  style={{
-                    left: `${pct(shiftWindow.startMin + shiftWindow.graceMin)}%`,
-                    width: `${Math.max(0.3, pct(f.firstIn) - pct(shiftWindow.startMin + shiftWindow.graceMin))}%`,
-                  }}
-                  title={`${hoursMin(f.lateMin)} late`}
-                />
-              )}
-              {/* the day itself */}
-              {f.firstIn !== null && f.lastOut !== null && (
-                <div
-                  className="absolute top-1/2 h-2.5 -translate-y-1/2 rounded-full bg-emerald-500"
-                  style={{ left: `${pct(f.firstIn)}%`, width: `${Math.max(0.4, pct(f.lastOut) - pct(f.firstIn))}%` }}
-                  title={`${hhmm(f.firstIn)} – ${hhmm(f.lastOut)}`}
-                />
-              )}
-              {/* breaks: a long one in amber, a short one as a gap in the bar */}
-              {breakRule &&
-                row.breaks?.breaks?.map((b) => (
-                  <div
-                    key={`break-${b.from}`}
-                    className={cn(
-                      "absolute top-1/2 h-2.5 -translate-y-1/2",
-                      b.to - b.from > breakRule.minutes ? "bg-amber-400" : "bg-canvas",
-                    )}
-                    style={{ left: `${pct(b.from)}%`, width: `${pct(b.to) - pct(b.from)}%` }}
-                    title={`Break ${to12h(hhmm(b.from))} – ${to12h(hhmm(b.to))} · ${hoursMin(b.to - b.from)}`}
-                  />
-                ))}
-              {clusterScans(f.punches.map((p) => p.min)).map((group) => {
-                const at = group.reduce((a, b) => a + b, 0) / group.length;
-                const times = group.map((m) => to12h(hhmm(m))).join(", ");
-                return (
-                  <div
-                    key={group[0]}
-                    role="img"
-                    aria-label={`${group.length === 1 ? "Scan" : `${group.length} scans`} at ${times}`}
-                    className="group absolute top-1/2 z-10 flex size-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center hover:z-20"
-                    style={{ left: `${pct(at)}%` }}
-                  >
-                    <span className="size-2.5 rounded-full bg-white shadow-sm ring-2 ring-emerald-600 transition-transform group-hover:scale-125 dark:bg-surface" />
-                    <span className="pointer-events-none absolute bottom-full left-1/2 mb-1 -translate-x-1/2 whitespace-nowrap rounded-md bg-content px-2 py-1 text-[11px] font-medium text-surface opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
-                      {times}
-                      {group.length > 1 && <span className="ml-1 opacity-60">· {group.length} scans</span>}
-                    </span>
-                  </div>
-                );
-              })}
-              {f.punches.length === 0 && (
-                <span className="absolute inset-0 flex items-center justify-center text-xs text-faint">
-                  No scans on this day
-                </span>
-              )}
-            </div>
-          </div>
-
-          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted">
-            {f.firstIn !== null && (
-              <span className="inline-flex items-center gap-1.5">
-                <span className="h-1.5 w-4 rounded-full bg-emerald-500" />
-                In {to12h(hhmm(f.firstIn))} → out {to12h(hhmm(f.lastOut!))}
-                <span className="text-faint">· {f.punches.length} scans</span>
+                  key={group[0]}
+                  role="img"
+                  aria-label={`${group.length === 1 ? "Scan" : `${group.length} scans`} at ${times}`}
+                  className="group absolute top-1/2 z-10 flex size-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center hover:z-20"
+                  style={{ left: `${pct(at)}%` }}
+                >
+                  <span className="size-2.5 rounded-full bg-white shadow-sm ring-2 ring-emerald-600 transition-transform group-hover:scale-125 dark:bg-surface" />
+                  <span className="pointer-events-none absolute bottom-full left-1/2 mb-1 -translate-x-1/2 whitespace-nowrap rounded-md bg-content px-2 py-1 text-[11px] font-medium text-surface opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+                    {times}
+                    {group.length > 1 && <span className="ml-1 opacity-60">· {group.length} scans</span>}
+                  </span>
+                </div>
+              );
+            })}
+            {f.punches.length === 0 && (
+              <span className="absolute inset-0 flex items-center justify-center text-xs text-faint">
+                No scans on this day
               </span>
             )}
+          </div>
+          <PunchLane items={lane("out")} dir="out" />
+          {/* hour labels along the bottom */}
+          <div className="relative mt-1 h-4">
+            {labelHours.map((h) => (
+              <span
+                key={h}
+                className={cn("absolute text-[11px] tabular-nums text-faint", edgeAlign(pct(h)))}
+                style={{ left: `${pct(h)}%` }}
+              >
+                {clockLabel(h)}
+              </span>
+            ))}
+          </div>
+
+          {/* every punch, paired in to out as the device labelled them */}
+          {pairs.length > 0 && (
+            <div className="mt-3 flex flex-wrap items-center gap-1.5">
+              <span className="mr-1 text-[11px] font-semibold uppercase tracking-wide text-faint">Punches</span>
+              {pairs.map((p, i) => {
+                const whole = p.in !== null && p.out !== null;
+                return (
+                  <span
+                    key={i}
+                    className={cn(
+                      "inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs tabular-nums ring-1 ring-inset",
+                      whole
+                        ? "bg-surface text-content ring-line"
+                        : "bg-amber-50 text-amber-900 ring-amber-200 dark:bg-amber-500/10 dark:text-amber-100 dark:ring-amber-500/25",
+                    )}
+                    title={whole ? undefined : p.in === null ? "No in-scan before this out" : "No out-scan after this in"}
+                  >
+                    <span className="font-medium text-emerald-700 dark:text-emerald-400">In</span>
+                    {p.in !== null ? to12h(hhmm(p.in)) : "—"}
+                    <span className="text-faint">→</span>
+                    <span className="font-medium text-rose-600 dark:text-rose-400">Out</span>
+                    {p.out !== null ? to12h(hhmm(p.out)) : "—"}
+                    {whole && <span className="ml-1 font-semibold">{hoursMin(p.out! - p.in!)}</span>}
+                  </span>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted">
             {f.lateMin > 0 && (
               <span className="inline-flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
                 <span className="h-1.5 w-4 rounded-full bg-amber-400" />
@@ -1339,10 +1491,10 @@ function clusterScans(mins: number[]): number[][] {
   return groups;
 }
 
-/** Hour marks across the track — every 3 hours, so the labels can be words. */
-function axisHours(lo: number, hi: number): number[] {
+/** Hour marks across the track, every `step` minutes on the hour. */
+function axisHours(lo: number, hi: number, step: number): number[] {
   const out: number[] = [];
-  for (let h = Math.ceil(lo / 180) * 180; h <= hi; h += 180) out.push(h);
+  for (let h = Math.ceil(lo / step) * step; h <= hi; h += step) out.push(h);
   return out;
 }
 
