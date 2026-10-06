@@ -25,6 +25,7 @@ import {
   readBreaks,
   realScans,
   toMin,
+  type Break,
   type BreakReading,
   type Punch,
   type BreakRule,
@@ -1080,6 +1081,13 @@ function DayDetail({
   const [lo, hi] = trackSpan(shiftWindow.startMin, shiftWindow.endMin, f.firstIn, f.lastOut);
   const pct = (min: number) => ((min - lo) / (hi - lo)) * 100;
   const pairs = punchPairs(f.punches);
+  // Breaks to draw, on a day judged against the limit. Where the scans pair
+  // cleanly, the exact ones. Where they don't, the gaps between the device's own
+  // in/out pairs — the reading its labels give. A missing scan may have moved
+  // one of those, so they're drawn striped rather than left out: a long gap is
+  // still worth seeing, and it's what the Punches row below already implies.
+  const exactBreaks = !!row.breaks?.breaks;
+  const drawnBreaks: Break[] = breakRule && row.breaks ? (row.breaks.breaks ?? gapsBetween(pairs)) : [];
   // The track's real width, measured once mounted: it spaces the hour labels
   // and sizes each dot's hover reach.
   const [trackRef, trackWidth] = useWidth<HTMLDivElement>();
@@ -1198,19 +1206,26 @@ function DayDetail({
                 title={`${hhmm(f.firstIn)} – ${hhmm(f.lastOut)}`}
               />
             )}
-            {/* breaks: a long one in amber, a short one as a gap in the bar */}
+            {/* breaks: a long one in amber (striped when it's the device's reading
+                of a day with a scan missing), a short one as a gap in the bar */}
             {breakRule &&
-              row.breaks?.breaks?.map((b) => (
-                <div
-                  key={`break-${b.from}`}
-                  className={cn(
-                    "absolute top-1/2 h-2.5 -translate-y-1/2",
-                    b.to - b.from > breakRule.minutes ? "bg-amber-400" : "bg-canvas",
-                  )}
-                  style={{ left: `${pct(b.from)}%`, width: `${pct(b.to) - pct(b.from)}%` }}
-                  title={`Break ${to12h(hhmm(b.from))} – ${to12h(hhmm(b.to))} · ${hoursMin(b.to - b.from)}`}
-                />
-              ))}
+              drawnBreaks.map((b) => {
+                const long = b.to - b.from > breakRule.minutes;
+                return (
+                  <div
+                    key={`break-${b.from}`}
+                    className={cn("absolute top-1/2 h-2.5 -translate-y-1/2", long ? "bg-amber-400" : "bg-canvas")}
+                    style={{
+                      left: `${pct(b.from)}%`,
+                      width: `${pct(b.to) - pct(b.from)}%`,
+                      ...(long && !exactBreaks ? { backgroundImage: READING_STRIPES } : {}),
+                    }}
+                    title={`Break ${to12h(hhmm(b.from))} – ${to12h(hhmm(b.to))} · ${hoursMin(b.to - b.from)}${
+                      exactBreaks ? "" : " — by the device's in/out labels; a scan is missing this day"
+                    }`}
+                  />
+                );
+              })}
             {dots.map((d) => {
               const label = `${d.dir === "in" ? "In" : "Out"} ${to12h(hhmm(d.min))}`;
               return (
@@ -1307,13 +1322,17 @@ function DayDetail({
                 {hoursMin(f.lateMin)} late
               </span>
             )}
-            {breakRule && row.breaks?.breaks?.some((b) => b.to - b.from > breakRule.minutes) && (
+            {breakRule && drawnBreaks.some((b) => b.to - b.from > breakRule.minutes) && (
               <span className="inline-flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
-                <span className="h-1.5 w-4 bg-amber-400" />
+                <span
+                  className="h-1.5 w-4 bg-amber-400"
+                  style={exactBreaks ? undefined : { backgroundImage: READING_STRIPES }}
+                />
                 Break over {breakRule.minutes} min
+                {!exactBreaks && <span className="text-muted">(as the device paired the scans — one is missing)</span>}
               </span>
             )}
-            {breakRule && row.breaks?.breaks?.some((b) => b.to - b.from <= breakRule.minutes) && (
+            {breakRule && drawnBreaks.some((b) => b.to - b.from <= breakRule.minutes) && (
               <span className="inline-flex items-center gap-1.5">
                 <span className="h-1.5 w-4 rounded-sm bg-canvas ring-1 ring-inset ring-line-strong" />
                 Shorter break
@@ -1337,7 +1356,7 @@ function DayDetail({
           ))}
         </div>
 
-        {breakRule && <BreaksPanel row={row} rule={breakRule} />}
+        {breakRule && <BreaksPanel row={row} rule={breakRule} gaps={exactBreaks ? [] : drawnBreaks} />}
 
         {row.flags.length > 0 && (
           <div className="rounded-xl bg-amber-50 px-4 py-3 ring-1 ring-inset ring-amber-200 dark:bg-amber-500/10 dark:ring-amber-500/25">
@@ -1380,12 +1399,24 @@ function DayDetail({
   );
 }
 
+/** Amber stripes: a break as the device's labels read it, on a day with a scan missing. */
+const READING_STRIPES = "repeating-linear-gradient(135deg, rgb(245 158 11) 0 3px, rgb(252 211 77) 3px 6px)";
+
+/** The gaps between consecutive in → out pairs where both ends are known. */
+function gapsBetween(pairs: { in: number | null; out: number | null }[]): Break[] {
+  return pairs.slice(1).flatMap((p, i) => {
+    const prev = pairs[i];
+    return prev.out !== null && p.in !== null && p.in > prev.out ? [{ from: prev.out, to: p.in }] : [];
+  });
+}
+
 /**
  * The day against the break limit, in words: the breaks themselves on a day
  * that pairs cleanly, and on one that doesn't, what holds however the missing
- * scan is read — or, when nothing does, that the day isn't counted.
+ * scan is read — or, when nothing does, that the day isn't counted — followed
+ * by the gaps the device's own labels give (`gaps`), marked as that reading.
  */
-function BreaksPanel({ row, rule }: { row: Row; rule: BreakRule }) {
+function BreaksPanel({ row, rule, gaps }: { row: Row; rule: BreakRule; gaps: Break[] }) {
   const b = row.breaks;
   if (!b) {
     // Scanned on a day off: say why nothing is judged rather than go quiet.
@@ -1457,6 +1488,30 @@ function BreaksPanel({ row, rule }: { row: Row; rule: BreakRule }) {
             );
           })}
         </ul>
+      )}
+      {!b.breaks && gaps.length > 0 && (
+        <>
+          <p className="mt-2.5 text-xs text-muted">As the device paired the scans, the gaps were:</p>
+          <ul className="mt-1.5 flex flex-wrap gap-1.5">
+            {gaps.map((x) => {
+              const long = x.to - x.from > rule.minutes;
+              return (
+                <li
+                  key={x.from}
+                  className={cn(
+                    "rounded-lg border border-dashed px-2 py-1 text-xs tabular-nums",
+                    long
+                      ? "border-amber-400 bg-amber-50 text-amber-900 dark:bg-amber-500/10 dark:text-amber-100"
+                      : "border-line-strong bg-surface text-muted",
+                  )}
+                >
+                  {to12h(hhmm(x.from))} – {to12h(hhmm(x.to))}
+                  <span className="ml-1.5 font-semibold">{hoursMin(x.to - x.from)}</span>
+                </li>
+              );
+            })}
+          </ul>
+        </>
       )}
     </div>
   );
