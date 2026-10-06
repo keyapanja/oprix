@@ -472,11 +472,7 @@ export function PersonAttendance({
               note={
                 dayStandard === null
                   ? `${facts.readable} of ${facts.workedDays} days pair in/out cleanly`
-                  : facts.uniformDaily === null
-                    ? `of ${hoursMin(dayStandard)} a day on average`
-                    : dayStandard === regularStandard && regularLength !== null
-                      ? `of ${hoursMin(dayStandard)} a day · ${hoursMin(regularLength)} shift${shift.lunchMinutes ? ` less ${hoursMin(shift.lunchMinutes)} lunch` : ", no lunch off"}`
-                      : `of ${hoursMin(dayStandard)} a day`
+                  : `of ${hoursMin(dayStandard)} a day${facts.uniformDaily === null ? " on average" : ""}`
               }
               accent={
                 dayStandard !== null && facts.workedDays > 0 && facts.avgMin < dayStandard
@@ -490,7 +486,13 @@ export function PersonAttendance({
               // Never a 0 without a shift: that would read as "always on time"
               // when the truth is that nothing was measured.
               value={shift.startTime ? String(facts.lateDays) : "not measured"}
-              note={shift.startTime ? `after ${graceNote}${timingsVary ? " · varies by day" : ""}` : "assign a work shift to get this"}
+              note={
+                shift.startTime
+                  ? shift.graceMinutes
+                    ? `after ${shift.graceMinutes} min grace`
+                    : "from the shift start, no grace"
+                  : "assign a work shift to get this"
+              }
               accent={
                 !shift.startTime
                   ? "text-amber-600 dark:text-amber-400"
