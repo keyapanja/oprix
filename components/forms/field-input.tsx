@@ -20,9 +20,26 @@ export type { FieldValue } from "@/lib/forms/types";
 function Help({ field, at, fallback }: { field: FieldDef; at: HelpPosition; fallback?: HelpPosition }) {
   if (!field.helpText) return null;
   if ((field.helpPosition ?? fallback ?? HELP_POSITION_DEFAULT) !== at) return null;
-  const cls = at === "label" ? "-mt-0.5 mb-1.5 text-xs text-muted" : "mt-1 text-xs text-muted";
+  const cls = at === "label" ? "mt-0.5 text-xs text-muted" : "mt-1 text-xs text-muted";
   if (!looksLikeHtml(field.helpText)) return <p className={cls}>{field.helpText}</p>;
   return <div className={cls} dangerouslySetInnerHTML={{ __html: sanitizeHelpHtml(field.helpText) }} />;
+}
+
+/**
+ * A field's label, plus its help text when that sits under the label. They
+ * read as one unit, so they're one block with a single gap to the control —
+ * the same gap whether or not there is help text, so fields line up.
+ */
+function FieldHeader({ field, helpDefault }: { field: FieldDef; helpDefault?: HelpPosition }) {
+  return (
+    <div className="mb-2.5">
+      <label className="block text-sm font-medium text-content">
+        {field.label}
+        {field.required && <span className="text-red-500"> *</span>}
+      </label>
+      <Help field={field} at="label" fallback={helpDefault} />
+    </div>
+  );
 }
 
 function toggle(arr: string[], v: string): string[] {
@@ -65,11 +82,7 @@ export function FieldInput({
     const on = value === true || value === "true";
     return (
       <div>
-        <label className="mb-1.5 block text-sm font-medium text-content">
-          {field.label}
-          {field.required && <span className="text-red-500"> *</span>}
-        </label>
-        <Help field={field} at="label" fallback={helpDefault} />
+        <FieldHeader field={field} helpDefault={helpDefault} />
         <label
           className={cn(
             "flex h-10 items-center rounded-xl bg-surface px-3.5 shadow-sm ring-1 ring-inset ring-line-strong",
@@ -314,11 +327,7 @@ export function FieldInput({
 
   return (
     <div>
-      <label className="mb-1.5 block text-sm font-medium text-content">
-        {field.label}
-        {field.required && <span className="text-red-500"> *</span>}
-      </label>
-      <Help field={field} at="label" fallback={helpDefault} />
+      <FieldHeader field={field} helpDefault={helpDefault} />
       {control}
       <Help field={field} at="field" fallback={helpDefault} />
       {error && <p className="mt-1 text-xs font-medium text-red-600 dark:text-red-400">{error}</p>}
