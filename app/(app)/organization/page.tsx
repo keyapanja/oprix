@@ -5,6 +5,7 @@ import { EDITABLE_ROLES } from "@/lib/auth/can";
 import { getTaskScopeMatrix } from "@/lib/tasks/visibility";
 import { listSuperAdmins, listPromotableEmployees, type AdminRow } from "@/lib/admins/data";
 import { parseWorkWeek } from "@/lib/leave/work-week";
+import { parseWeekdayTimings } from "@/lib/attendance/timings";
 import { prisma } from "@/lib/db";
 import { PageHeader } from "@/components/ui/page-header";
 import { OrgTabs } from "@/components/org/org-tabs";
@@ -15,7 +16,7 @@ export default async function OrganizationPage() {
   const session = await requirePage("org:manage");
   const where = { companyId: session.companyId };
 
-  const [departments, services, designations, shifts, locations, probationPeriods, employees, company] =
+  const [departments, services, designations, shifts, locations, probationPeriods, employees, company, specialDays] =
     await Promise.all([
       prisma.department.findMany({ where, orderBy: { name: "asc" }, select: { id: true, name: true, headId: true, clientFacing: true } }),
       prisma.service.findMany({
@@ -37,7 +38,15 @@ export default async function OrganizationPage() {
       prisma.workShift.findMany({
         where,
         orderBy: { name: "asc" },
-        select: { id: true, name: true, startTime: true, endTime: true, graceMinutes: true },
+        select: {
+          id: true,
+          name: true,
+          startTime: true,
+          endTime: true,
+          graceMinutes: true,
+          lunchMinutes: true,
+          weekdayTimings: true,
+        },
       }),
       prisma.location.findMany({ where, orderBy: { name: "asc" }, select: { id: true, name: true } }),
       prisma.probationPeriod.findMany({ where, orderBy: { months: "asc" }, select: { id: true, months: true } }),
@@ -67,6 +76,8 @@ export default async function OrganizationPage() {
           portalBadgeUrl: true,
         },
       }),
+      // Newest dates first; older ones stay listed because past reports still use them.
+      prisma.specialDay.findMany({ where, orderBy: { fromDate: "desc" }, take: 200 }),
     ]);
 
   const canManageRoles = await hasPermission(session.companyId, session.role, "roles:manage");
@@ -115,8 +126,20 @@ export default async function OrganizationPage() {
           checklist: s.checklistTemplate,
         }))}
         designations={designations}
-        shifts={shifts}
+        shifts={shifts.map(({ weekdayTimings, ...s }) => ({ ...s, weekdays: parseWeekdayTimings(weekdayTimings) }))}
         defaultShiftId={company?.defaultWorkShiftId ?? null}
+        specialDays={specialDays.map((d) => ({
+          id: d.id,
+          from: d.fromDate.toISOString().slice(0, 10),
+          to: d.toDate.toISOString().slice(0, 10),
+          startTime: d.startTime,
+          endTime: d.endTime,
+          graceMinutes: d.graceMinutes,
+          lunchMinutes: d.lunchMinutes,
+          workingDay: d.workingDay,
+          note: d.note,
+          shiftIds: d.shiftIds,
+        }))}
         locations={locations}
         probationPeriods={probationPeriods}
         multiLocation={company?.multiLocation ?? false}

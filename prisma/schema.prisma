@@ -211,6 +211,7 @@ model Company {
   forms            Form[]
   formSubmissions  FormSubmission[]
   attendanceImports AttendanceImport[]
+  specialDays       SpecialDay[]
   defaultWorkShift  WorkShift?  @relation("CompanyDefaultShift", fields: [defaultWorkShiftId], references: [id])
 }
 
@@ -375,12 +376,44 @@ model WorkShift {
   startTime    String // "09:00" local to company tz
   endTime      String // "18:00"
   graceMinutes Int    @default(0) // minutes after start still counted as on-time
+  // Taken off the shift's length for the hours a day asks for on site, so
+  // 09:00–18:00 with 60 here is an 8h day.
+  lunchMinutes Int    @default(60)
+  // Weekdays whose hours differ from the ones above — a short Saturday — as
+  // { "6": { start, end, graceMinutes, lunchMinutes } }, keyed 0 (Sun) – 6 (Sat).
+  weekdayTimings Json?
 
   company   Company    @relation(fields: [companyId], references: [id])
   employees Employee[]
   defaultFor Company[] @relation("CompanyDefaultShift")
 
   @@index([companyId])
+}
+
+// A dated change to some shifts' hours: opening late after a festival, closing
+// early before one, a Sunday worked to clear a backlog. Applied when attendance
+// is read, never copied onto days, so adding or correcting one fixes every
+// report that covers its dates.
+model SpecialDay {
+  id           String   @id @default(cuid())
+  companyId    String
+  fromDate     DateTime @db.Date
+  toDate       DateTime @db.Date
+  startTime    String
+  endTime      String
+  graceMinutes Int      @default(0)
+  lunchMinutes Int      @default(0)
+  // A working day for these shifts even where the work week or a holiday
+  // would make it a day off.
+  workingDay   Boolean  @default(false)
+  note         String?
+  // The shifts it applies to. A deleted shift's id simply stops matching.
+  shiftIds     String[]
+  createdAt    DateTime @default(now())
+
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@index([companyId, fromDate])
 }
 
 // ============================================================

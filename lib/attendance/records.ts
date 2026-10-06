@@ -2,7 +2,14 @@ import "server-only";
 import { prisma } from "@/lib/db";
 import { dateAtUTC, shiftISO, todayISO } from "@/lib/dates";
 import { isWorkingDay, parseWorkWeek, type WorkWeek } from "@/lib/leave/work-week";
-import { computeDay, dayFlags, parseDeviceStatus, readBreaks, toMin, type BreakRule } from "@/lib/attendance/punches";
+import { computeDay, dayFlags, readBreaks, type BreakRule } from "@/lib/attendance/punches";
+import {
+  parseWeekdayTimings,
+  timingOn,
+  windowOf,
+  type ShiftTimings,
+  type SpecialDay,
+} from "@/lib/attendance/timings";
 
 // Everything the attendance views read. The per-day arithmetic deliberately
 // isn't done here: the browser recomputes it from the punch trail (see
@@ -25,16 +32,54 @@ export type DayRecord = {
   deviceStatus: string | null;
 };
 
-export type PersonShift = {
+export type PersonShift = ShiftTimings & {
   name: string | null;
-  startTime: string | null;
-  endTime: string | null;
-  graceMinutes: number;
   /** True when this is the company default, not a shift set on the person. */
   fromDefault: boolean;
 };
 
-type ShiftRow = { name: string; startTime: string; endTime: string; graceMinutes: number } | null;
+/** The statuses a leave is finally approved in — matching lib/leave/notices.ts. */
+const APPROVED_LEAVE: ("HR_APPROVED" | "APPROVED")[] = ["HR_APPROVED", "APPROVED"];
+
+const SHIFT_SELECT = {
+  id: true,
+  name: true,
+  startTime: true,
+  endTime: true,
+  graceMinutes: true,
+  lunchMinutes: true,
+  weekdayTimings: true,
+} as const;
+
+type ShiftRow = {
+  id: string;
+  name: string;
+  startTime: string;
+  endTime: string;
+  graceMinutes: number;
+  lunchMinutes: number;
+  weekdayTimings: unknown;
+} | null;
+
+/**
+ * Special days touching [from, to], oldest first — the order specialOn() needs
+ * so that a later one laid over an earlier one wins.
+ */
+async function specialDaysBetween(companyId: string, from: string, to: string): Promise<SpecialDay[]> {
+  const rows = await prisma.specialDay.findMany({
+    where: { companyId, fromDate: { lte: dateAtUTC(to) }, toDate: { gte: dateAtUTC(from) } },
+    orderBy: { createdAt: "asc" },
+  });
+  return rows.map((r) => ({
+    id: r.id,
+    from: iso(r.fromDate),
+    to: iso(r.toDate),
+    timing: { start: r.startTime, end: r.endTime, graceMinutes: r.graceMinutes, lunchMinutes: r.lunchMinutes },
+    workingDay: r.workingDay,
+    note: r.note,
+    shiftIds: r.shiftIds,
+  }));
+}
 
 /** The company's break limit as stored, switched on or not. */
 export type BreakLimit = BreakRule & { on: boolean };
@@ -61,10 +106,13 @@ export function ruleOf(limit: BreakLimit): BreakRule | null {
 function resolveShift(own: ShiftRow, fallback: ShiftRow): PersonShift {
   const shift = own ?? fallback;
   return {
+    id: shift?.id ?? null,
     name: shift?.name ?? null,
     startTime: shift?.startTime ?? null,
     endTime: shift?.endTime ?? null,
     graceMinutes: shift?.graceMinutes ?? 0,
+    lunchMinutes: shift?.lunchMinutes ?? 0,
+    weekdays: parseWeekdayTimings(shift?.weekdayTimings),
     fromDefault: !own && !!fallback,
   };
 }
@@ -88,6 +136,8 @@ export type PersonAttendance = {
   /** Company holidays within the window. */
   holidays: { dateISO: string; name: string }[];
   workWeek: WorkWeek;
+  /** Special days on this person's shift within the window, oldest first. */
+  specialDays: SpecialDay[];
   /** The limit as stored, for the control that changes it. */
   breakLimit: BreakLimit;
   /** Days with more breaks than this are highlighted; null when switched off. */
@@ -131,7 +181,7 @@ export async function getPersonAttendance(args: {
       machineCode: true,
       department: { select: { name: true } },
       designation: { select: { name: true } },
-      workShift: { select: { name: true, startTime: true, endTime: true, graceMinutes: true } },
+      workShift: { select: SHIFT_SELECT },
     },
   });
   if (!employee) return null;
@@ -144,7 +194,7 @@ export async function getPersonAttendance(args: {
   const to = minISO(args.to ?? today, today);
   const from = minISO(args.from ?? `${today.slice(0, 7)}-01`, to);
 
-  const [days, leave, holidays, company] = await Promise.all([
+  const [days, leave, holidays, company, specials] = await Promise.all([
     prisma.attendance.findMany({
       where: { companyId, employeeId, date: { gte: dateAtUTC(from), lte: dateAtUTC(to) } },
       orderBy: { date: "asc" },
@@ -165,7 +215,9 @@ export async function getPersonAttendance(args: {
       where: {
         companyId,
         employeeId,
-        status: "HR_APPROVED",
+        // Both finals: HR's sign-off, and the single-step approval some
+        // requests get. MANAGER_APPROVED still waits on HR, so it isn't one.
+        status: { in: APPROVED_LEAVE },
         deletedAt: null,
         startDate: { lte: dateAtUTC(to) },
         endDate: { gte: dateAtUTC(from) },
@@ -180,13 +232,15 @@ export async function getPersonAttendance(args: {
       where: { id: companyId },
       select: {
         workWeek: true,
-        defaultWorkShift: { select: { name: true, startTime: true, endTime: true, graceMinutes: true } },
+        defaultWorkShift: { select: SHIFT_SELECT },
         ...BREAK_LIMIT_SELECT,
       },
     }),
+    specialDaysBetween(companyId, from, to),
   ]);
 
   const breakLimit = breakLimitOf(company);
+  const shift = resolveShift(employee.workShift, company?.defaultWorkShift ?? null);
   const leaveDays: PersonAttendance["leaveDays"] = [];
   for (const l of leave) {
     const label = l.kind === "WFH" ? "Work from home" : (l.leaveType?.name ?? "Leave");
@@ -204,7 +258,7 @@ export async function getPersonAttendance(args: {
       department: employee.department?.name ?? null,
       designation: employee.designation?.name ?? null,
     },
-    shift: resolveShift(employee.workShift, company?.defaultWorkShift ?? null),
+    shift,
     from,
     to,
     days: days.map((d) => ({
@@ -222,6 +276,7 @@ export async function getPersonAttendance(args: {
     leaveDays,
     holidays: holidays.map((h) => ({ dateISO: iso(h.date), name: h.name })),
     workWeek: parseWorkWeek(company?.workWeek),
+    specialDays: shift.id ? specials.filter((s) => s.shiftIds.includes(shift.id!)) : [],
     breakLimit,
     breakRule: ruleOf(breakLimit),
     importedRange: covered,
@@ -247,8 +302,13 @@ export type RosterPerson = {
   shiftFromDefault: boolean;
   /** Days with at least one scan. */
   daysWorked: number;
-  /** Days the device recorded as a no-show. */
+  /**
+   * Working days with no scan and nothing to explain it. Holidays, weekly offs
+   * and work-from-home days never count; approved leave is counted apart.
+   */
   absences: number;
+  /** Working days with no scan, covered by approved leave. */
+  leaveDays: number;
   /** Total minutes between first and last scan, summed. */
   totalMin: number;
   /** Arrivals after shift start + grace. */
@@ -279,7 +339,7 @@ export async function getRoster(args: {
   // The work calendar is loaded here too, so the roster's "late" is the same
   // number you see on opening that person — lateness is only counted on days
   // somebody was due in.
-  const [employees, rows, company, holidayRows] = await Promise.all([
+  const [employees, rows, company, holidayRows, specials, leaves, covered] = await Promise.all([
     prisma.employee.findMany({
       where: { companyId, deletedAt: null },
       orderBy: { fullName: "asc" },
@@ -289,7 +349,7 @@ export async function getRoster(args: {
         employeeCode: true,
         machineCode: true,
         department: { select: { name: true } },
-        workShift: { select: { name: true, startTime: true, endTime: true, graceMinutes: true } },
+        workShift: { select: SHIFT_SELECT },
       },
     }),
     prisma.attendance.findMany({
@@ -306,7 +366,7 @@ export async function getRoster(args: {
       where: { id: companyId },
       select: {
         workWeek: true,
-        defaultWorkShift: { select: { name: true, startTime: true, endTime: true, graceMinutes: true } },
+        defaultWorkShift: { select: SHIFT_SELECT },
         ...BREAK_LIMIT_SELECT,
       },
     }),
@@ -314,10 +374,35 @@ export async function getRoster(args: {
       where: { companyId, deletedAt: null, date: { gte: dateAtUTC(from), lte: dateAtUTC(to) } },
       select: { date: true },
     }),
+    specialDaysBetween(companyId, from, to),
+    prisma.leaveRequest.findMany({
+      where: {
+        companyId,
+        // Both finals: HR's sign-off, and the single-step approval some
+        // requests get. MANAGER_APPROVED still waits on HR, so it isn't one.
+        status: { in: APPROVED_LEAVE },
+        deletedAt: null,
+        startDate: { lte: dateAtUTC(to) },
+        endDate: { gte: dateAtUTC(from) },
+      },
+      select: { employeeId: true, startDate: true, endDate: true, kind: true },
+    }),
+    importedRange(companyId),
   ]);
 
   const workWeek = parseWorkWeek(company?.workWeek);
   const holidays = new Set(holidayRows.map((h) => iso(h.date)));
+
+  // Who was away with approval, and how: leave, or working from home — which
+  // is neither an absence nor a leave.
+  const approved = new Map<string, Map<string, "LEAVE" | "WFH">>();
+  for (const l of leaves) {
+    const mine = approved.get(l.employeeId) ?? new Map<string, "LEAVE" | "WFH">();
+    approved.set(l.employeeId, mine);
+    for (let d = iso(l.startDate); d <= iso(l.endDate); d = shiftISO(d, 1)) {
+      if (d >= from && d <= to) mine.set(d, l.kind === "WFH" ? "WFH" : "LEAVE");
+    }
+  }
 
   const byEmployee = new Map<string, typeof rows>();
   for (const r of rows) {
@@ -330,16 +415,23 @@ export async function getRoster(args: {
   const breakLimit = breakLimitOf(company);
   const rule = ruleOf(breakLimit);
 
+  // Every day an import covered, as a person's own page walks them. The device
+  // leaves out a day it took for a weekly off, so a day the company counts as
+  // working — a Saturday, a special working Sunday — has no row at all, and
+  // reading rows alone would never see that nobody came in.
+  const span: string[] = [];
+  if (covered) {
+    const last = minISO(to, covered.to);
+    for (let d = from > covered.from ? from : covered.from; d <= last; d = shiftISO(d, 1)) span.push(d);
+  }
+
   const people: RosterPerson[] = employees.map((e) => {
     const applies = resolveShift(e.workShift, fallback);
-    const shift = {
-      startMin: toMin(applies.startTime),
-      endMin: toMin(applies.endTime),
-      graceMin: applies.graceMinutes,
-    };
     const mine = byEmployee.get(e.id) ?? [];
+    const recordOn = new Map(mine.map((r) => [iso(r.date), r]));
     let daysWorked = 0;
     let absences = 0;
+    let leaveDays = 0;
     let totalMin = 0;
     let lateDays = 0;
     let lateMin = 0;
@@ -348,11 +440,16 @@ export async function getRoster(args: {
     let breakUnclearDays = 0;
     let lastDay: string | null = null;
 
-    for (const r of mine) {
-      const d = iso(r.date);
-      const expected = isWorkingDay(d, workWeek, holidays);
-      const f = computeDay(r.punchLog, { ...shift, expected });
-      const st = parseDeviceStatus(r.deviceStatus);
+    // Someone with nothing imported in the window isn't being tracked by the
+    // device at all (not mapped, not joined yet) — no days, rather than a column
+    // of absences. The same gate a person's page applies.
+    for (const d of mine.length ? span : []) {
+      const r = recordOn.get(d) ?? null;
+      // The day's own hours: a special day's, the shift's for that weekday, or
+      // its regular ones. A special day marked working counts even on a day off.
+      const timing = timingOn(applies, d, specials);
+      const expected = !!timing?.special?.workingDay || isWorkingDay(d, workWeek, holidays);
+      const f = computeDay(r?.punchLog, { ...windowOf(timing), expected });
       if (f.punches.length) {
         daysWorked++;
         totalMin += f.spanMin;
@@ -360,8 +457,16 @@ export async function getRoster(args: {
           lateDays++;
           lateMin += f.lateMin;
         }
-      } else if (!st.restDay) absences++;
+      } else if (expected) {
+        // No scan on a day they were due in. The device writes "Absent" for a
+        // holiday too, so its verdict isn't used here: the company calendar
+        // decides whether the day counted, and approved leave explains it.
+        const away = approved.get(e.id)?.get(d);
+        if (away === "LEAVE") leaveDays++;
+        else if (away !== "WFH") absences++;
+      }
       if (
+        r &&
         dayFlags({
           figures: f,
           deviceStatus: r.deviceStatus,
@@ -375,7 +480,7 @@ export async function getRoster(args: {
       const breaks = rule && expected ? readBreaks(f, rule) : null;
       if (breaks?.verdict === "over") longBreakDays++;
       else if (breaks?.verdict === "unclear") breakUnclearDays++;
-      if (!lastDay || d > lastDay) lastDay = d;
+      if (r && (!lastDay || d > lastDay)) lastDay = d;
     }
 
     return {
@@ -390,6 +495,7 @@ export async function getRoster(args: {
       shiftFromDefault: applies.fromDefault,
       daysWorked,
       absences,
+      leaveDays,
       totalMin,
       lateDays,
       lateMin,

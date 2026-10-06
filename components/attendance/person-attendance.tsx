@@ -29,6 +29,14 @@ import {
   type DayFigures,
   type DayFlag,
 } from "@/lib/attendance/punches";
+import {
+  standardMin,
+  timingLengthMin,
+  timingOn,
+  windowOf,
+  WEEKDAY_NAMES,
+  type AppliedTiming,
+} from "@/lib/attendance/timings";
 import type { PersonAttendance as PersonData } from "@/lib/attendance/records";
 import { BreakLimitSetting } from "@/components/attendance/break-limit";
 
@@ -65,8 +73,15 @@ const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
 
 type Row = {
   dateISO: string;
-  /** A day this person was expected in, per the company work week + holidays. */
+  /** A day this person was due in: the work week and holidays, unless a special
+   *  day makes it a working one. */
   expected: boolean;
+  /** The hours the day asked for — a special day's, the shift's for that
+   *  weekday, or its regular ones. Null without a shift. */
+  timing: AppliedTiming | null;
+  /** Hours on site the day asked for: its length less lunch. Null on a day off
+   *  or without a shift. */
+  standard: number | null;
   holiday: string | null;
   leave: { typeName: string; half: boolean } | null;
   record: PersonData["days"][number] | null;
@@ -92,6 +107,9 @@ export function PersonAttendance({
   const router = useRouter();
   const { employee, shift, from, to, breakRule } = data;
 
+  // The shift's regular hours: the arrival chart's line and the notes that
+  // describe the shift. A day with other hours — a short Saturday, a special
+  // day — carries its own timing on its row, and every figure for it uses that.
   const shiftWindow = useMemo(
     () => ({
       startMin: toMin(shift.startTime),
@@ -100,12 +118,18 @@ export function PersonAttendance({
     }),
     [shift.startTime, shift.endTime, shift.graceMinutes],
   );
-
-  // What a day asks for: the shift's length less an hour — the lunch nobody is
-  // expected on site for — so a 9–6 shift asks for 8 hours. Null without a
-  // shift, and then nothing on this page is held against a standard.
-  const shiftLen = shiftLengthMin(shiftWindow.startMin, shiftWindow.endMin);
-  const dailyStandard = shiftLen !== null && shiftLen > LUNCH_MIN ? shiftLen - LUNCH_MIN : null;
+  const regular =
+    shift.startTime && shift.endTime
+      ? { start: shift.startTime, end: shift.endTime, graceMinutes: shift.graceMinutes, lunchMinutes: shift.lunchMinutes }
+      : null;
+  const regularLength = regular ? timingLengthMin(regular) : null;
+  const regularStandard = standardMin(regular);
+  // Weekdays with their own hours, Monday first — "Sat 10:00–14:00".
+  const weekdayHours = WEEK_ORDER.flatMap((d) => {
+    const t = shift.weekdays[d];
+    return t ? [`${DOW_LABELS[d]} ${t.start}–${t.end}`] : [];
+  });
+  const timingsVary = weekdayHours.length > 0 || data.specialDays.length > 0;
 
   // ---- one Row per calendar day in the loaded window ----------------------
   const rows = useMemo<Row[]>(() => {
@@ -123,8 +147,12 @@ export function PersonAttendance({
     const out: Row[] = [];
     for (let d = first; d <= last; d = shiftISO(d, 1)) {
       const record = byDate.get(d) ?? null;
-      const expected = isWorkingDay(d, data.workWeek, holidaySet);
-      const figures = computeDay(record?.punchLog, { ...shiftWindow, expected });
+      const timing = timingOn(shift, d, data.specialDays);
+      // A special day marked working counts even where the week or a holiday
+      // would make it a day off.
+      const workingOverride = !!timing?.special?.workingDay;
+      const expected = workingOverride || isWorkingDay(d, data.workWeek, holidaySet);
+      const figures = computeDay(record?.punchLog, { ...windowOf(timing), expected });
       const flags = record
         ? dayFlags({
             figures,
@@ -140,8 +168,10 @@ export function PersonAttendance({
       const scanned = figures.punches.length > 0;
 
       let bucket: Bucket;
-      if (holiday) bucket = "holiday";
-      else if (leave) bucket = "leave";
+      if (holiday && !workingOverride) bucket = "holiday";
+      // Leave covers working days only: a weekend inside a leave's dates is
+      // still a day off, as the leave balance counts it.
+      else if (leave && expected) bucket = "leave";
       else if (scanned && !expected) bucket = "rest-worked";
       else if (scanned && (device.kind === "half" || record?.type === "HALF_DAY")) bucket = "half";
       else if (scanned) bucket = "worked";
@@ -155,10 +185,11 @@ export function PersonAttendance({
       else if (record?.manual) label = `${device.label || "Marked by hand"} · set by hand`;
       else label = device.label || (scanned ? "Present" : "Absent");
 
-      out.push({ dateISO: d, expected, holiday, leave, record, figures, flags, breaks, bucket, label });
+      const standard = expected ? standardMin(timing) : null;
+      out.push({ dateISO: d, expected, timing, standard, holiday, leave, record, figures, flags, breaks, bucket, label });
     }
     return out;
-  }, [data.days, data.holidays, data.leaveDays, data.workWeek, data.importedRange, from, to, shiftWindow, breakRule]);
+  }, [data.days, data.holidays, data.leaveDays, data.workWeek, data.importedRange, data.specialDays, from, to, shift, breakRule]);
 
   // ---- filters ------------------------------------------------------------
   const [buckets, setBuckets] = useState<Set<Bucket>>(new Set());
@@ -194,14 +225,19 @@ export function PersonAttendance({
     const lateMin = late.reduce((s, r) => s + r.figures.lateMin, 0);
     const arrivals = worked.map((r) => r.figures.firstIn!).sort((a, b) => a - b);
     const median = arrivals.length ? arrivals[Math.floor(arrivals.length / 2)] : null;
-    // The period's standard: the daily one on every working day, half of it on a
-    // half day's approved leave (or work from home), none on a full day's.
-    const standardDays = kept
-      .filter((r) => r.expected)
-      .reduce((n, r) => n + (r.leave ? (r.leave.half ? 0.5 : 0) : 1), 0);
+    // The period's standard: each working day's own — its hours less lunch — in
+    // full, half of it on a half day's approved leave (or work from home), none
+    // on a full day's.
+    const due = kept.filter((r) => r.standard !== null);
+    const share = (r: Row) => (r.leave ? (r.leave.half ? 0.5 : 0) : 1);
+    const standardDays = due.reduce((n, r) => n + share(r), 0);
+    const standardTotal = due.reduce((n, r) => n + share(r) * r.standard!, 0);
+    // One figure when every working day asks the same, so a note can say "× 8h".
+    const dailies = new Set(due.map((r) => r.standard!));
     return {
       workedDays: worked.length,
-      expectedDays: kept.filter((r) => r.expected).length,
+      // Due in: working days, less any spent on a full day's approved leave.
+      expectedDays: kept.filter((r) => r.expected && !(r.leave && !r.leave.half)).length,
       totalMin,
       readable,
       avgMin: worked.length ? Math.round(totalMin / worked.length) : 0,
@@ -215,9 +251,16 @@ export function PersonAttendance({
       overBreaks: kept.filter((r) => r.breaks?.verdict === "over").length,
       unclearBreaks: kept.filter((r) => r.breaks?.verdict === "unclear").length,
       standardDays,
-      standardMin: dailyStandard === null ? null : Math.round(standardDays * dailyStandard),
+      standardMin: shift.startTime ? Math.round(standardTotal) : null,
+      uniformDaily: dailies.size === 1 ? [...dailies][0] : null,
     };
-  }, [kept, dailyStandard]);
+  }, [kept, shift.startTime]);
+
+  // What an average day is held against: the one daily standard when every
+  // working day shares it, else their mean.
+  const dayStandard =
+    facts.uniformDaily ??
+    (facts.standardMin !== null && facts.standardDays > 0 ? Math.round(facts.standardMin / facts.standardDays) : null);
 
   // ---- the open day -------------------------------------------------------
   const byDate = useMemo(() => new Map(rows.map((r) => [r.dateISO, r])), [rows]);
@@ -289,6 +332,7 @@ export function PersonAttendance({
                 <>
                   Lateness measured from <span className="font-medium text-content">{graceNote}</span>
                   {shiftSource}
+                  {weekdayHours.length > 0 && ` · ${weekdayHours.join(", ")}`}
                 </>
               ) : (
                 <span className="font-medium text-amber-600 dark:text-amber-400">Lateness not measured — no work shift</span>
@@ -399,9 +443,11 @@ export function PersonAttendance({
               label="Hours on site"
               value={hoursMin(facts.totalMin)}
               note={
-                facts.standardMin !== null && dailyStandard !== null
-                  ? `of ${hoursMin(facts.standardMin)} · ${dayCount(facts.standardDays)} × ${hoursMin(dailyStandard)}`
-                  : "first scan to last, per day"
+                facts.standardMin === null
+                  ? "first scan to last, per day"
+                  : facts.uniformDaily !== null
+                    ? `of ${hoursMin(facts.standardMin)} · ${dayCount(facts.standardDays)} × ${hoursMin(facts.uniformDaily)}`
+                    : `of ${hoursMin(facts.standardMin)} · ${dayCount(facts.standardDays)}, each at its own hours`
               }
               accent={
                 facts.standardMin !== null && facts.totalMin < facts.standardMin
@@ -413,12 +459,16 @@ export function PersonAttendance({
               label="Average day"
               value={hoursMin(facts.avgMin)}
               note={
-                dailyStandard !== null && shiftLen !== null
-                  ? `of ${hoursMin(dailyStandard)} a day · ${hoursMin(shiftLen)} shift less 1h`
-                  : `${facts.readable} of ${facts.workedDays} days pair in/out cleanly`
+                dayStandard === null
+                  ? `${facts.readable} of ${facts.workedDays} days pair in/out cleanly`
+                  : facts.uniformDaily === null
+                    ? `of ${hoursMin(dayStandard)} a day on average`
+                    : dayStandard === regularStandard && regularLength !== null
+                      ? `of ${hoursMin(dayStandard)} a day · ${hoursMin(regularLength)} shift${shift.lunchMinutes ? ` less ${hoursMin(shift.lunchMinutes)} lunch` : ", no lunch off"}`
+                      : `of ${hoursMin(dayStandard)} a day`
               }
               accent={
-                dailyStandard !== null && facts.workedDays > 0 && facts.avgMin < dailyStandard
+                dayStandard !== null && facts.workedDays > 0 && facts.avgMin < dayStandard
                   ? "text-amber-600 dark:text-amber-400"
                   : undefined
               }
@@ -429,7 +479,7 @@ export function PersonAttendance({
               // Never a 0 without a shift: that would read as "always on time"
               // when the truth is that nothing was measured.
               value={shift.startTime ? String(facts.lateDays) : "not measured"}
-              note={shift.startTime ? `after ${graceNote}` : "assign a work shift to get this"}
+              note={shift.startTime ? `after ${graceNote}${timingsVary ? " · varies by day" : ""}` : "assign a work shift to get this"}
               accent={
                 !shift.startTime
                   ? "text-amber-600 dark:text-amber-400"
@@ -470,7 +520,7 @@ export function PersonAttendance({
           <Card>
             <CardHeader
               title="Day by day"
-              description={`Hours are first scan to last.${dailyStandard !== null ? ` Yellow marks a day under the ${hoursMin(dailyStandard)} standard.` : ""} A dot marks a day where the device's own figures don't hold up${breakRule ? "; a clock, a day over the break limit" : ""}.`}
+              description={`Hours are first scan to last.${shift.startTime ? " Yellow marks a working day under its standard hours." : ""} A dot marks a day where the device's own figures don't hold up${breakRule ? "; a clock, a day over the break limit" : ""}${data.specialDays.length ? "; a calendar, a special day" : ""}.`}
             />
             <CardBody>
               <MonthGrid
@@ -479,33 +529,41 @@ export function PersonAttendance({
                 dimUnmatched={filtersOn}
                 openDate={openDate}
                 onPick={setPicked}
-                dailyStandard={dailyStandard}
               />
             </CardBody>
           </Card>
 
           {/* ---- the open day -------------------------------------------- */}
-          {open && <DayDetail row={open} shift={shift} shiftWindow={shiftWindow} breakRule={breakRule} />}
+          {open && <DayDetail row={open} shift={shift} breakRule={breakRule} />}
 
           {/* ---- charts --------------------------------------------------- */}
           <div className="grid gap-6 xl:grid-cols-2">
             <Card>
-              <CardHeader title="When they arrive" description="Each scanned day's first punch against the shift line." />
+              <CardHeader
+                title="When they arrive"
+                description={
+                  timingsVary
+                    ? "Each scanned day's first punch. The line is the regular start; a dot turns amber when that day was late by its own hours."
+                    : "Each scanned day's first punch against the shift line."
+                }
+              />
               <CardBody>
-                <ArrivalChart rows={kept} shiftWindow={shiftWindow} onPick={setPicked} openDate={openDate} />
+                <ArrivalChart rows={kept} shiftWindow={shiftWindow} varies={timingsVary} onPick={setPicked} openDate={openDate} />
               </CardBody>
             </Card>
             <Card>
               <CardHeader
                 title="Hours per day"
                 description={
-                  dailyStandard !== null && shiftLen !== null
-                    ? `First scan to last, against the ${hoursMin(dailyStandard)} standard — the ${hoursMin(shiftLen)} shift (${shift.startTime}–${shift.endTime}) less an hour.`
-                    : "First scan to last. No work shift, so there's no day to measure against."
+                  !shift.startTime
+                    ? "First scan to last. No work shift, so there's no day to measure against."
+                    : facts.uniformDaily !== null && facts.uniformDaily === regularStandard && regularLength !== null
+                      ? `First scan to last, against the ${hoursMin(regularStandard)} standard — the ${hoursMin(regularLength)} shift (${shift.startTime}–${shift.endTime})${shift.lunchMinutes ? ` less ${hoursMin(shift.lunchMinutes)} lunch` : ""}.`
+                      : "First scan to last, each against its own day's standard: that day's hours less its lunch."
                 }
               />
               <CardBody>
-                <HoursChart rows={kept} target={dailyStandard} onPick={setPicked} openDate={openDate} />
+                <HoursChart rows={kept} onPick={setPicked} openDate={openDate} />
               </CardBody>
             </Card>
           </div>
@@ -793,14 +851,12 @@ function MonthGrid({
   dimUnmatched,
   openDate,
   onPick,
-  dailyStandard,
 }: {
   rows: Row[];
   matches: Set<string>;
   dimUnmatched: boolean;
   openDate: string | null;
   onPick: (d: string) => void;
-  dailyStandard: number | null;
 }) {
   const months = useMemo(() => {
     const map = new Map<string, Row[]>();
@@ -834,7 +890,6 @@ function MonthGrid({
                   dim={dimUnmatched && !matches.has(r.dateISO)}
                   open={r.dateISO === openDate}
                   onPick={onPick}
-                  dailyStandard={dailyStandard}
                 />
               ))}
             </div>
@@ -860,27 +915,29 @@ function DayCell({
   dim,
   open,
   onPick,
-  dailyStandard,
 }: {
   row: Row;
   dim: boolean;
   open: boolean;
   onPick: (d: string) => void;
-  dailyStandard: number | null;
 }) {
   const worked = row.figures.punches.length > 0;
   const longBreaks = row.breaks?.verdict === "over";
-  // A working day that came in under the standard reads yellow, like a half
-  // day — both are days short of what the shift asks for.
+  // A working day that came in under its standard reads yellow, like a half
+  // day — both are days short of what the shift asked for that day.
   let shortNote = "";
-  if (dailyStandard !== null && row.bucket === "worked" && row.figures.spanMin < dailyStandard) {
-    shortNote = ` · ${hoursMin(dailyStandard - row.figures.spanMin)} under the ${hoursMin(dailyStandard)} standard`;
+  if (row.standard !== null && row.bucket === "worked" && row.figures.spanMin < row.standard) {
+    shortNote = ` · ${hoursMin(row.standard - row.figures.spanMin)} under the day's ${hoursMin(row.standard)}`;
   }
+  const special = row.timing?.special ?? null;
+  const specialNote = special
+    ? ` · special day${special.note ? ` (${special.note})` : ""}: ${special.timing.start}–${special.timing.end}`
+    : "";
   return (
     <button
       type="button"
       onClick={() => onPick(row.dateISO)}
-      title={`${formatISO(row.dateISO)} — ${row.label}${shortNote}${longBreaks ? " · over the break limit" : ""}`}
+      title={`${formatISO(row.dateISO)} — ${row.label}${specialNote}${shortNote}${longBreaks ? " · over the break limit" : ""}`}
       className={cn(
         "relative flex h-16 flex-col items-start justify-between rounded-lg px-2 py-1.5 text-left ring-1 ring-inset transition-all",
         shortNote ? CELL_TONE.half : CELL_TONE[row.bucket],
@@ -902,8 +959,9 @@ function DayCell({
           {row.bucket === "off" ? "off" : row.bucket === "holiday" ? "holiday" : row.bucket === "leave" ? "leave" : "absent"}
         </span>
       )}
-      {(longBreaks || row.flags.length > 0) && (
+      {(special || longBreaks || row.flags.length > 0) && (
         <span className="absolute right-1.5 top-1 flex items-center gap-1">
+          {special && <Icon name="calendar" className="size-3 text-accent-strong" />}
           {longBreaks && <Icon name="clock" className="size-3 text-amber-600 dark:text-amber-400" />}
           {row.flags.length > 0 && <span className="size-1.5 rounded-full bg-amber-500" />}
         </span>
@@ -924,15 +982,15 @@ const TRACK_TO = 23 * 60;
 function DayDetail({
   row,
   shift,
-  shiftWindow,
   breakRule,
 }: {
   row: Row;
   shift: PersonData["shift"];
-  shiftWindow: { startMin: number | null; endMin: number | null; graceMin: number };
   breakRule: BreakRule | null;
 }) {
   const f = row.figures;
+  // This day's own hours — a short Saturday's or a special day's where they apply.
+  const shiftWindow = windowOf(row.timing);
   const device = parseDeviceStatus(row.record?.deviceStatus);
   const meta = BUCKET_META.get(row.bucket)!;
 
@@ -944,7 +1002,11 @@ function DayDetail({
   const facts: { label: string; value: string; tone?: string }[] = [
     { label: "In", value: f.firstIn === null ? "—" : to12h(hhmm(f.firstIn)) },
     { label: "Out", value: f.lastOut === null ? "—" : to12h(hhmm(f.lastOut)) },
-    { label: "Hours", value: f.punches.length ? hoursMin(f.spanMin) : "—" },
+    {
+      label: "Hours",
+      value: f.punches.length ? `${hoursMin(f.spanMin)}${row.standard !== null ? ` of ${hoursMin(row.standard)}` : ""}` : "—",
+      tone: f.punches.length && row.standard !== null && f.spanMin < row.standard ? "text-amber-600 dark:text-amber-400" : undefined,
+    },
     {
       label: "Late",
       value:
@@ -987,11 +1049,7 @@ function DayDetail({
             {!row.record && <Badge tone="gray">Not imported</Badge>}
           </span>
         }
-        description={
-          shift.startTime
-            ? `Shift ${shift.name ? `${shift.name} ` : ""}${shift.startTime}–${shift.endTime}${shift.graceMinutes ? `, ${shift.graceMinutes} min grace` : ""}${shift.fromDefault ? " (company default)" : ""}`
-            : "No work shift assigned, so lateness can't be measured"
-        }
+        description={timingLine(row, shift)}
       />
       <CardBody className="space-y-5">
         {/* The day on a clock. One bar from the first scan to the last, with a
@@ -1295,11 +1353,15 @@ const CHART_H = 160;
 function ArrivalChart({
   rows,
   shiftWindow,
+  varies,
   onPick,
   openDate,
 }: {
   rows: Row[];
+  /** The shift's regular start and grace. */
   shiftWindow: { startMin: number | null; graceMin: number };
+  /** Some days ask for other hours, so the line is only the usual start. */
+  varies: boolean;
   onPick: (d: string) => void;
   openDate: string | null;
 }) {
@@ -1367,7 +1429,7 @@ function ArrivalChart({
         </span>
         {start !== null && (
           <span className="inline-flex items-center gap-1.5">
-            <span className="h-px w-4 bg-brand-500/70" /> shift start {hhmm(start)}
+            <span className="h-px w-4 bg-brand-500/70" /> {varies ? "regular start" : "shift start"} {hhmm(start)}
             {shiftWindow.graceMin > 0 && <span className="text-faint">+ {shiftWindow.graceMin}m grace</span>}
           </span>
         )}
@@ -1376,18 +1438,23 @@ function ArrivalChart({
   );
 }
 
-/** Taken off a shift's length to give the hours a day asks for on site. */
-const LUNCH_MIN = 60;
-
 /** 26 → "26 days", 25.5 → "25.5 days" (a half day's leave halves a day). */
 function dayCount(n: number): string {
   return `${Number.isInteger(n) ? n : n.toFixed(1)} ${n === 1 ? "day" : "days"}`;
 }
 
-/** A shift's length in minutes, across midnight for a night shift. Null without one. */
-function shiftLengthMin(start: number | null, end: number | null): number | null {
-  if (start === null || end === null || start === end) return null;
-  return end > start ? end - start : end + 1440 - start;
+/** What the day asked for, in words: whose hours they were, and what they were. */
+function timingLine(row: Row, shift: PersonData["shift"]): string {
+  const t = row.timing;
+  if (!t) return "No work shift assigned, so lateness can't be measured";
+  const hours = `${t.start}–${t.end}${t.graceMinutes ? `, ${t.graceMinutes} min grace` : ""}${row.standard !== null ? `, ${hoursMin(row.standard)} on site` : ""}`;
+  const whose =
+    t.source === "special"
+      ? `Special day${t.special?.note ? ` (${t.special.note})` : ""}`
+      : t.source === "weekday"
+        ? `${WEEKDAY_NAMES[new Date(`${row.dateISO}T00:00:00Z`).getUTCDay()]} hours`
+        : `Shift${shift.name ? ` ${shift.name}` : ""}`;
+  return `${whose}: ${hours}${shift.fromDefault ? " · company default shift" : ""}`;
 }
 
 const BAR_FULL = "rgb(16 185 129 / 0.8)";
@@ -1396,70 +1463,76 @@ const BAR_OFF = "rgb(148 163 184 / 0.7)";
 const BAR_OPEN = "rgb(79 70 229)";
 
 /**
- * Each scanned day's hours against the person's daily standard (their shift
- * less an hour): the dashed line is the standard, and a bar is green when it
- * reaches it, amber when it falls short. A day nobody was due in is grey —
- * there was no standard to fall short of.
+ * Each scanned day's hours against that day's standard (its hours less lunch):
+ * green when it reached it, amber when it fell short, grey on a day nobody was
+ * due in. The standard is one dashed line while every day shares it, and a
+ * mark on each bar once they differ — a short Saturday, a special day.
  */
-function HoursChart({
-  rows,
-  target,
-  onPick,
-  openDate,
-}: {
-  rows: Row[];
-  /** The daily standard in minutes; null when the person has no shift. */
-  target: number | null;
-  onPick: (d: string) => void;
-  openDate: string | null;
-}) {
+function HoursChart({ rows, onPick, openDate }: { rows: Row[]; onPick: (d: string) => void; openDate: string | null }) {
   const bars = rows.filter((r) => r.figures.punches.length > 0);
   if (bars.length === 0) return <p className="py-10 text-center text-sm text-muted">No scanned days in this selection.</p>;
   const peak = Math.max(...bars.map((r) => r.figures.spanMin));
-  // Tall enough for the standard's line even when every day fell short of it.
-  const max = Math.max(peak, target ?? 0, 60);
+  const standards = bars.flatMap((r) => (r.standard === null ? [] : [r.standard]));
+  const uniform = new Set(standards).size === 1 ? standards[0] : null;
+  // Tall enough for the standard even when every day fell short of it.
+  const max = Math.max(peak, ...standards, 60);
   const width = 100 / bars.length;
   const yAt = (min: number) => CHART_H - (min / max) * CHART_H;
   const anyOff = bars.some((r) => !r.expected);
+  const target = standards.length ? uniform : null;
 
   return (
     <div className="space-y-2">
       <svg viewBox={`0 0 100 ${CHART_H}`} preserveAspectRatio="none" className="h-40 w-full">
-        {target !== null && (
-          <line x1={0} x2={100} y1={yAt(target)} y2={yAt(target)} stroke="rgb(99 102 241 / 0.5)" strokeWidth={1} strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />
+        {uniform !== null && (
+          <line x1={0} x2={100} y1={yAt(uniform)} y2={yAt(uniform)} stroke="rgb(99 102 241 / 0.5)" strokeWidth={1} strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />
         )}
         {bars.map((r, i) => {
           const span = r.figures.spanMin;
           const h = (span / max) * CHART_H;
-          const short = target !== null && r.expected && span < target;
+          const std = r.standard;
+          const short = std !== null && span < std;
           const note = !r.expected
             ? " · not a working day"
-            : short
-              ? ` · ${hoursMin(target - span)} short of the ${hoursMin(target)} standard`
-              : target !== null
-                ? " · standard met"
-                : "";
+            : std === null
+              ? ""
+              : short
+                ? ` · ${hoursMin(std - span)} short of the day's ${hoursMin(std)}`
+                : " · standard met";
           return (
-            <rect
-              key={r.dateISO}
-              x={i * width + width * 0.15}
-              y={CHART_H - h}
-              width={width * 0.7}
-              height={h}
-              rx={0.6}
-              className="cursor-pointer"
-              fill={r.dateISO === openDate ? BAR_OPEN : !r.expected ? BAR_OFF : short ? BAR_SHORT : BAR_FULL}
-              onClick={() => onPick(r.dateISO)}
-            >
-              <title>{`${formatISO(r.dateISO)} — ${hoursMin(span)}${note}`}</title>
-            </rect>
+            <g key={r.dateISO}>
+              <rect
+                x={i * width + width * 0.15}
+                y={CHART_H - h}
+                width={width * 0.7}
+                height={h}
+                rx={0.6}
+                className="cursor-pointer"
+                fill={r.dateISO === openDate ? BAR_OPEN : !r.expected ? BAR_OFF : short ? BAR_SHORT : BAR_FULL}
+                onClick={() => onPick(r.dateISO)}
+              >
+                <title>{`${formatISO(r.dateISO)} — ${hoursMin(span)}${note}`}</title>
+              </rect>
+              {uniform === null && std !== null && (
+                <line
+                  x1={i * width + width * 0.05}
+                  x2={(i + 1) * width - width * 0.05}
+                  y1={yAt(std)}
+                  y2={yAt(std)}
+                  stroke="rgb(79 70 229 / 0.8)"
+                  strokeWidth={1.5}
+                  vectorEffect="non-scaling-stroke"
+                  pointerEvents="none"
+                />
+              )}
+            </g>
           );
         })}
       </svg>
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-[11px] text-faint">
         <span>Peak {hoursMin(peak)}</span>
         <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          {target !== null && (
+          {standards.length > 0 && (
             <>
               <span className="inline-flex items-center gap-1.5">
                 <span className="size-2 rounded-sm" style={{ background: BAR_FULL }} /> met
@@ -1474,9 +1547,17 @@ function HoursChart({
               <span className="size-2 rounded-sm" style={{ background: BAR_OFF }} /> day off
             </span>
           )}
-          {target !== null && (
+          {standards.length > 0 && (
             <span className="inline-flex items-center gap-1.5">
-              <span className="h-px w-4 border-t border-dashed border-brand-500/60" /> {hoursMin(target)} standard
+              {target !== null ? (
+                <>
+                  <span className="h-px w-4 border-t border-dashed border-brand-500/60" /> {hoursMin(target)} standard
+                </>
+              ) : (
+                <>
+                  <span className="h-0.5 w-4 bg-brand-600/80" /> each day&apos;s standard
+                </>
+              )}
             </span>
           )}
         </span>

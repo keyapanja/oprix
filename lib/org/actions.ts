@@ -2,8 +2,11 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { requireCapability } from "@/lib/auth/guard";
+import { dateAtUTC } from "@/lib/dates";
+import { timingLengthMin, WEEKDAY_NAMES, type DayTiming } from "@/lib/attendance/timings";
 
 export type ActionState = { error?: string; ok?: boolean };
 
@@ -243,12 +246,54 @@ export async function renameService(id: string, name: string): Promise<ActionSta
 }
 
 // ---- Work shifts ----------------------------------------------------------
+const HHMM = z.string().regex(/^\d{2}:\d{2}$/, "Use HH:MM");
+const GraceZ = z.coerce.number().int().min(0, "Grace can't be negative").max(180, "Keep grace to 180 minutes or less");
+const LunchZ = z.coerce.number().int().min(0, "Lunch can't be negative").max(240, "Keep lunch to 240 minutes or less");
+
 const ShiftSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(80),
-  startTime: z.string().regex(/^\d{2}:\d{2}$/, "Use HH:MM"),
-  endTime: z.string().regex(/^\d{2}:\d{2}$/, "Use HH:MM"),
-  graceMinutes: z.coerce.number().int().min(0).max(180),
+  startTime: HHMM,
+  endTime: HHMM,
+  graceMinutes: GraceZ,
+  lunchMinutes: LunchZ,
 });
+
+/** Lunch has to leave some of the day standing, or there are no hours to measure. */
+function lunchError(t: DayTiming, what: string): string | null {
+  const length = timingLengthMin(t);
+  if (length === null) return `${what}: the start and end can't be the same time`;
+  if (t.lunchMinutes >= length) return `${what}: lunch can't take up the whole day`;
+  return null;
+}
+
+const WeekdayTimingsZ = z.record(
+  z.string().regex(/^[0-6]$/),
+  z.object({ start: HHMM, end: HHMM, graceMinutes: GraceZ, lunchMinutes: LunchZ }),
+);
+
+/**
+ * The shift form's weekday hours, posted as JSON — { "6": { start, end, … } }.
+ * Empty means none, which clears the column rather than storing "{}".
+ */
+function parseWeekdayInput(
+  raw: FormDataEntryValue | null,
+): { value: Prisma.InputJsonValue | typeof Prisma.DbNull } | { error: string } {
+  const text = typeof raw === "string" ? raw.trim() : "";
+  if (!text) return { value: Prisma.DbNull };
+  let json: unknown;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    return { error: "Couldn't read the weekday hours — try again" };
+  }
+  const parsed = WeekdayTimingsZ.safeParse(json);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the weekday hours" };
+  for (const [day, t] of Object.entries(parsed.data)) {
+    const err = lunchError(t, WEEKDAY_NAMES[Number(day)]);
+    if (err) return { error: err };
+  }
+  return { value: Object.keys(parsed.data).length ? parsed.data : Prisma.DbNull };
+}
 
 export async function createShift(
   _prev: ActionState,
@@ -260,11 +305,15 @@ export async function createShift(
     startTime: formData.get("startTime"),
     endTime: formData.get("endTime"),
     graceMinutes: formData.get("graceMinutes") || 0,
+    lunchMinutes: formData.get("lunchMinutes") ?? 60,
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message };
+  const d = parsed.data;
+  const err = lunchError({ start: d.startTime, end: d.endTime, graceMinutes: d.graceMinutes, lunchMinutes: d.lunchMinutes }, "The shift");
+  if (err) return { error: err };
 
   await prisma.workShift.create({
-    data: { companyId: session.companyId, ...parsed.data },
+    data: { companyId: session.companyId, ...d },
   });
   revalidatePath(ORG);
   return { ok: true };
@@ -313,12 +362,106 @@ export async function updateShift(
     startTime: formData.get("startTime"),
     endTime: formData.get("endTime"),
     graceMinutes: formData.get("graceMinutes") || 0,
+    lunchMinutes: formData.get("lunchMinutes") ?? 60,
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message };
   const { id, ...data } = parsed.data;
-  const res = await prisma.workShift.updateMany({ where: { id, companyId: session.companyId }, data });
+  const err = lunchError(
+    { start: data.startTime, end: data.endTime, graceMinutes: data.graceMinutes, lunchMinutes: data.lunchMinutes },
+    "The shift",
+  );
+  if (err) return { error: err };
+  const weekdays = parseWeekdayInput(formData.get("weekdayTimings"));
+  if ("error" in weekdays) return { error: weekdays.error };
+
+  const res = await prisma.workShift.updateMany({
+    where: { id, companyId: session.companyId },
+    data: { ...data, weekdayTimings: weekdays.value },
+  });
   if (res.count === 0) return { error: "Shift not found" };
   revalidatePath(ORG);
+  revalidatePath("/attendance");
+  return { ok: true };
+}
+
+// ---- Special days -----------------------------------------------------------
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+const SpecialDayZ = z.object({
+  fromDate: z.string().regex(ISO_DATE, "Pick the date"),
+  toDate: z.union([z.string().regex(ISO_DATE), z.literal("")]),
+  startTime: HHMM,
+  endTime: HHMM,
+  graceMinutes: GraceZ,
+  lunchMinutes: LunchZ,
+  note: z.string().trim().max(120, "Keep the note to 120 characters"),
+  workingDay: z.boolean(),
+  shiftIds: z.array(z.string().min(1)).min(1, "Pick at least one shift"),
+});
+
+/**
+ * A dated change to some shifts' hours. Attendance applies it whenever it's
+ * read, so it corrects every report covering its dates — past ones included —
+ * the moment it's saved.
+ */
+export async function createSpecialDay(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const session = await requireCapability("org:manage");
+  const parsed = SpecialDayZ.safeParse({
+    fromDate: formData.get("fromDate") ?? "",
+    toDate: formData.get("toDate") ?? "",
+    startTime: formData.get("startTime"),
+    endTime: formData.get("endTime"),
+    graceMinutes: formData.get("graceMinutes") || 0,
+    lunchMinutes: formData.get("lunchMinutes") || 0,
+    note: formData.get("note") ?? "",
+    workingDay: formData.get("workingDay") === "on",
+    shiftIds: formData.getAll("shiftIds").map(String),
+  });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message };
+  const d = parsed.data;
+  const to = d.toDate || d.fromDate;
+  if (to < d.fromDate) return { error: "The last date is before the first" };
+  if ((dateAtUTC(to).getTime() - dateAtUTC(d.fromDate).getTime()) / 86_400_000 > 366) {
+    return { error: "Keep a special day to a year or less" };
+  }
+  const err = lunchError(
+    { start: d.startTime, end: d.endTime, graceMinutes: d.graceMinutes, lunchMinutes: d.lunchMinutes },
+    "The special day",
+  );
+  if (err) return { error: err };
+
+  // Only this company's shifts, whatever the form sent.
+  const shifts = await prisma.workShift.findMany({
+    where: { companyId: session.companyId, id: { in: d.shiftIds } },
+    select: { id: true },
+  });
+  if (shifts.length === 0) return { error: "Pick at least one shift" };
+
+  await prisma.specialDay.create({
+    data: {
+      companyId: session.companyId,
+      fromDate: dateAtUTC(d.fromDate),
+      toDate: dateAtUTC(to),
+      startTime: d.startTime,
+      endTime: d.endTime,
+      graceMinutes: d.graceMinutes,
+      lunchMinutes: d.lunchMinutes,
+      workingDay: d.workingDay,
+      note: d.note || null,
+      shiftIds: shifts.map((s) => s.id),
+    },
+  });
+  revalidatePath(ORG);
+  revalidatePath("/attendance");
+  return { ok: true };
+}
+
+export async function deleteSpecialDay(id: string): Promise<ActionState> {
+  const session = await requireCapability("org:manage");
+  const res = await prisma.specialDay.deleteMany({ where: { id, companyId: session.companyId } });
+  if (res.count === 0) return { error: "That special day is already gone" };
+  revalidatePath(ORG);
+  revalidatePath("/attendance");
   return { ok: true };
 }
 

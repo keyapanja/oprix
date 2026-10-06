@@ -52,7 +52,7 @@ export function RosterTable({
         case "avg": return avg(p);
         case "late": return p.lateDays;
         case "breaks": return p.longBreakDays;
-        case "absent": return p.absences;
+        case "absent": return p.absences + p.leaveDays;
         case "flagged": return p.flagged;
         default: return 0;
       }
@@ -60,7 +60,7 @@ export function RosterTable({
     const filtered = people.filter((p) => {
       // Someone with no scans and no absences in the window has nothing to show —
       // usually a new joiner or a leaver, so they're out of the way by default.
-      if (hideQuiet && p.daysWorked === 0 && p.absences === 0) return false;
+      if (hideQuiet && p.daysWorked === 0 && p.absences === 0 && p.leaveDays === 0) return false;
       if (!q) return true;
       return (
         p.name.toLowerCase().includes(q) ||
@@ -75,7 +75,7 @@ export function RosterTable({
     );
   }, [people, query, sort, hideQuiet]);
 
-  const quiet = people.length - people.filter((p) => p.daysWorked > 0 || p.absences > 0).length;
+  const quiet = people.length - people.filter((p) => p.daysWorked > 0 || p.absences > 0 || p.leaveDays > 0).length;
 
   return (
     <Card className="overflow-hidden">
@@ -184,8 +184,21 @@ export function RosterTable({
                       {p.longBreakDays || "—"}
                     </td>
                   )}
-                  <td className={cn("px-4 py-3 text-right tabular-nums", p.absences ? "font-medium text-red-600 dark:text-red-400" : "text-muted")}>
-                    {p.absences || "—"}
+                  <td
+                    className={cn(
+                      "px-4 py-3 text-right tabular-nums",
+                      p.absences ? "font-medium text-red-600 dark:text-red-400" : p.leaveDays ? "text-content" : "text-muted",
+                    )}
+                    title={
+                      p.absences + p.leaveDays
+                        ? `${p.absences} without leave · ${p.leaveDays} on approved leave — holidays and days off aren't counted`
+                        : undefined
+                    }
+                  >
+                    {p.absences + p.leaveDays || "—"}
+                    {p.leaveDays > 0 && (
+                      <span className="ml-1 text-xs font-normal text-faint">incl. {p.leaveDays} leave</span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums">
                     {p.flagged ? (

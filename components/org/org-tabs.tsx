@@ -14,6 +14,8 @@ import { AddForm } from "@/components/org/add-form";
 import { DeleteButton } from "@/components/org/delete-button";
 import { ShiftEdit } from "@/components/org/shift-edit";
 import { DefaultShiftSetting } from "@/components/org/default-shift";
+import { SpecialDays, type SpecialDayRow } from "@/components/org/special-days";
+import type { WeekdayTimings } from "@/lib/attendance/timings";
 import { ServiceList } from "@/components/org/service-list";
 import { PermissionsMatrix } from "@/components/org/permissions-matrix";
 import { TaskScopeMatrix } from "@/components/org/task-scope-matrix";
@@ -47,7 +49,19 @@ type Svc = {
   checklist: { id: string; text: string }[];
 };
 type Desig = { id: string; name: string; department: { name: string } };
-type Shift = { id: string; name: string; startTime: string; endTime: string; graceMinutes: number };
+type Shift = {
+  id: string;
+  name: string;
+  startTime: string;
+  endTime: string;
+  graceMinutes: number;
+  lunchMinutes: number;
+  weekdays: WeekdayTimings;
+};
+
+/** Monday first, as the rest of Oprix draws a week. */
+const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
+const DAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 type Loc = { id: string; name: string };
 type Prob = { id: string; months: number };
 
@@ -62,6 +76,7 @@ export function OrgTabs({
   designations,
   shifts,
   defaultShiftId,
+  specialDays,
   locations,
   probationPeriods,
   multiLocation,
@@ -80,6 +95,7 @@ export function OrgTabs({
   designations: Desig[];
   shifts: Shift[];
   defaultShiftId: string | null;
+  specialDays: SpecialDayRow[];
   locations: Loc[];
   probationPeriods: Prob[];
   multiLocation: boolean;
@@ -134,7 +150,7 @@ export function OrgTabs({
               title="Work shifts"
               bulkEntity="shift"
               bulkNoun="shift"
-              headers={["Name", "Timing", "Grace", ""]}
+              headers={["Name", "Timing", "Grace", "Lunch", ""]}
               empty="No shifts yet."
               form={
                 <AddForm action={createShift}>
@@ -148,7 +164,10 @@ export function OrgTabs({
                     <Input id="shift-end" name="endTime" type="time" defaultValue="18:00" required />
                   </Field>
                   <Field label="Grace (min)" htmlFor="shift-grace" className="w-32" hint="late starts after this">
-                    <Input id="shift-grace" name="graceMinutes" type="number" min={0} max={240} defaultValue={0} />
+                    <Input id="shift-grace" name="graceMinutes" type="number" min={0} max={180} defaultValue={0} />
+                  </Field>
+                  <Field label="Lunch (min)" htmlFor="shift-lunch" className="w-32" hint="off the day's hours">
+                    <Input id="shift-lunch" name="lunchMinutes" type="number" min={0} max={240} defaultValue={60} />
                   </Field>
                 </AddForm>
               }
@@ -163,8 +182,23 @@ export function OrgTabs({
                   ) : (
                     s.name
                   ),
-                  `${s.startTime} – ${s.endTime}`,
+                  <span key="t" className="flex flex-col">
+                    <span>
+                      {s.startTime} – {s.endTime}
+                    </span>
+                    {WEEK_ORDER.flatMap((d) => {
+                      const t = s.weekdays[d];
+                      return t
+                        ? [
+                            <span key={d} className="text-xs text-faint">
+                              {DAY_SHORT[d]} {t.start} – {t.end}
+                            </span>,
+                          ]
+                        : [];
+                    })}
+                  </span>,
                   s.graceMinutes ? `${s.graceMinutes} min` : "—",
+                  s.lunchMinutes ? `${s.lunchMinutes} min` : "—",
                 ],
                 delete: (
                   <div className="flex items-center justify-end gap-1">
@@ -177,6 +211,11 @@ export function OrgTabs({
             <div className="mt-4">
               <DefaultShiftSetting shifts={shifts} current={defaultShiftId} />
             </div>
+          </div>
+
+          <div>
+            <h3 className="mb-4 text-xs font-semibold uppercase tracking-wider text-faint">Special days</h3>
+            <SpecialDays shifts={shifts} days={specialDays} />
           </div>
 
           <div>
