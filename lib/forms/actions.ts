@@ -7,7 +7,7 @@ import { prisma } from "@/lib/db";
 import { requireCapability, requirePortalAction } from "@/lib/auth/guard";
 import { getSession } from "@/lib/auth/session";
 import { canManageForms, audienceAllows } from "@/lib/forms/access";
-import { FormSchemaZ, validateAnswers, parseSchema, answerToText, isInputField } from "@/lib/forms/types";
+import { FormSchemaZ, validateAnswers, parseSchema, answerToText, isInputField, type FieldDef } from "@/lib/forms/types";
 import { ScheduleZ } from "@/lib/forms/schedule";
 import { EDITABLE_ROLES } from "@/lib/auth/can";
 import { logActivity, actorLabel } from "@/lib/activity";
@@ -20,6 +20,29 @@ export type FormActionState = {
 };
 
 const asJson = (v: unknown) => v as unknown as Prisma.InputJsonValue;
+
+/**
+ * A validation failure inside the schema, named by the field it is about.
+ * The raw issue is "Too big: expected string to have <=200 characters" — true,
+ * and no help at all on a form with forty fields.
+ */
+function describeIssue(issue: z.core.$ZodIssue, input: UpdateFormInput): string {
+  const [root, list, index, prop] = issue.path;
+  if (root === "schema" && list === "fields" && typeof index === "number") {
+    const f = input.schema?.fields?.[index] as FieldDef | undefined;
+    const where =
+      f?.type === "paragraph"
+        ? "The description block"
+        : f?.type === "heading"
+          ? `The heading "${f.label}"`
+          : f?.label
+            ? `The field "${f.label}"`
+            : `Field ${index + 1}`;
+    const what = prop === "label" && f?.type !== "paragraph" && f?.type !== "heading" ? " label" : "";
+    return `${where}${what}: ${issue.message}`;
+  }
+  return issue.message;
+}
 const VALID_ROLES = new Set<string>(EDITABLE_ROLES);
 
 // ---- Build / manage (form:manage) -----------------------------------------
@@ -62,7 +85,10 @@ export type UpdateFormInput = z.input<typeof UpdateZ>;
 export async function updateForm(input: UpdateFormInput): Promise<FormActionState> {
   const session = await requireCapability("form:manage");
   const parsed = UpdateZ.safeParse(input);
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid form." };
+  if (!parsed.success) {
+    const first = parsed.error.issues[0];
+    return { error: first ? describeIssue(first, input) : "Invalid form." };
+  }
   const d = parsed.data;
 
   const audience = d.audienceRoles.filter((r) => VALID_ROLES.has(r)) as Role[];

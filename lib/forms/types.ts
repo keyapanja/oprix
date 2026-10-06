@@ -236,11 +236,18 @@ const TypeZ = z.enum([
   "repeater", "list", "calculation", "heading", "paragraph",
 ]);
 
+// "label" is the field's label — except for a paragraph, where it is the body
+// text, and a heading, where it is the heading. A description block is a
+// different size of thing from a label, so the cap depends on the type; the
+// 200 that suits a label rejected a perfectly ordinary welcome paragraph.
+const LABEL_CAP: Partial<Record<FieldType, number>> = { paragraph: 5000, heading: 300 };
+const DEFAULT_LABEL_CAP = 200;
+
 const FieldDefZ: z.ZodType<FieldDef> = z.lazy(() =>
   z.object({
     id: z.string().min(1).max(40),
     type: TypeZ,
-    label: z.string().trim().min(1, "Field label is required").max(200),
+    label: z.string().trim().min(1, "Field label is required").max(20000),
     placeholder: z.string().trim().max(200).optional(),
     helpText: z.string().trim().max(500).optional(),
     required: z.boolean().optional(),
@@ -263,6 +270,18 @@ const FieldDefZ: z.ZodType<FieldDef> = z.lazy(() =>
     rangeDays: z.number().int().positive().max(3650).nullable().optional(),
     width: z.enum(["quarter", "third", "half", "twoThirds", "threeQuarters", "full"]).optional(),
     chips: z.boolean().optional(),
+  }).superRefine((f, ctx) => {
+    const cap = LABEL_CAP[f.type] ?? DEFAULT_LABEL_CAP;
+    if (f.label.length > cap) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["label"],
+        message:
+          f.type === "paragraph"
+            ? `Description text can be up to ${cap} characters (this one is ${f.label.length}).`
+            : `Keep this under ${cap} characters (it is ${f.label.length}).`,
+      });
+    }
   }),
 );
 
