@@ -103,7 +103,7 @@ export async function updateForm(input: UpdateFormInput): Promise<FormActionStat
   // across later saves so a link already handed out keeps working.
   const current = await prisma.form.findFirst({
     where: { id: d.id, companyId: session.companyId, deletedAt: null },
-    select: { publicToken: true },
+    select: { publicToken: true, dedupeFieldId: true },
   });
   if (!current) return { error: "Form not found." };
   const publicToken = d.publicEnabled && !current.publicToken ? newPublicToken() : current.publicToken;
@@ -132,6 +132,27 @@ export async function updateForm(input: UpdateFormInput): Promise<FormActionStat
     },
   });
   if (res.count === 0) return { error: "Form not found." };
+
+  // Entries submitted before the rule existed (or under a different field)
+  // carry no key, or the wrong one. Re-key them, or switching the rule on for
+  // a form with 200 responses would let all 200 people submit again.
+  if (dedupeFieldId !== current.dedupeFieldId) {
+    const fields = d.schema.fields as FieldDef[];
+    const subs = await prisma.formSubmission.findMany({
+      where: { formId: d.id, deletedAt: null },
+      select: { id: true, data: true },
+    });
+    await prisma.$transaction(
+      subs.map((sub) =>
+        prisma.formSubmission.update({
+          where: { id: sub.id },
+          data: {
+            dedupeKey: dedupeKeyFor({ dedupeFieldId }, fields, (sub.data ?? {}) as Record<string, unknown>),
+          },
+        }),
+      ),
+    );
+  }
   revalidatePath("/forms");
   revalidatePath(`/forms/${d.id}/edit`);
   return { ok: true, id: d.id };
