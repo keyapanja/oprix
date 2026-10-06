@@ -241,7 +241,7 @@ export async function getPublicForm(token: string) {
       description: true,
       schema: true,
       allowMultiple: true,
-      company: { select: { name: true, logoUrl: true } },
+      company: { select: { name: true, logoUrl: true, logoKey: true } },
     },
   });
   if (!form) return null;
