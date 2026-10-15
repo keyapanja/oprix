@@ -23,11 +23,13 @@ export const getCompanyTimezone = memo(10 * 60_000, async (companyId: string) =>
   return c?.timezone ?? "Asia/Kolkata";
 });
 
-/** Actor display label (employee name, else email) — cached 5 minutes. */
+/** Actor display label (employee name, else the nickname a portal user set,
+ *  else email) — cached 5 minutes. Clients have no Employee row, so without the
+ *  nickname their comments and history read as a bare email address. */
 export const getActorLabel = memo(5 * 60_000, async (userId: string) => {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { email: true, employee: { select: { fullName: true } } },
+    select: { email: true, nickname: true, employee: { select: { fullName: true } } },
   });
-  return user?.employee?.fullName ?? user?.email ?? "Someone";
+  return user?.employee?.fullName ?? (user?.nickname?.trim() || user?.email) ?? "Someone";
 });

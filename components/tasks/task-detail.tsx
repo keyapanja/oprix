@@ -190,13 +190,16 @@ export async function TaskDetail({
   const authors = authorIds.length
     ? await prisma.user.findMany({
         where: { id: { in: authorIds } },
-        select: { id: true, email: true, employee: { select: { id: true, fullName: true } } },
+        select: { id: true, email: true, nickname: true, role: true, employee: { select: { id: true, fullName: true } } },
       })
     : [];
+  // Clients comment from the portal too; they have no Employee row, so they go
+  // by the name they set there (else email) and carry a "Client" tag.
   const authorName = (uid: string) => {
     const u = authors.find((a) => a.id === uid);
-    return u?.employee?.fullName ?? u?.email ?? "Someone";
+    return u?.employee?.fullName ?? (u?.nickname?.trim() || u?.email) ?? "Someone";
   };
+  const fromClient = (uid: string) => authors.find((a) => a.id === uid)?.role === "CLIENT";
   const authorEmpId = (uid: string) => authors.find((a) => a.id === uid)?.employee?.id ?? null;
 
   return (
@@ -364,6 +367,7 @@ export async function TaskDetail({
                       people={employees.map((e) => ({ id: e.id, name: e.fullName }))}
                       authorName={authorName(c.authorId)}
                       authorEmpId={authorEmpId(c.authorId)}
+                      authorTag={fromClient(c.authorId) ? "Client" : undefined}
                       body={c.body}
                       time={formatDateTime(c.createdAt)}
                       isMine={c.authorId === session.userId}

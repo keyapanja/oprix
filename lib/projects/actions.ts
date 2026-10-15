@@ -18,6 +18,9 @@ import { notifyTaskAssigned, notifyClientTask } from "@/lib/tasks/assign-notify"
 import { notify } from "@/lib/notifications/notify";
 import { mentionedIds, type MentionPerson } from "@/lib/mentions";
 import { clientRaisedFilter } from "@/lib/tasks/client-tasks";
+import { isPortalTask } from "@/lib/portal/data";
+import { notifyProjectClient } from "@/lib/portal/notify";
+import { commentNote } from "@/lib/portal/comment-body";
 
 export type ProjectState = { error?: string; ok?: boolean; id?: string };
 
@@ -893,7 +896,7 @@ export async function addComment(taskId: string, body: string): Promise<ProjectS
 
   const task = await prisma.task.findFirst({
     where: { id: taskId, deletedAt: null, project: { companyId: session.companyId } },
-    select: { id: true, name: true, assignees: { select: { employeeId: true } } },
+    select: { id: true, name: true, projectId: true, assignees: { select: { employeeId: true } } },
   });
   if (!task) return { error: "Task not found" };
 
@@ -929,7 +932,25 @@ export async function addComment(taskId: string, body: string): Promise<ProjectS
     entityId: taskId,
     message: "commented",
   });
+
+  // The client reads the same thread in the portal, so tell them — in-app and
+  // push only, since email links point at internal routes. Best-effort: the
+  // comment is saved either way.
+  try {
+    if (await isPortalTask(session.companyId, taskId)) {
+      await notifyProjectClient(task.projectId, {
+        type: "TASK",
+        title: "New comment",
+        body: commentNote(actor, task.name, text),
+        meta: { taskId },
+      });
+    }
+  } catch {
+    /* never fail a comment on a notification */
+  }
+
   revalidatePath(`/tasks/${taskId}`);
+  revalidatePath(`/portal/tasks/${taskId}`);
   return { ok: true };
 }
 
@@ -963,6 +984,7 @@ export async function editComment(commentId: string, text: string): Promise<Proj
   }
 
   revalidatePath(`/tasks/${c.taskId}`);
+  revalidatePath(`/portal/tasks/${c.taskId}`);
   return { ok: true };
 }
 
@@ -978,6 +1000,7 @@ export async function deleteComment(commentId: string): Promise<ProjectState> {
   if (c.authorId !== session.userId) return { error: "You can only delete your own comments." };
   await prisma.comment.delete({ where: { id: commentId } });
   revalidatePath(`/tasks/${c.taskId}`);
+  revalidatePath(`/portal/tasks/${c.taskId}`);
   return { ok: true };
 }
 

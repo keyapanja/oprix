@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { requirePortal } from "@/lib/auth/guard";
 import { taskPill } from "@/lib/portal/status";
-import { getClientTask, getClientTaskActivity } from "@/lib/portal/data";
+import { getClientTask, getClientTaskActivity, getClientTaskComments } from "@/lib/portal/data";
 import { safeHref, isHttpUrl } from "@/lib/url";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +13,9 @@ import { formatDate, formatDateTime } from "@/lib/format";
 import { ReviewControls } from "@/components/portal/review-controls";
 import { ClientTaskActions } from "@/components/portal/client-task-actions";
 import { PortalAttachments } from "@/components/portal/portal-attachments";
+import { CommentForm } from "@/components/tasks/comment-form";
+import { CommentItem } from "@/components/tasks/comment-item";
+import { LiveRefresh } from "@/components/timer/live-refresh";
 
 export const metadata: Metadata = { title: "Task · Client Portal" };
 
@@ -24,7 +27,10 @@ export default async function PortalTaskDetailPage({ params }: { params: Promise
 
   const task = await getClientTask(session.clientId, session.companyId, id);
   if (!task) notFound();
-  const activity = await getClientTaskActivity(session.companyId, task.id);
+  const [activity, { comments, people }] = await Promise.all([
+    getClientTaskActivity(session.companyId, task.id),
+    getClientTaskComments(task.id),
+  ]);
 
   const pill = taskPill(task.status);
   const inReview = task.status === "CLIENT_REVIEW";
@@ -32,6 +38,9 @@ export default async function PortalTaskDetailPage({ params }: { params: Promise
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
+      {/* The thread is shared with the team, so their replies should turn up
+          without a reload — same cadence as the team's own task page. */}
+      <LiveRefresh seconds={10} />
       <BackLink href={`/portal/projects/${task.project.id}`}>Back to {task.project.name}</BackLink>
 
       <Card className="p-6">
@@ -100,6 +109,36 @@ export default async function PortalTaskDetailPage({ params }: { params: Promise
           }}
         />
       )}
+
+      {/* Comments — one thread with the team: every comment, theirs and ours. */}
+      <Card>
+        <div className="border-b border-line px-5 py-3">
+          <h2 className="text-sm font-semibold text-content">Comments</h2>
+        </div>
+        <div className="space-y-4 p-5">
+          <CommentForm taskId={task.id} people={people} portal />
+          {comments.length === 0 ? (
+            <p className="text-sm text-muted">No comments yet. Ask a question or leave a note for the team.</p>
+          ) : (
+            <ul className="space-y-4 border-t border-line pt-4">
+              {[...comments].reverse().map((c) => (
+                <CommentItem
+                  key={c.id}
+                  id={c.id}
+                  taskId={task.id}
+                  people={people}
+                  authorName={c.authorName}
+                  authorEmpId={null}
+                  body={c.body}
+                  time={formatDateTime(c.createdAt)}
+                  isMine={c.authorId === session.userId}
+                  portal
+                />
+              ))}
+            </ul>
+          )}
+        </div>
+      </Card>
 
       {/* History */}
       <Card>

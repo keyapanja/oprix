@@ -7,11 +7,13 @@ import { Role, Priority } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { clientRaisedFilter } from "@/lib/tasks/client-tasks";
 import { requirePortalAction, type PortalSession } from "@/lib/auth/guard";
-import { logTaskActivity } from "@/lib/activity";
+import { logTaskActivity, actorLabel } from "@/lib/activity";
 import { notify } from "@/lib/notifications/notify";
 import { sendInviteEmail, appUrl } from "@/lib/email";
 import { dateAtUTC } from "@/lib/dates";
 import { getProjectManager } from "@/lib/portal/manager";
+import { portalTasksWhere } from "@/lib/portal/data";
+import { fromPortal, commentNote } from "@/lib/portal/comment-body";
 
 export type PortalActionState = { ok?: boolean; error?: string; delivered?: boolean };
 
@@ -368,6 +370,98 @@ export async function clientRequestTaskChanges(
 
   revalidatePath("/portal");
   revalidatePath(`/portal/projects/${task.projectId}`);
+  return { ok: true };
+}
+
+// ---- Comments ---------------------------------------------------------------
+// One thread, shared with the team: the client reads every comment on their
+// task and can add their own. The gate is the task page's own (portalTasksWhere),
+// so a client can comment wherever they can read, and nowhere else.
+
+const COMMENT_MAX = 10_000;
+
+async function loadCommentableTask(session: PortalSession, taskId: string) {
+  return prisma.task.findFirst({
+    where: {
+      id: taskId,
+      project: { clientId: session.clientId, companyId: session.companyId, deletedAt: null },
+      ...(await portalTasksWhere(session.companyId)),
+    },
+    select: {
+      id: true,
+      name: true,
+      projectId: true,
+      assignees: { select: { employee: { select: { user: { select: { id: true } } } } } },
+    },
+  });
+}
+
+/** A comment the client wrote, on a task they can still see. */
+async function loadOwnComment(session: PortalSession, commentId: string) {
+  return prisma.comment.findFirst({
+    where: {
+      id: commentId,
+      authorId: session.userId,
+      task: {
+        project: { clientId: session.clientId, companyId: session.companyId, deletedAt: null },
+        ...(await portalTasksWhere(session.companyId)),
+      },
+    },
+    select: { id: true, taskId: true },
+  });
+}
+
+function revalidateComments(taskId: string) {
+  revalidatePath(`/portal/tasks/${taskId}`);
+  revalidatePath(`/tasks/${taskId}`);
+  revalidatePath(`/client-tasks/${taskId}`);
+}
+
+export async function clientAddComment(taskId: string, body: string): Promise<PortalActionState> {
+  const session = await requirePortalAction();
+  const text = fromPortal(body.trim());
+  if (!text) return { error: "Comment can't be empty." };
+  if (text.length > COMMENT_MAX) return { error: "Comment is too long." };
+
+  const task = await loadCommentableTask(session, taskId);
+  if (!task) return { error: "Task not found" };
+
+  await prisma.comment.create({ data: { taskId: task.id, authorId: session.userId, body: text } });
+  await logTaskActivity(session, task.id, "commented");
+
+  // The team on the task hears about it. Not the creator: on a client task
+  // that's a client login, not someone who works it.
+  await notifyInternal(
+    task.assignees.map((a) => a.employee.user?.id).filter((id) => id !== session.userId),
+    "TASK",
+    "Client commented",
+    commentNote(await actorLabel(session.userId), task.name, text),
+    { taskId: task.id },
+  );
+
+  revalidateComments(task.id);
+  return { ok: true };
+}
+
+export async function clientEditComment(commentId: string, body: string): Promise<PortalActionState> {
+  const session = await requirePortalAction();
+  const text = fromPortal(body.trim());
+  if (!text) return { error: "Comment can't be empty." };
+  if (text.length > COMMENT_MAX) return { error: "Comment is too long." };
+
+  const c = await loadOwnComment(session, commentId);
+  if (!c) return { error: "You can only edit your own comments." };
+  await prisma.comment.update({ where: { id: c.id }, data: { body: text } });
+  revalidateComments(c.taskId);
+  return { ok: true };
+}
+
+export async function clientDeleteComment(commentId: string): Promise<PortalActionState> {
+  const session = await requirePortalAction();
+  const c = await loadOwnComment(session, commentId);
+  if (!c) return { error: "You can only delete your own comments." };
+  await prisma.comment.delete({ where: { id: c.id } });
+  revalidateComments(c.taskId);
   return { ok: true };
 }
 

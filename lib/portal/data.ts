@@ -3,6 +3,7 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { clientRaisedFilter } from "@/lib/tasks/client-tasks";
 import { formatNoteTime, type ClientNote } from "@/lib/notifications/categories";
+import { forPortal } from "@/lib/portal/comment-body";
 
 /**
  * Which tasks the portal may show: ones the **client raised themselves**, and
@@ -17,7 +18,7 @@ import { formatNoteTime, type ClientNote } from "@/lib/notifications/categories"
  * it also matches client tasks that predate the column, where the flag reads
  * false but a client user created the row.
  */
-async function portalTasksWhere(companyId: string): Promise<Prisma.TaskWhereInput> {
+export async function portalTasksWhere(companyId: string): Promise<Prisma.TaskWhereInput> {
   return {
     deletedAt: null,
     AND: [
@@ -179,6 +180,87 @@ export async function getClientTask(clientId: string, companyId: string, taskId:
       },
     },
   });
+}
+
+/** Does the client see this task in the portal? Lets team-side code decide
+ *  whether the client should hear about something that happened on it. */
+export async function isPortalTask(companyId: string, taskId: string): Promise<boolean> {
+  const hit = await prisma.task.findFirst({
+    where: { id: taskId, project: { companyId, clientId: { not: null } }, ...(await portalTasksWhere(companyId)) },
+    select: { id: true },
+  });
+  return !!hit;
+}
+
+export type PortalComment = {
+  id: string;
+  authorId: string;
+  authorName: string;
+  body: string;
+  createdAt: Date;
+};
+
+/**
+ * A task's comment thread as the client sees it — the same thread the team
+ * sees, every comment, oldest first. Ownership is verified separately via
+ * getClientTask (a foreign id there returns null before this is called).
+ *
+ * Also returns the task's team (assignees, plus the creator when that's staff)
+ * as the @-mention roster. It's deliberately that narrow: the client gets
+ * chips for the people on their task, never the company's whole directory.
+ */
+export async function getClientTaskComments(taskId: string): Promise<{
+  comments: PortalComment[];
+  people: { id: string; name: string }[];
+}> {
+  const [comments, task] = await Promise.all([
+    prisma.comment.findMany({
+      where: { taskId },
+      orderBy: { createdAt: "asc" },
+      select: { id: true, authorId: true, body: true, createdAt: true },
+    }),
+    prisma.task.findUnique({
+      where: { id: taskId },
+      select: {
+        createdById: true,
+        assignees: { select: { employee: { select: { id: true, fullName: true } } } },
+      },
+    }),
+  ]);
+
+  const authorIds = [...new Set([...comments.map((c) => c.authorId), task?.createdById ?? ""])].filter(Boolean);
+  const users = authorIds.length
+    ? await prisma.user.findMany({
+        where: { id: { in: authorIds } },
+        select: { id: true, email: true, nickname: true, role: true, employee: { select: { id: true, fullName: true } } },
+      })
+    : [];
+  const byId = new Map(users.map((u) => [u.id, u]));
+  // Staff by their employee name; a client by the name they chose, else their
+  // email. A staff login with neither never shows its email to the client.
+  const nameOf = (uid: string) => {
+    const u = byId.get(uid);
+    if (!u) return "Someone";
+    if (u.employee) return u.employee.fullName;
+    if (u.role === "CLIENT") return u.nickname?.trim() || u.email;
+    return u.nickname?.trim() || "Team";
+  };
+
+  const people = new Map<string, string>();
+  for (const a of task?.assignees ?? []) people.set(a.employee.id, a.employee.fullName);
+  const creator = task?.createdById ? byId.get(task.createdById)?.employee : null;
+  if (creator) people.set(creator.id, creator.fullName);
+
+  return {
+    comments: comments.map((c) => ({
+      id: c.id,
+      authorId: c.authorId,
+      authorName: nameOf(c.authorId),
+      body: forPortal(c.body),
+      createdAt: c.createdAt,
+    })),
+    people: [...people].map(([id, name]) => ({ id, name })),
+  };
 }
 
 /** Change history for a task the client owns. Ownership is verified separately

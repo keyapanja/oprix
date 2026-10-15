@@ -4,6 +4,8 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { editComment, deleteComment } from "@/lib/projects/actions";
+import { clientEditComment, clientDeleteComment } from "@/lib/portal/actions";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icons";
 import { toast } from "@/components/ui/toast";
@@ -24,6 +26,8 @@ export function CommentItem({
   body,
   time,
   isMine,
+  authorTag,
+  portal = false,
 }: {
   id: string;
   taskId: string;
@@ -33,6 +37,11 @@ export function CommentItem({
   body: string;
   time: string;
   isMine: boolean;
+  /** A small label after the name, e.g. "Client" on the team's side. */
+  authorTag?: string;
+  /** Rendered in the client portal: portal actions + upload route, and
+   *  mentions as plain chips (the /people pages are staff-only). */
+  portal?: boolean;
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
@@ -44,7 +53,7 @@ export function CommentItem({
     const t = text.trim();
     if (!t) return;
     start(async () => {
-      const res = await editComment(id, t);
+      const res = await (portal ? clientEditComment : editComment)(id, t);
       if (res.error) toast.error(res.error);
       else {
         setEditing(false);
@@ -59,7 +68,7 @@ export function CommentItem({
       const ok = await confirmDialog({ message: "Delete this comment?", tone: "danger", confirmLabel: "Delete" });
       if (!ok) return;
       start(async () => {
-        const res = await deleteComment(id);
+        const res = await (portal ? clientDeleteComment : deleteComment)(id);
         if (res.error) toast.error(res.error);
         else {
           toast.success("Comment deleted");
@@ -76,16 +85,17 @@ export function CommentItem({
       </span>
       <div className="min-w-0 flex-1">
         <p className="flex items-center gap-2 text-sm">
-          {authorEmpId ? (
+          {authorEmpId && !portal ? (
             <Link href={`/people/${authorEmpId}`} className="font-medium text-content hover:text-accent-strong hover:underline">
               {authorName}
             </Link>
           ) : (
             <span className="font-medium text-content">{authorName}</span>
           )}
+          {authorTag && <Badge tone="gray">{authorTag}</Badge>}
           <span className="text-xs text-faint">{time}</span>
           {isMine && !editing && (
-            <span className="ml-auto flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+            <span className="ml-auto flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100 [@media(hover:none)]:opacity-100">
               <button
                 onClick={() => {
                   setText(body);
@@ -113,7 +123,7 @@ export function CommentItem({
               value={body}
               onChange={setText}
               people={people}
-              uploadUrl={`/api/tasks/${taskId}/comment-images`}
+              uploadUrl={portal ? `/api/portal/tasks/${taskId}/comment-images` : `/api/tasks/${taskId}/comment-images`}
               onSubmit={save}
               autoFocus
             />
@@ -143,7 +153,7 @@ export function CommentItem({
                   setPreview({ fileName: img.alt || "image", mimeType: "image/*", href: img.src });
                 }
               }}
-              dangerouslySetInnerHTML={{ __html: highlightMentions(renderMarkdown(body), people) }}
+              dangerouslySetInnerHTML={{ __html: highlightMentions(renderMarkdown(body), people, portal ? "chip" : "link") }}
             />
           </div>
         )}
