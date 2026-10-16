@@ -209,150 +209,180 @@ export async function TaskDetail({
         <BackLink href={backHref}>Back</BackLink>
       </div>
 
-      {/* Two columns on wide screens, like the client's view of the task: the
-          task on the left, the conversation on the right. On a phone they
-          stack, and the left column's wrapper dissolves (`contents`) so its
-          cards join the grid and the order-* classes keep the phone order the
-          page always had — workflow first, comments before the sidebar cards. */}
-      <div className="grid gap-5 lg:grid-cols-2 lg:items-start">
-        <div className="contents lg:block lg:space-y-5">
-          {/* Task header */}
-          <Card className="order-1 overflow-hidden">
-            <div className="flex flex-wrap items-start justify-between gap-3 p-5">
-              <div className="min-w-0">
-                <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-faint">
-                  <Link href={`/projects/${task.project.id}`} className="truncate hover:text-accent-strong hover:underline">
-                    {task.project.name}
-                  </Link>
-                </div>
-                <h1 className="text-2xl font-semibold leading-tight tracking-tight text-content">{task.name}</h1>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                {canEdit ? (
-                  <TaskStatusEditor taskId={task.id} status={task.status} />
-                ) : (
-                  <Badge tone={TASK_STATUS_TONE[task.status]}>{TASK_STATUS_LABEL[task.status]}</Badge>
-                )}
-                {isManager && <TaskDuplicate taskId={task.id} />}
-                {/* A client request isn't internal work yet — this opens the normal
-                    new-task form with its details filled in, for someone to pick a
-                    task type and file it properly. */}
-                {isManager && clientRaised && (
-                  <Link
-                    href={`/tasks/new?from=${task.id}`}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-canvas px-3 py-1.5 text-sm font-medium text-content ring-1 ring-inset ring-line transition-colors hover:bg-surface"
-                  >
-                    <Icon name="listPlus" className="size-4" />
-                    Copy to internal task
-                  </Link>
-                )}
-                {/* Only a task the client raised can be shown to them. An internal
-                    task has no business in the portal, whatever project it sits in,
-                    so there's nothing here to toggle. */}
-                {isManager && clientRaised && (
-                  <TaskClientVisible taskId={task.id} clientVisible={task.clientVisible} />
-                )}
-                {canEdit && (
-                  <TaskEdit
-                    taskId={task.id}
-                    projectId={task.project.id}
-                    services={task.project.services.flatMap((ps) =>
-                      ps.service.children.map((sub) => ({ id: sub.id, name: `${ps.service.name} › ${sub.name}` })),
-                    )}
-                    initial={{
-                      name: task.name,
-                      description: task.description ?? "",
-                      serviceId: task.serviceId ?? "",
-                      priority: task.priority,
-                      dueDate: task.dueDate ? task.dueDate.toISOString().slice(0, 10) : "",
-                    }}
-                  />
-                )}
-              </div>
+      {/* Task header */}
+      <Card className="mb-5 overflow-hidden">
+        <div className="flex flex-wrap items-start justify-between gap-3 p-5">
+          <div className="min-w-0">
+            <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-faint">
+              <Link href={`/projects/${task.project.id}`} className="truncate hover:text-accent-strong hover:underline">
+                {task.project.name}
+              </Link>
             </div>
-
-            {/* Meta strip — labelled facts for quick scanning */}
-            <div className="flex flex-wrap items-center gap-x-6 gap-y-2.5 border-t border-line bg-canvas/40 px-5 py-3 text-sm">
-              <span className="inline-flex items-center gap-2">
-                <span className="text-xs uppercase tracking-wide text-faint">Priority</span>
-                <Badge tone={PRIORITY_TONE[task.priority]}>{humanizeEnum(task.priority)}</Badge>
-              </span>
-              {task.service && (
-                <span className="inline-flex items-center gap-1.5">
-                  <Icon name="folder" className="size-4 text-faint" />
-                  <span className="font-medium text-content">{task.service.name}</span>
-                </span>
-              )}
-              {task.dueDate && (
-                <TaskDueBadge
-                  dueISO={task.dueDate.toISOString().slice(0, 10)}
-                  dueLabel={formatDate(task.dueDate)}
-                  submitISO={submitISO}
-                  pending={duePending}
-                />
-              )}
-              {task.clientDeadline && (
-                <span className="inline-flex items-center gap-1.5">
-                  <Icon name="calendarDays" className="size-4 text-faint" />
-                  <span className="text-faint">Client deadline</span>
-                  <span className="font-medium text-content">{formatDate(task.clientDeadline)}</span>
-                </span>
-              )}
-            </div>
-
-            {task.description && (
-              <div className="border-t border-line p-5">
-                <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-faint">Description</p>
-                <LinkifiedText text={task.description} className="text-sm leading-relaxed text-content" />
-              </div>
+            <h1 className="text-2xl font-semibold leading-tight tracking-tight text-content">{task.name}</h1>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {canEdit ? (
+              <TaskStatusEditor taskId={task.id} status={task.status} />
+            ) : (
+              <Badge tone={TASK_STATUS_TONE[task.status]}>{TASK_STATUS_LABEL[task.status]}</Badge>
             )}
-          </Card>
-
-          <Card className="order-7 p-5">
-            <h3 className="mb-3 text-sm font-semibold text-content">Details</h3>
-
-            <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-faint">Assignees</p>
-            <TaskAssignees
-              taskId={task.id}
-              canEdit={canEdit}
-              initial={task.assignees.map((a) => ({ id: a.employee.id, name: a.employee.fullName }))}
-              employees={employees.map((e) => ({ id: e.id, name: e.fullName }))}
-            />
-
-            <div className="mt-4 border-t border-line pt-4">
-              <div className="mb-2 flex items-center justify-between">
-                <p className="text-xs font-medium uppercase tracking-wide text-faint">Time tracking</p>
-                <span className="text-xs">
-                  <span className="text-faint">Total</span>{" "}
-                  <span className="font-semibold text-content">{fmtHm(trackedSeconds)}</span>
-                </span>
-              </div>
-              <TaskTimerControl
+            {isManager && <TaskDuplicate taskId={task.id} />}
+            {/* A client request isn't internal work yet — this opens the normal
+                new-task form with its details filled in, for someone to pick a
+                task type and file it properly. */}
+            {isManager && clientRaised && (
+              <Link
+                href={`/tasks/new?from=${task.id}`}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-canvas px-3 py-1.5 text-sm font-medium text-content ring-1 ring-inset ring-line transition-colors hover:bg-surface"
+              >
+                <Icon name="listPlus" className="size-4" />
+                Copy to internal task
+              </Link>
+            )}
+            {/* Only a task the client raised can be shown to them. An internal
+                task has no business in the portal, whatever project it sits in,
+                so there's nothing here to toggle. */}
+            {isManager && clientRaised && (
+              <TaskClientVisible taskId={task.id} clientVisible={task.clientVisible} />
+            )}
+            {canEdit && (
+              <TaskEdit
                 taskId={task.id}
-                status={myTimer.status}
-                baseSeconds={myTimer.baseSeconds}
-                runStartedAtMs={myTimer.runStartedAtMs}
-                locked={!canTime}
-                lockedReason={lockedReason}
+                projectId={task.project.id}
+                services={task.project.services.flatMap((ps) =>
+                  ps.service.children.map((sub) => ({ id: sub.id, name: `${ps.service.name} › ${sub.name}` })),
+                )}
+                initial={{
+                  name: task.name,
+                  description: task.description ?? "",
+                  serviceId: task.serviceId ?? "",
+                  priority: task.priority,
+                  dueDate: task.dueDate ? task.dueDate.toISOString().slice(0, 10) : "",
+                }}
               />
-              {/* Live "who else is working" — visible to every viewer. */}
-              <TaskLiveTimers runners={runners.filter((r) => r.userId !== session.userId)} />
-            </div>
+            )}
+          </div>
+        </div>
 
-            <div className="mt-4 space-y-1.5 border-t border-line pt-4 text-sm">
-              <div className="flex justify-between">
-                <span className="text-faint">Started</span>
-                <span className="font-medium text-content">{task.startedAt ? formatDateTime(task.startedAt) : "—"}</span>
+        {/* Meta strip — labelled facts for quick scanning */}
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-2.5 border-t border-line bg-canvas/40 px-5 py-3 text-sm">
+          <span className="inline-flex items-center gap-2">
+            <span className="text-xs uppercase tracking-wide text-faint">Priority</span>
+            <Badge tone={PRIORITY_TONE[task.priority]}>{humanizeEnum(task.priority)}</Badge>
+          </span>
+          {task.service && (
+            <span className="inline-flex items-center gap-1.5">
+              <Icon name="folder" className="size-4 text-faint" />
+              <span className="font-medium text-content">{task.service.name}</span>
+            </span>
+          )}
+          {task.dueDate && (
+            <TaskDueBadge
+              dueISO={task.dueDate.toISOString().slice(0, 10)}
+              dueLabel={formatDate(task.dueDate)}
+              submitISO={submitISO}
+              pending={duePending}
+            />
+          )}
+          {task.clientDeadline && (
+            <span className="inline-flex items-center gap-1.5">
+              <Icon name="calendarDays" className="size-4 text-faint" />
+              <span className="text-faint">Client deadline</span>
+              <span className="font-medium text-content">{formatDate(task.clientDeadline)}</span>
+            </span>
+          )}
+        </div>
+
+        {task.description && (
+          <div className="border-t border-line p-5">
+            <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-faint">Description</p>
+            <LinkifiedText text={task.description} className="text-sm leading-relaxed text-content" />
+          </div>
+        )}
+      </Card>
+
+      <div className="grid gap-5 lg:grid-cols-3">
+        {/* Main column — Workflow stays on top on mobile, but sits after the
+            Checklist in the 2-column (lg) layout via responsive order. */}
+        <div className="flex flex-col gap-5 lg:col-span-2">
+          {task.checklistEnabled && (
+            <Card className="order-2 lg:order-1">
+              <div className="border-b border-line px-5 py-3">
+                <h3 className="text-sm font-semibold text-content">Checklist</h3>
               </div>
-              <div className="flex justify-between">
-                <span className="text-faint">Completed</span>
-                <span className="font-medium text-content">{task.completedAt ? formatDateTime(task.completedAt) : "—"}</span>
+              <div className="p-5">
+                <TaskChecklist taskId={task.id} canEdit={canEdit} initial={checklistItems} />
               </div>
+            </Card>
+          )}
+
+          {/* Review workflow — submit / review / approve */}
+          <Card className="order-1 p-5 lg:order-2">
+            <h3 className="mb-3 text-sm font-semibold text-content">Final Link / Status</h3>
+            <TaskWorkflow
+              taskId={task.id}
+              status={task.status}
+              finalLink={task.finalLink}
+              previousLink={task.previousLink}
+              changeRequest={task.changeRequest}
+              canSubmit={canSubmit}
+              canReview={canReview}
+            />
+          </Card>
+
+          <Card className="order-3">
+            <div className="border-b border-line px-5 py-3">
+              <h3 className="text-sm font-semibold text-content">Attachments</h3>
+            </div>
+            <div className="p-5">
+              <AttachmentsPanel
+                uploadUrl={`/api/tasks/${task.id}/attachments`}
+                canEdit={canEdit}
+                initial={task.attachments.map((a) => ({
+                  id: a.id,
+                  fileName: a.fileName,
+                  mimeType: a.mimeType,
+                  sizeBytes: a.sizeBytes,
+                  createdAt: a.createdAt.toISOString(),
+                }))}
+              />
             </div>
           </Card>
 
+          <Card className="order-4">
+            <div className="border-b border-line px-5 py-3">
+              <h3 className="text-sm font-semibold text-content">Comments</h3>
+            </div>
+            <div className="space-y-4 p-5">
+              <CommentForm taskId={task.id} people={employees.map((e) => ({ id: e.id, name: e.fullName }))} />
+              {task.comments.length === 0 ? (
+                <p className="text-sm text-muted">No comments yet.</p>
+              ) : (
+                <ul className="space-y-4 border-t border-line pt-4">
+                  {[...task.comments].reverse().map((c) => (
+                    <CommentItem
+                      key={c.id}
+                      id={c.id}
+                      taskId={task.id}
+                      people={employees.map((e) => ({ id: e.id, name: e.fullName }))}
+                      authorName={authorName(c.authorId)}
+                      authorEmpId={authorEmpId(c.authorId)}
+                      authorTag={fromClient(c.authorId) ? "Client" : undefined}
+                      body={c.body}
+                      time={formatDateTime(c.createdAt)}
+                      isMine={c.authorId === session.userId}
+                    />
+                  ))}
+                </ul>
+              )}
+            </div>
+          </Card>
+        </div>
+
+        {/* Sidebar */}
+        <div className="space-y-5">
           {kbArticles.length > 0 && (
-            <Card className="order-6 bg-accent-soft/40 p-5 ring-1 ring-inset ring-brand-500/20">
+            <Card className="bg-accent-soft/40 p-5 ring-1 ring-inset ring-brand-500/20">
               <h3 className="mb-1 flex items-center gap-1.5 text-sm font-semibold text-content">
                 <Icon name="book" className="size-4 text-accent-strong" />
                 Related guides
@@ -400,51 +430,50 @@ export async function TaskDetail({
             </Card>
           )}
 
-          {task.checklistEnabled && (
-            <Card className="order-3">
-              <div className="border-b border-line px-5 py-3">
-                <h3 className="text-sm font-semibold text-content">Checklist</h3>
-              </div>
-              <div className="p-5">
-                <TaskChecklist taskId={task.id} canEdit={canEdit} initial={checklistItems} />
-              </div>
-            </Card>
-          )}
+          <Card className="p-5">
+            <h3 className="mb-3 text-sm font-semibold text-content">Details</h3>
 
-          {/* Review workflow — submit / review / approve */}
-          <Card className="order-2 p-5">
-            <h3 className="mb-3 text-sm font-semibold text-content">Final Link / Status</h3>
-            <TaskWorkflow
+            <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-faint">Assignees</p>
+            <TaskAssignees
               taskId={task.id}
-              status={task.status}
-              finalLink={task.finalLink}
-              previousLink={task.previousLink}
-              changeRequest={task.changeRequest}
-              canSubmit={canSubmit}
-              canReview={canReview}
+              canEdit={canEdit}
+              initial={task.assignees.map((a) => ({ id: a.employee.id, name: a.employee.fullName }))}
+              employees={employees.map((e) => ({ id: e.id, name: e.fullName }))}
             />
-          </Card>
 
-          <Card className="order-4">
-            <div className="border-b border-line px-5 py-3">
-              <h3 className="text-sm font-semibold text-content">Attachments</h3>
-            </div>
-            <div className="p-5">
-              <AttachmentsPanel
-                uploadUrl={`/api/tasks/${task.id}/attachments`}
-                canEdit={canEdit}
-                initial={task.attachments.map((a) => ({
-                  id: a.id,
-                  fileName: a.fileName,
-                  mimeType: a.mimeType,
-                  sizeBytes: a.sizeBytes,
-                  createdAt: a.createdAt.toISOString(),
-                }))}
+            <div className="mt-4 border-t border-line pt-4">
+              <div className="mb-2 flex items-center justify-between">
+                <p className="text-xs font-medium uppercase tracking-wide text-faint">Time tracking</p>
+                <span className="text-xs">
+                  <span className="text-faint">Total</span>{" "}
+                  <span className="font-semibold text-content">{fmtHm(trackedSeconds)}</span>
+                </span>
+              </div>
+              <TaskTimerControl
+                taskId={task.id}
+                status={myTimer.status}
+                baseSeconds={myTimer.baseSeconds}
+                runStartedAtMs={myTimer.runStartedAtMs}
+                locked={!canTime}
+                lockedReason={lockedReason}
               />
+              {/* Live "who else is working" — visible to every viewer. */}
+              <TaskLiveTimers runners={runners.filter((r) => r.userId !== session.userId)} />
+            </div>
+
+            <div className="mt-4 space-y-1.5 border-t border-line pt-4 text-sm">
+              <div className="flex justify-between">
+                <span className="text-faint">Started</span>
+                <span className="font-medium text-content">{task.startedAt ? formatDateTime(task.startedAt) : "—"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-faint">Completed</span>
+                <span className="font-medium text-content">{task.completedAt ? formatDateTime(task.completedAt) : "—"}</span>
+              </div>
             </div>
           </Card>
 
-          <Card className="order-8">
+          <Card>
             <div className="border-b border-line px-5 py-3">
               <h3 className="text-sm font-semibold text-content">History</h3>
             </div>
@@ -472,46 +501,6 @@ export async function TaskDetail({
             </div>
           </Card>
         </div>
-
-        {/* Pinned to the top of the scrolling area on wide screens, and capped
-            below the viewport with room to spare for the running-timer bar,
-            so the box stays in reach and a long thread scrolls inside the
-            panel instead of stretching the page. */}
-        <Card className="order-5 lg:sticky lg:top-0 lg:flex lg:max-h-[calc(100dvh-12rem)] lg:flex-col">
-          <div className="shrink-0 border-b border-line px-5 py-3">
-            <h3 className="text-sm font-semibold text-content">
-              Comments
-              {task.comments.length > 0 && (
-                <span className="ml-1.5 font-normal text-faint">{task.comments.length}</span>
-              )}
-            </h3>
-          </div>
-          <div className="space-y-4 p-5 lg:flex lg:min-h-0 lg:flex-col">
-            <div className="shrink-0">
-              <CommentForm taskId={task.id} people={employees.map((e) => ({ id: e.id, name: e.fullName }))} />
-            </div>
-            {task.comments.length === 0 ? (
-              <p className="text-sm text-muted">No comments yet.</p>
-            ) : (
-              <ul className="space-y-4 border-t border-line pt-4 lg:-mr-2 lg:min-h-0 lg:overflow-y-auto lg:pr-2">
-                {[...task.comments].reverse().map((c) => (
-                  <CommentItem
-                    key={c.id}
-                    id={c.id}
-                    taskId={task.id}
-                    people={employees.map((e) => ({ id: e.id, name: e.fullName }))}
-                    authorName={authorName(c.authorId)}
-                    authorEmpId={authorEmpId(c.authorId)}
-                    authorTag={fromClient(c.authorId) ? "Client" : undefined}
-                    body={c.body}
-                    time={formatDateTime(c.createdAt)}
-                    isMine={c.authorId === session.userId}
-                  />
-                ))}
-              </ul>
-            )}
-          </div>
-        </Card>
       </div>
     </div>
   );
