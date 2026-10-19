@@ -17,6 +17,7 @@ import { ReviewControls } from "@/components/portal/review-controls";
 import { DeliverableCard } from "@/components/portal/deliverable-card";
 import { ClientTaskForm } from "@/components/portal/client-task-form";
 import { getProjectManager } from "@/lib/portal/manager";
+import { CredentialsSection } from "@/components/vault/credentials-section";
 
 export const metadata: Metadata = { title: "Project · Client Portal" };
 
@@ -175,6 +176,9 @@ export default async function PortalProjectDetailPage({ params }: { params: Prom
           </Card>
         )}
       </div>
+
+      {/* Logins shared with the team — opens with a code sent to their email. */}
+      <CredentialsSection session={session} projectId={project.id} />
 
       {/* Deliverables history */}
       {pastDeliverables.length > 0 && (

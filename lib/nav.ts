@@ -54,6 +54,9 @@ export const NAV: NavItem[] = [
     icon: "userGroup",
     action: "task:manage",
   },
+  // Every staff member: the page lists only the projects whose library they
+  // can open (lib/vault/access.ts), and says so when there are none.
+  { label: "Credentials", href: "/credentials", icon: "key" },
   {
     label: "Reports",
     href: "/reports",

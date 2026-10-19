@@ -17,6 +17,7 @@ import { AttachmentsPanel } from "@/components/attachments/attachments-panel";
 import { LinkifiedText } from "@/components/ui/linkified-text";
 import { BackLink } from "@/components/ui/back-link";
 import type { KanbanTask } from "@/lib/projects/actions";
+import { CredentialsSection } from "@/components/vault/credentials-section";
 
 export const metadata: Metadata = { title: "Project · Oprix" };
 
@@ -219,6 +220,10 @@ export default async function ProjectDetailPage({
             />
           </div>
         </Card>
+      </div>
+
+      <div className="mb-6">
+        <CredentialsSection session={session} projectId={project.id} />
       </div>
 
       <KanbanBoard projectId={project.id} initialTasks={initialTasks} />

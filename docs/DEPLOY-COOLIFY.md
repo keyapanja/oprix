@@ -72,6 +72,7 @@ AUTH_SECRET    = <generate: see below>
 APP_URL        = https://oprix.gowithepic.com
 CRON_SECRET    = <generate: see below>
 DEPLOY_HOOK_SECRET = <generate: see below>   # see "Deploy notice" below
+CREDENTIALS_KEY = <generate: see below>      # credentials library; see the note below
 EXTENSION_ORIGINS =            # leave empty until the extension is published
 # SMTP (so invites + password resets actually send):
 SMTP_HOST      = <your provider host>
@@ -81,8 +82,16 @@ SMTP_PASS      = <smtp password>
 SMTP_FROM      = Oprix <no-reply@gowithepic.com>
 ```
 
-Generate the three secrets and paste the output — **don't reuse the localhost
-values**. Run once per secret (`AUTH_SECRET`, `CRON_SECRET`, `DEPLOY_HOOK_SECRET`).
+Generate the secrets and paste the output — **don't reuse the localhost
+values**. Run once per secret (`AUTH_SECRET`, `CRON_SECRET`, `DEPLOY_HOOK_SECRET`,
+`CREDENTIALS_KEY`).
+
+**`CREDENTIALS_KEY` is different from the others: it encrypts every saved
+credential, so it must never change and never be lost.** Save a copy in a
+password manager the moment you create it. A new key can't read anything the
+old one encrypted. Without it the Credentials library shows "not set up";
+nothing else breaks. Coolify only injects env vars at container start, so
+adding it needs a **redeploy**.
 
 Node, which this project already needs, so it works on Windows and the server
 alike:

@@ -131,6 +131,37 @@ export async function sendMagicLinkEmail(opts: {
   return sendMail({ to: opts.to, subject: "Your Oprix sign-in link", html });
 }
 
+/** The 6-digit code for the credentials library. The code is never put in
+ *  the subject line, so it doesn't show on a lock screen's notification. */
+export async function sendVaultCodeEmail(opts: {
+  to: string;
+  name: string;
+  code: string;
+  minutes: number;
+  purpose: "VIEW" | "EDIT";
+}): Promise<{ delivered: boolean }> {
+  const what =
+    opts.purpose === "EDIT"
+      ? "confirm a change in the credentials library"
+      : "unlock the credentials library";
+  const html = `
+  <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto">
+    <h2 style="color:#059669;margin:0 0 8px">Your verification code</h2>
+    <p style="color:#334155;font-size:14px;line-height:1.6">
+      Hi ${escapeHtml(opts.name)}, use this code to ${what}.
+    </p>
+    <p style="margin:24px 0;font-size:32px;font-weight:700;letter-spacing:8px;color:#0f172a;font-family:'Courier New',monospace">
+      ${escapeHtml(opts.code)}
+    </p>
+    <p style="color:#94a3b8;font-size:12px;line-height:1.6">
+      It expires in ${opts.minutes} minutes and works once. Never share it — nobody from the
+      team will ask you for it. If you didn't request it, someone may be signed in as you:
+      change your password.
+    </p>
+  </div>`;
+  return sendMail({ to: opts.to, subject: "Your Oprix verification code", html });
+}
+
 export async function sendTaskAssignedEmail(opts: {
   to: string;
   name: string;

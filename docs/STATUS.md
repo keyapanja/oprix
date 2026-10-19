@@ -65,6 +65,26 @@ _Last updated: 2026-09-29 — **The deploy notice finally fires during a deploy*
   `/profile/devices`. **Localhost-first; production is a config swap.** Live
   browser test is the remaining step.
 
+### Credentials library (2026-10-19)
+- **Per-project logins** (WordPress admin, Tag Manager, Ads…) shared between the client's portal logins and the team.
+  - Shown on the project page, the portal project page, and **`/credentials`** (sidebar; lists only the libraries you can open, plus a Security card for admins with the two windows).
+  - UI: `components/vault/credentials-library.tsx`, through the server wrapper `credentials-section.tsx`.
+- **Who has access** (`lib/vault/access.ts#vaultProject`, re-checked on every request):
+  - every portal login of the project's client;
+  - Super Admins;
+  - the project's **category owners** (`ProjectService.primaryAssigneeId`);
+  - anyone a `project:manage` holder adds (`CredentialAccess`, managed in the card's **Manage access** dialog).
+- **Unlocking:** an emailed 6-digit code opens the library for `Company.vaultViewMinutes` (default 30). A second code opens add/edit/delete/access changes for `vaultEditMinutes` (default 10).
+  - Codes (`VaultCode`) are stored only as an HMAC. They expire in 10 min, die after 5 wrong tries, and only the newest works. Sends are capped at 5 per 15 min and 20 per day per person.
+  - An unlock (`VaultUnlock`) is an httpOnly, sameSite=strict cookie holding a random token; only its SHA-256 is stored. It is revoked by **Lock now** and by `/logout`.
+- **Encryption** (`lib/vault/crypto.ts`): the title is plain; the login URL and the `{username, password, notes}` blob are AES-256-GCM under keys HKDF-derived from **`CREDENTIALS_KEY`** (env, never the DB).
+  - Each ciphertext is bound (AAD) to `project:row:field`, so a row can't be moved or swapped.
+  - Losing the key loses every entry (see `docs/DEPLOY-COOLIFY.md`).
+- **Never in the page:** entries reach the browser as title + URL only. `revealCredential` returns one entry's secrets on Show; they auto-hide after 60 s. Copy clears the clipboard after 2 min (on return to the tab if it was in the background).
+- **History:** `ActivityLog` with entityType `CREDENTIALS` and entityId = projectId. It records added, renamed, which fields changed, deleted, and access given/removed, never a value. Per the user, views and copies are **not** logged. Deletes are permanent.
+- **Tests:** verified with 30 crypto checks and 67 server-action checks against an in-memory Prisma stand-in. The local DB was unreachable, so **not yet run end-to-end against Postgres**.
+- **Deploy:** new tables plus two Company columns with defaults ship through the boot `db push`. **`CREDENTIALS_KEY` must be added in Coolify, followed by a redeploy.**
+
 ## Key conventions / decisions
 - **Multi-tenant**: every tenant row carries `companyId`; all queries scope by it; server actions re-check ownership.
 - **No UI libraries** — charts, Markdown renderer, combobox, datepicker, modal, WYSIWYG, toast, confirm dialog all hand-rolled. **Profile avatars + the company logo upload to disk** (reserved `Employee.photoKey` / `Company.logoKey`, served via scoped `/api/people/[id]/avatar` + `/api/org/logo`, route URL stored in the existing `avatarUrl`/`logoUrl` so render sites are unchanged; shared `ImageUpload` component). KB article images remain URL-in-markdown. Avatars fall back to **first+last-name initials**.

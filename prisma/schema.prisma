@@ -188,6 +188,10 @@ model Company {
   breakLimitOn         Boolean  @default(true)
   breakLimitMinutes    Int      @default(10)
   breakLimitCount      Int      @default(2)
+  // Credentials library: how long one emailed code keeps it unlocked, and how
+  // long a second code allows changes (add / edit / delete / access).
+  vaultViewMinutes     Int      @default(30)
+  vaultEditMinutes     Int      @default(10)
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
@@ -465,6 +469,8 @@ model User {
   notifications Notification[]
   extensionTokens ExtensionToken[]
   pushSubscriptions PushSubscription[]
+  vaultCodes      VaultCode[]
+  vaultUnlocks    VaultUnlock[]
 
   @@unique([companyId, email])
   @@index([companyId])
@@ -561,6 +567,7 @@ model Employee {
   tasks          Task[]            @relation("Assignee")
   salaryStructures SalaryStructure[]
   payslips       Payslip[]
+  credentialAccess CredentialAccess[]
 
   @@unique([companyId, employeeCode])
   @@unique([companyId, machineCode])
@@ -637,6 +644,8 @@ model Project {
   deliverables Deliverable[]
   kbArticles   KbArticle[]
   attachments  Attachment[]
+  credentials  Credential[]
+  credentialAccess CredentialAccess[]
 
   @@index([companyId])
   @@index([clientId])
@@ -1352,4 +1361,77 @@ model FormSubmission {
   @@index([formId])
   @@index([formId, dedupeKey])
   @@index([shareToken])
+}
+
+// ---- Credentials library ---------------------------------------------------
+// Per-project logins (WordPress admin, Tag Manager, Ads manager…) shared by the
+// client's portal logins and the team members with access. The title is kept
+// plain — the list and the history show it. The login URL and the secrets
+// (username, password, notes) are AES-256-GCM ciphertext under CREDENTIALS_KEY,
+// which lives in the server env and never in the database, so a leaked dump or
+// backup holds nothing readable. See lib/vault/crypto.ts.
+model Credential {
+  id           String   @id // made before encrypting: each ciphertext is bound to its row
+  companyId    String
+  projectId    String
+  title        String
+  urlCipher    String?
+  secretCipher String
+  createdById  String // userId
+  updatedById  String? // userId
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+// Team members a project manager added to a project's library, on top of the
+// ones with automatic access (the project's category owners, Super Admins).
+model CredentialAccess {
+  id          String   @id @default(cuid())
+  projectId   String
+  employeeId  String
+  grantedById String // userId
+  createdAt   DateTime @default(now())
+
+  project  Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, employeeId])
+}
+
+// An emailed 6-digit code for the library. Only an HMAC of it is stored; it
+// expires in 10 minutes and dies after 5 wrong tries.
+model VaultCode {
+  id        String    @id // made before hashing: the hash is bound to its row
+  userId    String
+  purpose   String // "VIEW" (unlock) | "EDIT" (make changes)
+  codeHash  String
+  attempts  Int       @default(0)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+// A verified code, held by one browser: its httpOnly cookie carries a random
+// token and only the token's SHA-256 is stored here, so reading the database
+// gives nothing that can be replayed as a cookie.
+model VaultUnlock {
+  id        String    @id @default(cuid())
+  userId    String
+  purpose   String // "VIEW" | "EDIT"
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
