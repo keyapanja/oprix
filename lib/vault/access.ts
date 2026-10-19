@@ -36,6 +36,8 @@ export type VaultProject = { id: string; name: string; clientId: string | null }
  * - Super Admins → every project;
  * - other staff → projects where they own a category (primary assignee of one
  *   of the project's services), or that a project manager added them to.
+ *   A manager's word wins either way: a CredentialAccess row with
+ *   allowed = false takes a category owner off this project's library.
  */
 export async function vaultProject(session: SessionUser, projectId: string): Promise<VaultProject | null> {
   const project = await prisma.project.findFirst({
@@ -50,11 +52,15 @@ export async function vaultProject(session: SessionUser, projectId: string): Pro
   if (session.role === "SUPER_ADMIN") return project;
   if (!session.employeeId) return null;
 
-  const [owns, added] = await Promise.all([
+  const [owns, say] = await Promise.all([
     prisma.projectService.count({ where: { projectId, primaryAssigneeId: session.employeeId } }),
-    prisma.credentialAccess.count({ where: { projectId, employeeId: session.employeeId } }),
+    prisma.credentialAccess.findUnique({
+      where: { projectId_employeeId: { projectId, employeeId: session.employeeId } },
+      select: { allowed: true },
+    }),
   ]);
-  return owns + added > 0 ? project : null;
+  const allowed = say ? say.allowed : owns > 0;
+  return allowed ? project : null;
 }
 
 /** Can this person change who has access? Staff with project:manage. */
@@ -73,8 +79,11 @@ export async function vaultProjectsFor(session: SessionUser) {
             companyId: session.companyId,
             deletedAt: null,
             OR: [
-              { services: { some: { primaryAssigneeId: session.employeeId } } },
-              { credentialAccess: { some: { employeeId: session.employeeId } } },
+              {
+                services: { some: { primaryAssigneeId: session.employeeId } },
+                credentialAccess: { none: { employeeId: session.employeeId, allowed: false } },
+              },
+              { credentialAccess: { some: { employeeId: session.employeeId, allowed: true } } },
             ],
           }
         : null;

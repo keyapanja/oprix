@@ -386,6 +386,15 @@ async function openAccess(projectId: string): Promise<{ session: SessionUser; pr
   return { session, projectId: project.id };
 }
 
+/** Does this employee own one of the project's categories (automatic access)? */
+async function ownsCategory(projectId: string, employeeId: string): Promise<boolean> {
+  return (await prisma.projectService.count({ where: { projectId, primaryAssigneeId: employeeId } })) > 0;
+}
+
+/**
+ * Give someone access. For a category owner a manager had taken off, this
+ * clears the removal, so they're back on the automatic rule.
+ */
 export async function grantVaultAccess(projectId: string, employeeId: string): Promise<VaultResult> {
   const opened = await openAccess(String(projectId));
   if ("fail" in opened) return opened.fail;
@@ -395,29 +404,71 @@ export async function grantVaultAccess(projectId: string, employeeId: string): P
   });
   if (!emp) return { error: "Employee not found." };
 
-  const existing = await prisma.credentialAccess.findUnique({
-    where: { projectId_employeeId: { projectId: opened.projectId, employeeId: emp.id } },
-    select: { id: true },
-  });
-  if (existing) return { ok: true };
-  await prisma.credentialAccess.create({
-    data: { projectId: opened.projectId, employeeId: emp.id, grantedById: opened.session.userId },
-  });
-  await logVault(opened.session, opened.projectId, `gave ${emp.fullName} access`);
+  const key = { projectId_employeeId: { projectId: opened.projectId, employeeId: emp.id } };
+  const [owner, row] = await Promise.all([
+    ownsCategory(opened.projectId, emp.id),
+    prisma.credentialAccess.findUnique({ where: key, select: { id: true, allowed: true } }),
+  ]);
+
+  if (owner) {
+    if (!row || row.allowed) return { ok: true }; // already has it
+    await prisma.credentialAccess.delete({ where: { id: row.id } });
+    await logVault(opened.session, opened.projectId, `restored ${emp.fullName}'s access`);
+  } else {
+    if (row?.allowed) return { ok: true };
+    if (row) {
+      await prisma.credentialAccess.update({
+        where: { id: row.id },
+        data: { allowed: true, grantedById: opened.session.userId },
+      });
+    } else {
+      await prisma.credentialAccess.create({
+        data: { projectId: opened.projectId, employeeId: emp.id, allowed: true, grantedById: opened.session.userId },
+      });
+    }
+    await logVault(opened.session, opened.projectId, `gave ${emp.fullName} access`);
+  }
   refresh(opened.projectId);
   return { ok: true };
 }
 
+/**
+ * Take someone's access away. A hand-added person's entry is simply removed;
+ * a category owner gets a removal on record, which outranks their ownership
+ * for this project's library until a manager restores them.
+ */
 export async function revokeVaultAccess(projectId: string, employeeId: string): Promise<VaultResult> {
   const opened = await openAccess(String(projectId));
   if ("fail" in opened) return opened.fail;
-  const row = await prisma.credentialAccess.findUnique({
-    where: { projectId_employeeId: { projectId: opened.projectId, employeeId: String(employeeId) } },
-    select: { id: true, employee: { select: { fullName: true } } },
+  const emp = await prisma.employee.findFirst({
+    where: { id: String(employeeId), companyId: opened.session.companyId },
+    select: { id: true, fullName: true },
   });
-  if (!row) return { ok: true };
-  await prisma.credentialAccess.delete({ where: { id: row.id } });
-  await logVault(opened.session, opened.projectId, `removed ${row.employee.fullName}'s access`);
+  if (!emp) return { error: "Employee not found." };
+
+  const key = { projectId_employeeId: { projectId: opened.projectId, employeeId: emp.id } };
+  const [owner, row] = await Promise.all([
+    ownsCategory(opened.projectId, emp.id),
+    prisma.credentialAccess.findUnique({ where: key, select: { id: true, allowed: true } }),
+  ]);
+
+  if (owner) {
+    if (row && !row.allowed) return { ok: true }; // already removed
+    if (row) {
+      await prisma.credentialAccess.update({
+        where: { id: row.id },
+        data: { allowed: false, grantedById: opened.session.userId },
+      });
+    } else {
+      await prisma.credentialAccess.create({
+        data: { projectId: opened.projectId, employeeId: emp.id, allowed: false, grantedById: opened.session.userId },
+      });
+    }
+  } else {
+    if (!row?.allowed) return { ok: true };
+    await prisma.credentialAccess.delete({ where: { id: row.id } });
+  }
+  await logVault(opened.session, opened.projectId, `removed ${emp.fullName}'s access`);
   refresh(opened.projectId);
   return { ok: true };
 }

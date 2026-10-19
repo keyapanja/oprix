@@ -1387,13 +1387,17 @@ model Credential {
   @@index([projectId])
 }
 
-// Team members a project manager added to a project's library, on top of the
-// ones with automatic access (the project's category owners, Super Admins).
+// A project manager's say over one person's access to a project's library.
+// allowed = true: added by hand, on top of the automatic access (the project's
+// category owners, Super Admins). allowed = false: a category owner taken off
+// this project's library — they keep the category, not the access. No row:
+// the automatic rule decides.
 model CredentialAccess {
   id          String   @id @default(cuid())
   projectId   String
   employeeId  String
-  grantedById String // userId
+  allowed     Boolean  @default(true)
+  grantedById String // userId — who added or removed them
   createdAt   DateTime @default(now())
 
   project  Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)

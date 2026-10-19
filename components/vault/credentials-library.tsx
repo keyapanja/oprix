@@ -756,6 +756,16 @@ function AccessModal({
     withEdit(run);
   }
 
+  /** Put a removed category owner back on the automatic rule. */
+  function restore(employeeId: string) {
+    const run = () =>
+      start(async () => {
+        const res = await grantVaultAccess(projectId, employeeId);
+        if (handle(res, run)) router.refresh();
+      });
+    withEdit(run);
+  }
+
   return (
     <Modal title="Who can use these credentials" onClose={onClose}>
       <div className="space-y-5 text-sm">
@@ -765,11 +775,18 @@ function AccessModal({
 
         <section>
           <p className="mb-2 text-xs font-medium uppercase tracking-wide text-faint">Automatic</p>
-          <ul className="space-y-1.5">
+          <ul className="space-y-1">
             {access.automatic.map((a) => (
-              <li key={a.name} className="flex items-center justify-between gap-3">
-                <span className="font-medium text-content">{a.name}</span>
-                <span className="truncate text-xs text-faint">{a.why}</span>
+              <li key={a.employeeId ?? a.name} className="flex items-center justify-between gap-3">
+                <span className="min-w-0">
+                  <span className="font-medium text-content">{a.name}</span>
+                  <span className="ml-2 text-xs text-faint">{a.why}</span>
+                </span>
+                {a.employeeId && (
+                  <AccessButton onClick={() => remove(a.employeeId!)} disabled={pending} danger>
+                    Remove
+                  </AccessButton>
+                )}
               </li>
             ))}
           </ul>
@@ -784,19 +801,33 @@ function AccessModal({
               {access.added.map((a) => (
                 <li key={a.employeeId} className="flex items-center justify-between gap-3">
                   <span className="font-medium text-content">{a.name}</span>
-                  <button
-                    type="button"
-                    onClick={() => remove(a.employeeId)}
-                    disabled={pending}
-                    className="rounded-lg px-2 py-1 text-xs font-medium text-muted hover:bg-red-50 hover:text-red-600 disabled:opacity-50 dark:hover:bg-red-500/15"
-                  >
+                  <AccessButton onClick={() => remove(a.employeeId)} disabled={pending} danger>
                     Remove
-                  </button>
+                  </AccessButton>
                 </li>
               ))}
             </ul>
           )}
         </section>
+
+        {access.removed.length > 0 && (
+          <section>
+            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-faint">Removed by a manager</p>
+            <ul className="space-y-1">
+              {access.removed.map((a) => (
+                <li key={a.employeeId} className="flex items-center justify-between gap-3">
+                  <span className="min-w-0">
+                    <span className="font-medium text-muted line-through decoration-faint">{a.name}</span>
+                    <span className="ml-2 text-xs text-faint">{a.why}</span>
+                  </span>
+                  <AccessButton onClick={() => restore(a.employeeId)} disabled={pending}>
+                    Restore
+                  </AccessButton>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         <section className="flex items-end gap-2 border-t border-line pt-4">
           <div className="min-w-0 flex-1">
@@ -812,8 +843,38 @@ function AccessModal({
             Add
           </Button>
         </section>
-        <p className="text-xs text-faint">Changing access asks for the same second code as editing.</p>
+        <p className="text-xs text-faint">
+          Changing access asks for the same second code as editing. Super Admins always have access.
+        </p>
       </div>
     </Modal>
+  );
+}
+
+function AccessButton({
+  children,
+  onClick,
+  disabled,
+  danger,
+}: {
+  children: ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
+  danger?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={cn(
+        "shrink-0 rounded-lg px-2 py-1 text-xs font-medium text-muted disabled:opacity-50",
+        danger
+          ? "hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/15"
+          : "hover:bg-canvas hover:text-content",
+      )}
+    >
+      {children}
+    </button>
   );
 }

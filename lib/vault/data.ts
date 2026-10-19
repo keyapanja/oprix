@@ -14,8 +14,11 @@ import { canManageVaultAccess, maskEmail, readUnlock, vaultProject } from "@/lib
 export type VaultEntry = { id: string; title: string; url: string | null; updated: string };
 export type VaultHistoryRow = { id: string; actor: string; action: string; at: string };
 export type VaultAccessInfo = {
-  automatic: { name: string; why: string }[];
+  /** Super Admins (employeeId null — not removable) and category owners. */
+  automatic: { employeeId: string | null; name: string; why: string }[];
   added: { employeeId: string; name: string }[];
+  /** Category owners a manager took off this library. */
+  removed: { employeeId: string; name: string; why: string }[];
   candidates: { id: string; name: string }[];
 };
 export type VaultView = {
@@ -139,7 +142,7 @@ async function accessInfo(companyId: string, projectId: string): Promise<VaultAc
     prisma.credentialAccess.findMany({
       where: { projectId },
       orderBy: { createdAt: "asc" },
-      select: { employee: { select: { id: true, fullName: true } } },
+      select: { allowed: true, employee: { select: { id: true, fullName: true } } },
     }),
     // Only people who can sign in are worth adding.
     prisma.employee.findMany({
@@ -156,14 +159,22 @@ async function accessInfo(companyId: string, projectId: string): Promise<VaultAc
     cur.categories.push(o.service.name);
     byOwner.set(o.primaryAssignee.id, cur);
   }
-  const taken = new Set([...byOwner.keys(), ...added.map((a) => a.employee.id)]);
+  const blocked = new Set(added.filter((a) => !a.allowed).map((a) => a.employee.id));
+  const ownersList = [...byOwner].map(([employeeId, o]) => ({
+    employeeId,
+    name: o.name,
+    why: `Owns ${o.categories.join(", ")}`,
+  }));
+  const handAdded = added.filter((a) => a.allowed && !byOwner.has(a.employee.id));
+  const taken = new Set([...byOwner.keys(), ...handAdded.map((a) => a.employee.id)]);
 
   return {
     automatic: [
-      { name: "Super Admins", why: "Always" },
-      ...[...byOwner.values()].map((o) => ({ name: o.name, why: `Owns ${o.categories.join(", ")}` })),
+      { employeeId: null, name: "Super Admins", why: "Always" },
+      ...ownersList.filter((o) => !blocked.has(o.employeeId)),
     ],
-    added: added.map((a) => ({ employeeId: a.employee.id, name: a.employee.fullName })),
+    added: handAdded.map((a) => ({ employeeId: a.employee.id, name: a.employee.fullName })),
+    removed: ownersList.filter((o) => blocked.has(o.employeeId)),
     candidates: employees.filter((e) => !taken.has(e.id)).map((e) => ({ id: e.id, name: e.fullName })),
   };
 }

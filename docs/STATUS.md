@@ -74,6 +74,9 @@ _Last updated: 2026-09-29 — **The deploy notice finally fires during a deploy*
   - Super Admins;
   - the project's **category owners** (`ProjectService.primaryAssigneeId`);
   - anyone a `project:manage` holder adds (`CredentialAccess`, managed in the card's **Manage access** dialog).
+  - Managers can also **remove a category owner** from one project's library and **Restore** them later.
+    Both overrides are a `CredentialAccess` row: `allowed: true` = added by hand, `allowed: false` = owner removed, no row = the automatic rule decides.
+    Super Admins can't be removed: they could always re-add themselves.
 - **Unlocking:** an emailed 6-digit code opens the library for `Company.vaultViewMinutes` (default 30). A second code opens add/edit/delete/access changes for `vaultEditMinutes` (default 10).
   - Codes (`VaultCode`) are stored only as an HMAC. They expire in 10 min, die after 5 wrong tries, and only the newest works. Sends are capped at 5 per 15 min and 20 per day per person.
   - An unlock (`VaultUnlock`) is an httpOnly, sameSite=strict cookie holding a random token; only its SHA-256 is stored. It is revoked by **Lock now** and by `/logout`.
@@ -82,7 +85,7 @@ _Last updated: 2026-09-29 — **The deploy notice finally fires during a deploy*
   - Losing the key loses every entry (see `docs/DEPLOY-COOLIFY.md`).
 - **Never in the page:** entries reach the browser as title + URL only. `revealCredential` returns one entry's secrets on Show; they auto-hide after 60 s. Copy clears the clipboard after 2 min (on return to the tab if it was in the background).
 - **History:** `ActivityLog` with entityType `CREDENTIALS` and entityId = projectId. It records added, renamed, which fields changed, deleted, and access given/removed, never a value. Per the user, views and copies are **not** logged. Deletes are permanent.
-- **Tests:** verified with 30 crypto checks and 67 server-action checks against an in-memory Prisma stand-in. The local DB was unreachable, so **not yet run end-to-end against Postgres**.
+- **Tests:** verified with 30 crypto checks and 82 server-action checks against an in-memory Prisma stand-in. The local DB was unreachable, so **not yet run end-to-end against Postgres**.
 - **Deploy:** new tables plus two Company columns with defaults ship through the boot `db push`. **`CREDENTIALS_KEY` must be added in Coolify, followed by a redeploy.**
 
 ## Key conventions / decisions
