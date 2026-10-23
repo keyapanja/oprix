@@ -115,12 +115,23 @@ export default async function ProjectDetailPage({
     <div>
       <div className="mb-4 flex items-center justify-between gap-4">
         <BackLink href="/projects">Back to projects</BackLink>
-        <Link href={`/tasks/new?project=${project.id}`}>
-          <Button>
-            <Icon name="plus" className="size-4" />
-            Add task
-          </Button>
-        </Link>
+        <div className="flex items-center gap-2">
+          {canManageStorage && (
+            // Admins: bring a client's task history over from Airtable.
+            <Link href={`/projects/${project.id}/import`}>
+              <Button variant="secondary">
+                <Icon name="download" className="size-4" />
+                Import from Airtable
+              </Button>
+            </Link>
+          )}
+          <Link href={`/tasks/new?project=${project.id}`}>
+            <Button>
+              <Icon name="plus" className="size-4" />
+              Add task
+            </Button>
+          </Link>
+        </div>
       </div>
 
       <Card className="mb-6 p-6">

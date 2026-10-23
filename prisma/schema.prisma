@@ -675,6 +675,7 @@ model Task {
   submittedAt  DateTime? // when the current work was submitted for review (for on-time/delayed)
   completedAt  DateTime? // moved to Completed
   orderIndex   Int        @default(0)
+  externalRef  String?   // where an imported task came from, e.g. "airtable:Tech - 8129"; a re-import skips it
   deletedAt    DateTime?
   deletedById  String?   // userId who moved it to trash
   createdAt    DateTime   @default(now())
@@ -695,6 +696,7 @@ model Task {
   @@index([projectId])
   @@index([assigneeId])
   @@index([serviceId])
+  @@index([projectId, externalRef])
 }
 
 // Which services a project uses, and the primary employee for each.

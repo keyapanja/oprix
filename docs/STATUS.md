@@ -65,6 +65,28 @@ _Last updated: 2026-09-29 — **The deploy notice finally fires during a deploy*
   `/profile/devices`. **Localhost-first; production is a config swap.** Live
   browser test is the remaining step.
 
+### Airtable task import (2026-10-23)
+- **What it's for:** bringing a client's task history over from an Airtable grid view's "Download CSV". Built for Satori Method: 581 tasks (570 delivered, 11 open).
+- **Where:** **Project page → Import from Airtable**, admins only (`org:manage`), at `/projects/[id]/import`.
+  - UI: `components/projects/airtable-import.tsx`.
+  - Upload goes to `POST /api/projects/[id]/import-airtable` (`mode=preview|import`). It's a route rather than a server action because exports can pass the 1 MB server-action body limit.
+- **Reading the CSV** (`lib/import/airtable-csv.ts`, pure):
+  - An RFC 4180 parser.
+  - Airtable's "Local" dates follow the downloader's browser, so the day/month order is **detected from the file**. Ambiguous files are refused, never guessed.
+  - Times are read in company time.
+  - Status mapping: Done & Delivered → Completed, Awaiting for BM feedback → Review, Task Assigned → To Do, In Progress, On Hold; anything else → To Do (flagged in the preview).
+  - "Website: New Page/Post Design" matches the project's sub-category "New Page/Post Design". An unmatched type leaves the task untyped and is noted in its description.
+- **Writing** (`lib/import/airtable-import.ts`):
+  - Only rows whose Client column matches the chosen value are imported; a file with several clients must be narrowed first.
+  - Tasks are created the way a portal request is: `clientRaised` and `clientVisible`, no checklist, `createdById` = the client's earliest active portal login (else the admin), assigned to the project's BM (`getProjectManager`; refused without one).
+  - Dates: `createdAt` = Airtable creation time; `dueDate` = `clientDeadline` = Client Deadline, the same day so history doesn't read as late; `completedAt`/`submittedAt` = Delivered On.
+  - Notes and client comments are appended to the description.
+  - Task numbers are reserved in one step, in creation order.
+  - One history line per task; **no notifications**.
+  - `Task.externalRef` = `airtable:<Task ID>` makes re-runs add only new rows. An advisory lock stops a double click from importing twice.
+  - Assets are downloaded afterwards from Airtable's hosts only (`*.airtableusercontent.com`, `dl.airtable.com`; redirects checked; 25 MB cap). Failures are listed, not fatal. CSV file links expire, so upload soon after downloading.
+- **Tests:** 52 checks against an in-memory Prisma stand-in. **Not yet run against the real CSV or Postgres** — the preview step is the check before writing.
+
 ### Credentials library (2026-10-19)
 - **Per-project logins** (WordPress admin, Tag Manager, Ads…) shared between the client's portal logins and the team.
   - Shown on the project page, the portal project page, and **`/credentials`** (sidebar; lists only the libraries you can open, plus a Security card for admins with the two windows).
