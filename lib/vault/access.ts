@@ -40,6 +40,9 @@ export type VaultProject = { id: string; name: string; clientId: string | null }
  *   allowed = false takes a category owner off this project's library.
  */
 export async function vaultProject(session: SessionUser, projectId: string): Promise<VaultProject | null> {
+  // Never through the client API (MCP): an AI agent holding a key must not be
+  // able to read saved logins, whatever the key's owner could see in a browser.
+  if (session.via === "api") return null;
   const project = await prisma.project.findFirst({
     where: { id: projectId, companyId: session.companyId, deletedAt: null },
     select: { id: true, name: true, clientId: true },
@@ -65,6 +68,7 @@ export async function vaultProject(session: SessionUser, projectId: string): Pro
 
 /** Can this person change who has access? Staff with project:manage. */
 export async function canManageVaultAccess(session: SessionUser): Promise<boolean> {
+  if (session.via === "api") return false;
   return session.role !== "CLIENT" && (await sessionCan(session, "project:manage"));
 }
 

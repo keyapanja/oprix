@@ -163,6 +163,7 @@ export async function getClientTask(clientId: string, companyId: string, taskId:
     },
     select: {
       id: true,
+      taskNumber: true,
       name: true,
       description: true,
       status: true,

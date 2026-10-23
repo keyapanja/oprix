@@ -162,6 +162,40 @@ export async function sendVaultCodeEmail(opts: {
   return sendMail({ to: opts.to, subject: "Your Oprix verification code", html });
 }
 
+/** Sent whenever a key is created or an app is connected to a client's
+ *  account, so a connection nobody meant to make doesn't go unnoticed. */
+export async function sendApiConnectionEmail(opts: {
+  to: string;
+  name: string;
+  connectionName: string;
+  kind: "KEY" | "OAUTH";
+  access: string;
+  projects: string;
+  manageUrl: string;
+}): Promise<{ delivered: boolean }> {
+  const what = opts.kind === "KEY" ? "An API key was created" : "An app was connected";
+  const html = `
+  <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto">
+    <h2 style="color:#059669;margin:0 0 8px">${what}</h2>
+    <p style="color:#334155;font-size:14px;line-height:1.6">
+      Hi ${escapeHtml(opts.name)}, <strong>${escapeHtml(opts.connectionName)}</strong> can now reach your
+      projects in the client portal through the API.
+    </p>
+    <p style="color:#334155;font-size:14px;line-height:1.6;margin:0">
+      Access: ${escapeHtml(opts.access)}<br>Projects: ${escapeHtml(opts.projects)}
+    </p>
+    <p style="margin:24px 0">
+      <a href="${opts.manageUrl}" style="background:#059669;color:#fff;text-decoration:none;padding:12px 20px;border-radius:10px;font-size:14px;font-weight:600;display:inline-block">
+        Review connections
+      </a>
+    </p>
+    <p style="color:#94a3b8;font-size:12px;line-height:1.6">
+      If this wasn't you, revoke it there straight away and tell your Business Manager.
+    </p>
+  </div>`;
+  return sendMail({ to: opts.to, subject: `${what} on your account`, html });
+}
+
 export async function sendTaskAssignedEmail(opts: {
   to: string;
   name: string;

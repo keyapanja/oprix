@@ -34,6 +34,16 @@ export function rateLimited(key: string, max: number, windowMs: number): boolean
   return bucket.count > max;
 }
 
+/**
+ * Whether `key` has already used up `max` hits in its current window, without
+ * counting one. For limits that only count failures: check this first, then
+ * call rateLimited() when the attempt fails.
+ */
+export function alreadyLimited(key: string, max: number): boolean {
+  const bucket = BUCKETS.get(key);
+  return !!bucket && Date.now() <= bucket.resetAt && bucket.count >= max;
+}
+
 /** Best-effort caller IP from the proxy headers; "unknown" behind a bad proxy. */
 export function clientIp(headers: Headers): string {
   return (

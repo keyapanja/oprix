@@ -471,6 +471,7 @@ model User {
   pushSubscriptions PushSubscription[]
   vaultCodes      VaultCode[]
   vaultUnlocks    VaultUnlock[]
+  apiConnections  ApiConnection[]
 
   @@unique([companyId, email])
   @@index([companyId])
@@ -1140,12 +1141,16 @@ model Client {
   address     String?
   deletedAt   DateTime?
   deletedById String?   // userId who moved it to trash
+  // Client API (MCP): off until the team switches it on for this client.
+  // Switching it off revokes every key and connected app.
+  apiEnabled  Boolean  @default(false)
   createdAt   DateTime @default(now())
 
   company  Company         @relation(fields: [companyId], references: [id])
   contacts ClientContact[]
   projects Project[]
   users    User[] // CLIENT-role portal logins
+  apiConnections ApiConnection[]
 
   @@index([companyId])
 }
@@ -1440,4 +1445,98 @@ model VaultUnlock {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+// ---- Client API (MCP) -------------------------------------------------------
+// Clients connect Claude (or any MCP agent) to Oprix. Every connection acts as
+// one client portal login and goes through the portal's own ownership checks,
+// so it can never see more than that person sees in the portal. The
+// credentials library is refused to API callers outright. See lib/api.
+
+// One way in for one client login: a key their primary contact created (KEY),
+// or an app they approved through the sign-in flow (OAUTH). Revoking it ends
+// every token under it.
+model ApiConnection {
+  id         String    @id @default(cuid())
+  companyId  String
+  clientId   String
+  userId     String // the client login it acts as
+  kind       String // "KEY" | "OAUTH"
+  name       String
+  keyPrefix  String? // "oprix_sk_AbCd" — enough to recognise a key in a list (KEY only)
+  keyHash    String?   @unique // SHA-256 of the key; the key itself is shown once (KEY only)
+  oauthAppId String? // the registered app it was approved for (OAUTH only)
+  canWrite   Boolean   @default(false)
+  projectIds String[] // empty = every project of the client
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  lastUsedAt DateTime?
+  lastUsedIp String?
+  createdAt  DateTime  @default(now())
+
+  client Client       @relation(fields: [clientId], references: [id])
+  user   User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokens OAuthToken[]
+
+  @@index([clientId])
+}
+
+// An app that registered itself for the sign-in flow (OAuth dynamic client
+// registration) — Claude does this on its own. Registering grants nothing:
+// a client's primary contact still has to approve it.
+model OAuthApp {
+  id           String   @id // the client_id handed back to the app
+  name         String
+  redirectUris String[]
+  createdAt    DateTime @default(now())
+}
+
+// A one-time authorization code from the consent screen: 10 minutes, PKCE-bound.
+model OAuthCode {
+  id            String    @id @default(cuid())
+  codeHash      String    @unique
+  appId         String
+  userId        String
+  redirectUri   String
+  codeChallenge String
+  canWrite      Boolean
+  projectIds    String[]
+  expiresAt     DateTime
+  usedAt        DateTime?
+  connectionId  String? // the connection it was exchanged for — revoked if the code is replayed
+  createdAt     DateTime  @default(now())
+}
+
+// Access tokens (1 hour) and refresh tokens (rotated on every use) for an
+// OAUTH connection. Only hashes are stored.
+model OAuthToken {
+  id           String    @id @default(cuid())
+  connectionId String
+  kind         String // "ACCESS" | "REFRESH"
+  tokenHash    String    @unique
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  createdAt    DateTime  @default(now())
+
+  connection ApiConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@index([connectionId])
+}
+
+// Every tool call through the API: who, through which connection, what, when.
+// The client sees their own; admins see all.
+model ApiCallLog {
+  id           String   @id @default(cuid())
+  companyId    String
+  clientId     String
+  connectionId String
+  tool         String
+  target       String?
+  ok           Boolean
+  error        String?
+  ip           String?
+  createdAt    DateTime @default(now())
+
+  @@index([clientId, createdAt])
+  @@index([connectionId, createdAt])
 }

@@ -42,6 +42,7 @@ export type VaultResult = { ok?: boolean; error?: string; locked?: boolean; need
 export type Secrets = { username: string; password: string; notes: string };
 
 const NOT_SET_UP = "The credentials library isn't set up yet — an admin needs to add its encryption key.";
+const NOT_VIA_API = "The credentials library isn't available through the API.";
 const PurposeZ = z.enum(["VIEW", "EDIT"]);
 
 // ---- Codes and unlocking -----------------------------------------------------
@@ -50,6 +51,7 @@ const PurposeZ = z.enum(["VIEW", "EDIT"]);
 export async function sendVaultCode(purpose: Purpose): Promise<VaultResult & { sentTo?: string }> {
   const session = await getSession();
   if (!session) return { error: "You're not signed in." };
+  if (session.via === "api") return { error: NOT_VIA_API };
   const p = PurposeZ.safeParse(purpose);
   if (!p.success) return { error: "Invalid request." };
   if (!vaultConfigured()) return { error: NOT_SET_UP };
@@ -113,6 +115,7 @@ export async function sendVaultCode(purpose: Purpose): Promise<VaultResult & { s
 export async function verifyVaultCode(purpose: Purpose, code: string): Promise<VaultResult> {
   const session = await getSession();
   if (!session) return { error: "You're not signed in." };
+  if (session.via === "api") return { error: NOT_VIA_API };
   const p = PurposeZ.safeParse(purpose);
   if (!p.success) return { error: "Invalid request." };
   if (!vaultConfigured()) return { error: NOT_SET_UP };

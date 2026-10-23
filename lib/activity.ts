@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/db";
 import { getActorLabel } from "@/lib/cache";
+import { apiCall } from "@/lib/api/context";
 
 /** Append a human-readable entry to a task's (or any entity's) change history.
  *  Extra `meta` (e.g. a field-level diff) is merged alongside the actor label. */
@@ -41,7 +42,11 @@ export async function logTaskActivity(
   });
 }
 
-/** Best-effort display label for the current user (employee name, else email). */
+/** Best-effort display label for the current user (employee name, else email).
+ *  Through the client API it says so — "Tristan (via Claude)" — so the history
+ *  shows which changes an AI agent made. */
 export async function actorLabel(userId: string): Promise<string> {
-  return getActorLabel(userId);
+  const label = await getActorLabel(userId);
+  const api = apiCall();
+  return api && api.session.userId === userId ? `${label} (via ${api.connection.name})` : label;
 }

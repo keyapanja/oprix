@@ -10,6 +10,8 @@ import { PROJECT_STATUS_TONE } from "@/lib/status";
 import { ContactForm } from "@/components/clients/contact-form";
 import { ClientPortalTeam, type PortalMember } from "@/components/clients/client-portal-team";
 import { BackLink } from "@/components/ui/back-link";
+import { ClientApiAccess } from "@/components/clients/client-api-access";
+import { apiAccountView } from "@/lib/api/data";
 
 export const metadata: Metadata = { title: "Client · Oprix" };
 
@@ -39,6 +41,7 @@ export default async function ClientDetailPage({
   });
 
   if (!client) notFound();
+  const api = await apiAccountView(client.id, session.companyId);
 
   // Everyone from the client's side who can sign in. The earliest login is the
   // primary contact (mirrors the portal's own team view); they can invite more.
@@ -68,6 +71,10 @@ export default async function ClientDetailPage({
 
       <Card className="mb-6 p-6">
         <ClientPortalTeam clientId={client.id} clientEmail={client.email} members={members} />
+      </Card>
+
+      <Card className="mb-6 p-6">
+        <ClientApiAccess clientId={client.id} view={api} />
       </Card>
 
       <div className="grid gap-6 lg:grid-cols-2">

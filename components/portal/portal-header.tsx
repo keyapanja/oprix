@@ -17,6 +17,7 @@ export function PortalHeader({
   displayName,
   avatarUrl,
   showForms,
+  showConnect,
   notifications,
   unread,
 }: {
@@ -27,6 +28,8 @@ export function PortalHeader({
   displayName: string;
   avatarUrl: string | null;
   showForms?: boolean;
+  /** API access is on for this client: show the Connect Claude page. */
+  showConnect?: boolean;
   notifications: ClientNote[];
   unread: number;
 }) {
@@ -36,6 +39,7 @@ export function PortalHeader({
     { label: "Deliverables", href: "/portal/deliverables" },
     ...(showForms ? [{ label: "Forms", href: "/portal/forms" }] : []),
     { label: "Team", href: "/portal/team" },
+    ...(showConnect ? [{ label: "Connect Claude", href: "/portal/connect" }] : []),
   ];
   const pathname = usePathname();
   const [open, setOpen] = useState(false);

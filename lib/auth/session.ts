@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { SignJWT, jwtVerify } from "jose";
 import type { Role } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { apiCall } from "@/lib/api/context";
 
 // ---------------------------------------------------------------------------
 // Session = a signed JWT in an httpOnly cookie. We only need email/password
@@ -22,6 +23,10 @@ export type SessionUser = {
   email: string;
   employeeId: string | null;
   clientId: string | null;
+  /** Set when the request came through the client API (MCP), not a browser.
+   *  Anything that must never be reachable that way (the credentials
+   *  library) checks this and refuses. */
+  via?: "api";
 };
 
 function secret(): Uint8Array {
@@ -48,6 +53,12 @@ export async function createSession(user: SessionUser): Promise<void> {
 }
 
 export const getSession = cache(async (): Promise<SessionUser | null> => {
+  // Inside an API call the caller is the connection's client login — already
+  // checked (active, still a client, API switched on) by lib/api/auth.ts. A
+  // browser cookie that happens to be present is ignored.
+  const api = apiCall();
+  if (api) return api.session;
+
   const store = await cookies();
   const token = store.get(COOKIE_NAME)?.value;
   if (!token) return null;

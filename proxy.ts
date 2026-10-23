@@ -54,7 +54,12 @@ export async function proxy(req: NextRequest) {
     pathname.startsWith("/api/cron") ||
     pathname.startsWith("/api/health") ||
     pathname.startsWith("/api/deploy-hook") ||
-    pathname.startsWith("/api/portal/")
+    pathname.startsWith("/api/portal/") ||
+    // The client API (MCP) and its OAuth endpoints: bearer tokens, no cookie.
+    // Each handler authenticates on its own (lib/api/auth.ts, lib/api/oauth.ts).
+    pathname === "/api/mcp" ||
+    pathname.startsWith("/api/mcp/") ||
+    pathname.startsWith("/api/oauth/")
   ) {
     return NextResponse.next();
   }
@@ -110,7 +115,14 @@ export async function proxy(req: NextRequest) {
   // employee punch-in gate) without re-parsing the URL.
   const headers = new Headers(req.headers);
   headers.set("x-pathname", pathname);
-  return NextResponse.next({ request: { headers } });
+  const res = NextResponse.next({ request: { headers } });
+  // The connect pages approve API access; never let another site frame them
+  // (clickjacking an "Approve" click).
+  if (pathname.startsWith("/portal/connect")) {
+    res.headers.set("X-Frame-Options", "DENY");
+    res.headers.set("Content-Security-Policy", "frame-ancestors 'none'");
+  }
+  return res;
 }
 
 export const config = {

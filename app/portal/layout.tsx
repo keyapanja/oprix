@@ -20,6 +20,7 @@ export default async function PortalLayout({ children }: { children: React.React
     select: {
       name: true,
       companyName: true,
+      apiEnabled: true,
       company: {
         select: {
           name: true,
@@ -61,6 +62,7 @@ export default async function PortalLayout({ children }: { children: React.React
         displayName={me?.nickname || session.email}
         avatarUrl={me?.avatarUrl ?? null}
         showForms={showForms}
+        showConnect={client.apiEnabled}
         notifications={notifications}
         unread={unread}
       />

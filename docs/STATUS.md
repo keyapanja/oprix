@@ -65,6 +65,38 @@ _Last updated: 2026-09-29 — **The deploy notice finally fires during a deploy*
   `/profile/devices`. **Localhost-first; production is a config swap.** Live
   browser test is the remaining step.
 
+### Client API — Claude / MCP (2026-10-23)
+- **What it is:** clients connect Claude (or any MCP agent) to their portal at **`/api/mcp`**, a stateless Streamable-HTTP MCP server that answers JSON (`lib/api/mcp.ts`).
+- **Tools** (`lib/api/tools.ts`):
+  - Read: list/get projects, list/get tasks (by id or number), list reviews, list deliverables, get attachment.
+  - Write: raise, edit, comment, approve or send back tasks and deliverables.
+  - Attachments: images come back inline, small text inline, anything else as a signed 30-minute download link (`/api/mcp/files/[token]`).
+  - **Never available:** deleting or withdrawing, team or profile, the credentials library.
+- **The model:** a connection acts as one client portal login.
+  - `lib/api/context.ts` (AsyncLocalStorage) makes `getSession()` return that login (marked `via: "api"`) while a tool runs, so reads go through the portal loaders (clientId in every WHERE) and writes call the portal actions unchanged.
+  - Extra limits per connection: `canWrite` and `projectIds`.
+  - The vault refuses `via: "api"` sessions in `vaultProject`, `canManageVaultAccess`, `sendVaultCode` and `verifyVaultCode`.
+- **Access:**
+  - `Client.apiEnabled` defaults to off. Staff switch it on the client page; switching off revokes every connection.
+  - Only the client's **primary contact** (earliest active login) creates keys or approves apps, on `/portal/connect`. The "Connect Claude" nav item shows only when API access is on.
+  - Each new connection emails that login.
+- **Keys:** `oprix_sk_…`, 90 days, SHA-256 only, shown once. Sent as `Authorization: Bearer` or `X-API-Key`.
+- **OAuth 2.1 with PKCE** (`lib/api/oauth.ts`):
+  - RFC 9728 metadata at `/.well-known/oauth-protected-resource[/api/mcp]`; RFC 8414 at `/.well-known/oauth-authorization-server`.
+  - Dynamic client registration `/api/oauth/register` (https or loopback redirects only), token endpoint `/api/oauth/token`, revoke endpoint `/api/oauth/revoke`.
+  - Consent screen at `/portal/connect/authorize`; framing blocked by the proxy.
+  - Codes last 10 minutes and are single-use; access tokens last 1 hour; refresh tokens rotate. A replayed code or refresh token revokes the whole connection.
+  - The primary-contact and API-on checks run again at exchange time.
+- **Audit and rate limits:**
+  - `ApiCallLog` records every tool call; clients see it on Connect Claude, staff on the client page. History lines read "Name (via <connection>)".
+  - 120 calls/min per connection; 20 bad credentials per IP per 10 min; foreign `Origin` refused.
+- **Tests** (2026-10-23), against a throwaway PGlite Postgres with `next dev` over real HTTP, two API-on clients and one API-off:
+  - 83 API checks, including isolation between clients, internal/hidden tasks, single-project and read-only keys, files, every write, and revoke/deactivate/switch-off mid-session.
+  - 13 + 25 + 12 OAuth checks, including the real consent screen in the browser.
+  - 4 vault-refusal checks.
+  - UI: Connect Claude page, key shown once, staff switch.
+- **Deploy:** new tables plus `Client.apiEnabled` (default false) ship through the boot `db push`. No new env vars; `APP_URL` must be the public https URL, because it is the OAuth issuer and the MCP resource.
+
 ### Airtable task import (2026-10-23)
 - **What it's for:** bringing a client's task history over from an Airtable grid view's "Download CSV". Built for Satori Method: 581 tasks (570 delivered, 11 open).
 - **Where:** **Project page → Import from Airtable**, admins only (`org:manage`), at `/projects/[id]/import`.
