@@ -823,6 +823,44 @@ export async function deleteTasks(
   return { ok: true, deleted, skipped };
 }
 
+/**
+ * Move every client-raised task created up to `cutoffISO` to Trash — all
+ * clients at once, for starting the client-task list over. Admins only
+ * (org:manage). The team's own tasks are never touched, and everything lands
+ * in Trash, where it can be restored. The cutoff is when the admin opened the
+ * page, so a request a client raises while they're confirming isn't swept up.
+ */
+export async function trashAllClientTasks(
+  cutoffISO: string,
+): Promise<ProjectState & { deleted?: number; skipped?: number }> {
+  const session = await requireCapability("org:manage");
+  const cutoff = new Date(cutoffISO);
+  if (Number.isNaN(cutoff.getTime())) return { error: "Invalid request." };
+  const tasks = await prisma.task.findMany({
+    where: {
+      deletedAt: null,
+      createdAt: { lte: cutoff },
+      project: { companyId: session.companyId, deletedAt: null },
+      ...(await clientRaisedFilter(session.companyId)),
+    },
+    select: { id: true },
+  });
+  let deleted = 0;
+  let skipped = 0;
+  for (const t of tasks) {
+    try {
+      await trashTask(session.companyId, t.id, session.userId);
+      deleted++;
+    } catch {
+      skipped++;
+    }
+  }
+  revalidatePath("/client-tasks");
+  revalidatePath("/tasks");
+  revalidatePath("/trash");
+  return { ok: true, deleted, skipped };
+}
+
 /** Clone a task into a fresh To-Do copy (carries checklist + assignees; not files/comments). */
 export async function duplicateTask(
   taskId: string,

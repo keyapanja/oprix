@@ -142,7 +142,8 @@ async function plan(session: SessionUser, projectId: string, csv: string, client
   const refs = rows.map((r) => REF_PREFIX + r.ref);
   const existing = refs.length
     ? await prisma.task.findMany({
-        where: { projectId: ctx.project.id, externalRef: { in: refs } },
+        // A task in Trash counts as gone: re-importing brings it back fresh.
+        where: { projectId: ctx.project.id, externalRef: { in: refs }, deletedAt: null },
         select: { externalRef: true },
       })
     : [];
@@ -249,7 +250,7 @@ export async function runAirtableImport(
       // One import per project at a time — a double click can't duplicate.
       await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtext(${"airtable-import:" + ctx.project.id}))`;
       const already = await tx.task.findMany({
-        where: { projectId: ctx.project.id, externalRef: { in: ordered.map((o) => REF_PREFIX + o.row.ref) } },
+        where: { projectId: ctx.project.id, externalRef: { in: ordered.map((o) => REF_PREFIX + o.row.ref) }, deletedAt: null },
         select: { externalRef: true },
       });
       const skip = new Set(already.map((a) => a.externalRef));
