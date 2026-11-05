@@ -2,44 +2,17 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { updateAnnouncement, deleteAnnouncement } from "@/lib/calendar/actions";
+import { deleteAnnouncement } from "@/lib/calendar/actions";
 import { Modal } from "@/components/ui/modal";
-import { Input, Textarea } from "@/components/ui/input";
-import { Field } from "@/components/ui/field";
-import { Button } from "@/components/ui/button";
-import { DatePicker } from "@/components/ui/date-picker";
 import { Icon } from "@/components/ui/icons";
+import { AnnouncementForm, type EditableAnnouncement } from "@/components/calendar/announcement-form";
 import { toast } from "@/components/ui/toast";
 import { confirmDialog } from "@/components/ui/confirm";
 
-type Ann = { id: string; title: string; body: string | null; dateISO: string };
-
-export function AnnouncementActions({ announcement }: { announcement: Ann }) {
+export function AnnouncementActions({ announcement }: { announcement: EditableAnnouncement }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
-  const [error, setError] = useState<string | null>(null);
-  const [title, setTitle] = useState(announcement.title);
-  const [body, setBody] = useState(announcement.body ?? "");
-  const [date, setDate] = useState(announcement.dateISO);
-
-  function save() {
-    setError(null);
-    if (!title.trim()) return setError("Title is required");
-    const fd = new FormData();
-    fd.set("title", title);
-    fd.set("body", body);
-    fd.set("date", date);
-    start(async () => {
-      const res = await updateAnnouncement(announcement.id, fd);
-      if (res.error) setError(res.error);
-      else {
-        setOpen(false);
-        toast.success("Announcement updated");
-        router.refresh();
-      }
-    });
-  }
 
   async function onDelete() {
     const ok = await confirmDialog({
@@ -85,29 +58,9 @@ export function AnnouncementActions({ announcement }: { announcement: Ann }) {
       </div>
 
       {open && (
-        <Modal onClose={() => setOpen(false)} title="Edit announcement">
-          <div className="space-y-4">
-            {error && (
-              <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 ring-1 ring-inset ring-red-200 dark:bg-red-500/15 dark:text-red-300 dark:ring-red-500/25">
-                {error}
-              </div>
-            )}
-            <div className="flex flex-wrap gap-4">
-              <Field label="Date" className="w-44">
-                <DatePicker value={date} onChange={setDate} />
-              </Field>
-              <Field label="Title" className="min-w-56 flex-1">
-                <Input value={title} onChange={(e) => setTitle(e.target.value)} />
-              </Field>
-            </div>
-            <Field label="Details">
-              <Textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Optional details…" />
-            </Field>
-            <div className="flex justify-end gap-3">
-              <Button variant="secondary" onClick={() => setOpen(false)}>Cancel</Button>
-              <Button onClick={save} disabled={pending || !title.trim()}>{pending ? "Saving…" : "Save"}</Button>
-            </div>
-          </div>
+        <Modal onClose={() => setOpen(false)} title="Edit announcement" size="lg">
+          {/* The same form as posting — rich text and attachments included. */}
+          <AnnouncementForm existing={announcement} onDone={() => setOpen(false)} onCancel={() => setOpen(false)} />
         </Modal>
       )}
     </>

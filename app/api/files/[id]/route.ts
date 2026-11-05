@@ -7,7 +7,8 @@ import { readUpload } from "@/lib/uploads";
 
 export const dynamic = "force-dynamic";
 
-// Auth-gated download of a task attachment, scoped to the caller's company.
+// Auth-gated download of an attachment (task, project, announcement or leave
+// request), scoped to the caller's company.
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
@@ -19,6 +20,9 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       OR: [
         { task: { project: { companyId: session.companyId } } },
         { project: { companyId: session.companyId } },
+        // Announcements are company-wide (everyone signed in reads them) —
+        // but not once they're in Trash.
+        { announcement: { companyId: session.companyId, deletedAt: null } },
         { leaveRequest: { companyId: session.companyId } },
       ],
     },

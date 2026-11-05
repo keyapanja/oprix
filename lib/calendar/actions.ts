@@ -7,6 +7,8 @@ import { requireCapability } from "@/lib/auth/guard";
 import { dateAtUTC } from "@/lib/dates";
 import { formatDate } from "@/lib/format";
 import { notifyAllInternal } from "@/lib/calendar/reminders";
+import { markdownToText } from "@/lib/kb/markdown";
+import { deleteUpload } from "@/lib/uploads";
 
 export type CalendarState = { error?: string; ok?: boolean };
 const CAL = "/calendar";
@@ -121,7 +123,8 @@ export async function createAnnouncement(
       session.companyId,
       "ANNOUNCEMENT",
       d.title,
-      d.body || `Announcement for ${formatDate(dateAtUTC(d.date))}.`,
+      // The body is rich text; a notification shows plain words.
+      (d.body && markdownToText(d.body, 160)) || `Announcement for ${formatDate(dateAtUTC(d.date))}.`,
       { announcementId: ann.id },
     );
   } catch (e) {
@@ -156,6 +159,24 @@ export async function updateAnnouncement(id: string, formData: FormData): Promis
     where: { id },
     data: { title: d.title, body: d.body || null, date: dateAtUTC(d.date) },
   });
+  revalidatePath(CAL);
+  return { ok: true };
+}
+
+/** Remove one file from an announcement — same rule as editing it. The file goes for good. */
+export async function deleteAnnouncementAttachment(attachmentId: string): Promise<CalendarState> {
+  const session = await requireCapability("org:manage");
+  const att = await prisma.attachment.findFirst({
+    where: { id: String(attachmentId), announcement: { companyId: session.companyId, deletedAt: null } },
+    select: { id: true, fileKey: true, announcement: { select: { authorId: true } } },
+  });
+  if (!att) return { error: "Attachment not found" };
+  const authorId = att.announcement?.authorId ?? null;
+  if (authorId && authorId !== session.userId && session.role !== "SUPER_ADMIN") {
+    return { error: "Only the author can edit this announcement." };
+  }
+  await prisma.attachment.delete({ where: { id: att.id } });
+  if (att.fileKey) await deleteUpload(att.fileKey);
   revalidatePath(CAL);
   return { ok: true };
 }

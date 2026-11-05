@@ -141,3 +141,18 @@ export function renderMarkdown(md: string): string {
   flush();
   return out.join("\n");
 }
+
+/**
+ * Markdown as one plain line — for previews and notifications, where markup
+ * would show up as stray symbols. Images are dropped, links keep their text.
+ */
+export function markdownToText(md: string, max = 200): string {
+  const text = md
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/^\s{0,3}(#{1,6}\s+|>\s?|[-*+]\s+|\d+\.\s+)/gm, "")
+    .replace(/(\*\*|\*|~~|`)/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text;
+}

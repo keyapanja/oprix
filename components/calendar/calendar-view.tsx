@@ -12,6 +12,7 @@ import { CalendarDetailModal, type CalendarDetail } from "@/components/calendar/
 import { formatDate } from "@/lib/format";
 import { halfDayLabel } from "@/lib/leave/half-day";
 import { cn } from "@/lib/cn";
+import { markdownToText } from "@/lib/kb/markdown";
 
 type Balance = {
   typeId: string;
@@ -310,7 +311,8 @@ export function CalendarView({
                           </span>
                         )}
                       </div>
-                      {a.body && <p className="mt-0.5 pl-4 text-sm text-muted">{a.body}</p>}
+                      {/* The body is rich text — preview it as plain words, full version in the detail pop-up. */}
+                      {a.body && <p className="mt-0.5 line-clamp-2 pl-4 text-sm text-muted">{markdownToText(a.body)}</p>}
                     </li>
                   );
                 })}

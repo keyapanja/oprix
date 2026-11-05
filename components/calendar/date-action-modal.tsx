@@ -4,15 +4,12 @@ import { useActionState, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Modal } from "@/components/ui/modal";
 import { ApplyForm } from "@/components/leave/apply-form";
-import {
-  createHoliday,
-  createAnnouncement,
-  type CalendarState,
-} from "@/lib/calendar/actions";
-import { Input, Textarea } from "@/components/ui/input";
+import { createHoliday, type CalendarState } from "@/lib/calendar/actions";
+import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { DatePicker } from "@/components/ui/date-picker";
+import { AnnouncementForm } from "@/components/calendar/announcement-form";
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/cn";
 
@@ -57,7 +54,8 @@ export function DateActionModal({
   const title = start === end ? formatDate(start) : `${formatDate(start)} – ${formatDate(end)}`;
 
   return (
-    <Modal onClose={onClose} title={title}>
+    // The announcement form carries a rich-text editor and attachments: give it room.
+    <Modal onClose={onClose} title={title} size={mode === "announcement" ? "lg" : "md"}>
       {modes.length > 1 && (
         <div className="mb-4 inline-flex rounded-xl bg-canvas p-0.5">
           {modes.map((m) => (
@@ -79,7 +77,7 @@ export function DateActionModal({
         <ApplyForm bare balances={balances} initialStart={start} initialEnd={end} onDone={done} />
       )}
       {mode === "holiday" && <HolidayForm date={start} onDone={done} />}
-      {mode === "announcement" && <AnnouncementForm date={start} onDone={done} />}
+      {mode === "announcement" && <AnnouncementForm initialDate={start} onDone={done} onCancel={onClose} />}
     </Modal>
   );
 }
@@ -109,30 +107,6 @@ function HolidayForm({ date, onDone }: { date: string; onDone: () => void }) {
       </Field>
       <div className="flex justify-end">
         <Button type="submit" disabled={pending}>{pending ? "Saving…" : "Add holiday"}</Button>
-      </div>
-    </form>
-  );
-}
-
-function AnnouncementForm({ date, onDone }: { date: string; onDone: () => void }) {
-  const [state, action, pending] = useActionState<CalendarState, FormData>(createAnnouncement, {});
-  useEffect(() => {
-    if (state.ok) onDone();
-  }, [state, onDone]);
-  return (
-    <form action={action} className="space-y-4">
-      <ErrBox msg={state.error} />
-      <Field label="Date" required>
-        <DatePicker name="date" defaultValue={date} />
-      </Field>
-      <Field label="Title" htmlFor="am-title" required>
-        <Input id="am-title" name="title" placeholder="e.g. Bollywood theme party" required />
-      </Field>
-      <Field label="Details" htmlFor="am-body">
-        <Textarea id="am-body" name="body" placeholder="Optional details…" />
-      </Field>
-      <div className="flex justify-end">
-        <Button type="submit" disabled={pending}>{pending ? "Posting…" : "Post announcement"}</Button>
       </div>
     </form>
   );
