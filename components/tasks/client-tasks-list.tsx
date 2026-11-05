@@ -1,16 +1,23 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { humanizeEnum, formatDate } from "@/lib/format";
 import { TASK_STATUS_TONE, TASK_STATUS_LABEL, PRIORITY_TONE } from "@/lib/status";
 import type { ClientTaskRow } from "@/lib/tasks/client-tasks";
+import { replaceQuery } from "@/lib/url";
 
 export function ClientTasksList({ rows }: { rows: ClientTaskRow[] }) {
-  const [q, setQ] = useState("");
+  // The search lives in the URL, so Back from a task keeps it.
+  const sp = useSearchParams();
+  const [q, setQ] = useState(() => sp.get("q") ?? "");
+  useEffect(() => {
+    replaceQuery({ q: q.trim() || null });
+  }, [q]);
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
     if (!s) return rows;

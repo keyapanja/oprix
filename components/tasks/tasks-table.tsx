@@ -2,8 +2,8 @@
 
 import { toast } from "@/components/ui/toast";
 import { confirmDialog } from "@/components/ui/confirm";
-import { Fragment, useMemo, useState, useTransition, type MouseEvent } from "react";
-import { useRouter } from "next/navigation";
+import { Fragment, useEffect, useMemo, useState, useTransition, type MouseEvent } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import type { TaskStatus, Priority } from "@prisma/client";
 import { deleteTask, deleteTasks, duplicateTask } from "@/lib/projects/actions";
 import { TASK_STATUS_TONE, PRIORITY_TONE } from "@/lib/status";
@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Icon } from "@/components/ui/icons";
 import { rowLinkProps, RowLink } from "@/components/ui/row-link";
 import { humanizeEnum, formatDate, formatDateTime } from "@/lib/format";
-import { safeHref, isHttpUrl } from "@/lib/url";
+import { safeHref, isHttpUrl, replaceQuery } from "@/lib/url";
 import { fmtHm, type TimerStatusUI } from "@/lib/timer/shared";
 import { cn } from "@/lib/cn";
 
@@ -94,7 +94,13 @@ export function TasksTable({
   filterKey: string;
 }) {
   const router = useRouter();
-  const [page, setPage] = useState(1);
+  // The page number lives in the URL with the filters, so Back from a task
+  // returns to the same page of the list.
+  const sp = useSearchParams();
+  const [page, setPage] = useState(() => Math.max(1, Number(sp.get("page")) || 1));
+  useEffect(() => {
+    replaceQuery({ page: page > 1 ? String(page) : null });
+  }, [page]);
   const pageSize = 15;
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 

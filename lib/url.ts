@@ -50,3 +50,24 @@ export function safeInternalPath(raw: string | null | undefined): string | null 
   if (next.includes("://")) return null;
   return next;
 }
+
+/**
+ * Keep list filters in the address bar: set (or, for empty/null, remove)
+ * these query parameters on the current URL without a navigation. Going to a
+ * record and pressing Back then lands on the same filtered list, and the URL
+ * can be shared. Uses the native History API, which Next.js syncs with
+ * useSearchParams — no server round trip per keystroke. Browser only.
+ */
+export function replaceQuery(updates: Record<string, string | null | undefined>): void {
+  if (typeof window === "undefined") return;
+  const url = new URL(window.location.href);
+  for (const [key, value] of Object.entries(updates)) {
+    if (value === null || value === undefined || value === "") url.searchParams.delete(key);
+    else url.searchParams.set(key, value);
+  }
+  const next = `${url.pathname}${url.search}${url.hash}`;
+  if (next !== `${window.location.pathname}${window.location.search}${window.location.hash}`) {
+    window.history.replaceState(null, "", next);
+  }
+}
+

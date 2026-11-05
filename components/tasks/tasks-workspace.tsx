@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { TasksTable, type TaskRow } from "./tasks-table";
 import { TaskCalendar } from "./task-calendar";
 import { Icon } from "@/components/ui/icons";
 import { Combobox } from "@/components/ui/combobox";
 import { cn } from "@/lib/cn";
+import { replaceQuery } from "@/lib/url";
 
 type Mode = "list" | "calendar";
 const MODES: { value: Mode; label: string; icon: string }[] = [
@@ -45,6 +47,10 @@ const GROUP_OPTS = [
  * silently dropped them — and took the filter bar off screen with them. They
  * belong to the workspace instead: one toolbar, one filtered set, two ways of
  * looking at it.
+ *
+ * They also live in the address bar (q, status, view, dept, service, project,
+ * mode; the table adds page), so opening a task and coming back — the Back
+ * button or the browser's — lands on the same filtered list.
  */
 export function TasksWorkspace({
   rows,
@@ -61,15 +67,34 @@ export function TasksWorkspace({
   showAdvancedFilters?: boolean;
   today: string;
 }) {
-  const [mode, setMode] = useState<Mode>("list");
+  // Filters come back from the URL when the page is opened again.
+  const sp = useSearchParams();
+  const fromUrl = (key: string, allowed?: readonly string[]) => {
+    const v = sp.get(key);
+    return v && (!allowed || allowed.includes(v)) ? v : null;
+  };
+  const [mode, setMode] = useState<Mode>(() => (fromUrl("mode", ["list", "calendar"]) as Mode | null) ?? "list");
 
-  const [search, setSearch] = useState("");
-  const [status, setStatus] = useState(initialStatus);
-  const [view, setView] = useState<View>(initialView);
-  const [dept, setDept] = useState("ALL");
-  const [service, setService] = useState("ALL");
-  const [project, setProject] = useState("ALL");
+  const [search, setSearch] = useState(() => sp.get("q") ?? "");
+  const [status, setStatus] = useState(() => fromUrl("status", STATUS_FILTER.map((o) => o.value)) ?? initialStatus);
+  const [view, setView] = useState<View>(() => (fromUrl("view", ["all", "mine", "created"]) as View | null) ?? initialView);
+  const [dept, setDept] = useState(() => fromUrl("dept") ?? "ALL");
+  const [service, setService] = useState(() => fromUrl("service") ?? "ALL");
+  const [project, setProject] = useState(() => fromUrl("project") ?? "ALL");
   const [groupBy, setGroupBy] = useState("");
+
+  // …and are written back as they change. Defaults are left out of the URL.
+  useEffect(() => {
+    replaceQuery({
+      q: search.trim() || null,
+      status: status !== "ALL" ? status : null,
+      view: view !== "all" ? view : null,
+      dept: dept !== "ALL" ? dept : null,
+      service: service !== "ALL" ? service : null,
+      project: project !== "ALL" ? project : null,
+      mode: mode !== "list" ? mode : null,
+    });
+  }, [search, status, view, dept, service, project, mode]);
 
   // Keep the view in sync with the URL (sidebar "My tasks" / "Assigned by me"),
   // while still letting the pills below override it.
